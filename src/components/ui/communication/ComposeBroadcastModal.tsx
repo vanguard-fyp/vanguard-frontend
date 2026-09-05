@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Send, Megaphone, Smartphone, Globe, Tv } from 'lucide-react';
 import type { PublicAnnouncement, SeverityLevel } from '../../../types';
@@ -38,6 +38,15 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
     'NADMA Portal',
   ]);
 
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   const toggleChannel = (ch: string) => {
     setSelectedChannels((prev) =>
       prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
@@ -61,12 +70,16 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 12 }}
         className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 flex items-center justify-between shrink-0">

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Truck, Package, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, MapPin, Sparkles, Clock } from 'lucide-react';
+import { Send, Truck, Package, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, MapPin, Sparkles, Clock, Check, Loader2 } from 'lucide-react';
 import type { ResourceRequest } from '../../../../types';
 import { lifecycleSteps } from '../../../../constants';
+import { formatDateTime } from '../../../../utils/dateFormatter';
+import { useUpdateRequestStatus } from '../../../../hooks/useResources';
 
 interface AllocationTrackerStageProps {
   requests: ResourceRequest[];
@@ -17,10 +19,16 @@ function getStepIndex(status: string): number {
 
 export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ requests }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const updateStatusMutation = useUpdateRequestStatus();
 
   const activeAllocations = requests.filter(
     (r) => r.status === 'Approved' || r.status === 'Dispatched'
   );
+
+  const handleAdvanceStatus = (e: React.MouseEvent, req: ResourceRequest, nextStatus: string) => {
+    e.stopPropagation();
+    updateStatusMutation.mutate({ id: req.id, status: nextStatus });
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
@@ -41,9 +49,12 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
           </div>
         </div>
 
-        <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
-          {activeAllocations.length} Active Logistics Transits
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+            <Truck size={12} />
+            {activeAllocations.length} Active Dispatches
+          </span>
+        </div>
       </div>
 
       {/* Allocation List */}
@@ -52,6 +63,7 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
           activeAllocations.map((req) => {
             const isExpanded = expandedId === req.id;
             const currentStepIdx = getStepIndex(req.status);
+            const isPending = updateStatusMutation.isPending && updateStatusMutation.variables?.id === req.id;
 
             return (
               <div key={req.id} className="transition-colors hover:bg-slate-50/40">
@@ -72,7 +84,7 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                       >
                         {req.status}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-medium ml-auto sm:ml-0">{req.timestamp}</span>
+                      <span className="text-[11px] text-slate-400 font-medium ml-auto sm:ml-0">{formatDateTime(req.timestamp)}</span>
                     </div>
 
                     <h4 className="text-sm font-bold text-slate-900">{req.itemRequested}</h4>
@@ -91,6 +103,28 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
+                    {req.status === 'Approved' && (
+                      <button
+                        onClick={(e) => handleAdvanceStatus(e, req, 'Dispatched')}
+                        disabled={isPending}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isPending ? <Loader2 size={12} className="animate-spin" /> : <Truck size={12} />}
+                        Dispatch Supplies
+                      </button>
+                    )}
+
+                    {req.status === 'Dispatched' && (
+                      <button
+                        onClick={(e) => handleAdvanceStatus(e, req, 'Delivered')}
+                        disabled={isPending}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {isPending ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                        Mark Delivered
+                      </button>
+                    )}
+
                     <span className="text-xs font-bold text-blue-600 hover:text-blue-700 underline">
                       {isExpanded ? 'Hide Lifecycle' : 'Track Lifecycle'}
                     </span>

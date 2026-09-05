@@ -1,7 +1,14 @@
 import { apiClient } from './apiClient';
-import type { ActivityEvent, KpiTrends } from '../types';
+import type { ActivityEvent, AnalyticsSummary, KpiTrends } from '../types';
 
 export const analyticsService = {
+  /**
+   * Fetch aggregate summary metrics, response times, and YoY trends
+   */
+  getSummary: async (year: string = '2026'): Promise<AnalyticsSummary> => {
+    return apiClient.get<AnalyticsSummary>('/analytics/summary', { year });
+  },
+
   /**
    * Fetch 7-hour rolling KPI sparkline trend data
    */
@@ -26,7 +33,7 @@ export const analyticsService = {
   /**
    * Fetch hourly response time trend
    */
-  getResponseTrends: async (): Promise<Array<{ time: string; response_min: number }>> => {
+  getResponseTrends: async (): Promise<Array<{ time: string; response_min: number; responseMin?: number }>> => {
     return apiClient.get('/analytics/response-trends');
   },
 
@@ -52,10 +59,10 @@ export const analyticsService = {
   },
 
   /**
-   * Fetch historical monthly incident trend
+   * Fetch historical monthly incident trend (year-filtered)
    */
-  getMonthlyTrends: async (): Promise<Array<{ month: string; incidents: number; resolved: number }>> => {
-    return apiClient.get('/analytics/monthly-trends');
+  getMonthlyTrends: async (year: string = '2026'): Promise<Array<{ month: string; incidents: number; resolved: number }>> => {
+    return apiClient.get('/analytics/monthly-trends', { year });
   },
 
   /**
@@ -75,7 +82,60 @@ export const analyticsService = {
   /**
    * Fetch state incident heatmap breakdown
    */
-  getStateHeatmap: async (): Promise<Array<{ state: string; count: number; severity: 'Critical' | 'High' | 'Medium' | 'Low' }>> => {
-    return apiClient.get('/analytics/state-heatmap');
+  getStateHeatmap: async (year: string = '2026'): Promise<Array<{ state: string; count: number; severity: 'Critical' | 'High' | 'Medium' | 'Low' }>> => {
+    return apiClient.get('/analytics/state-heatmap', { year });
+  },
+
+  /**
+   * Export all analytics as CSV file download
+   */
+  exportCSV: async (year: string = '2026'): Promise<void> => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const res = await fetch(`${baseUrl}/analytics/export/csv?year=${encodeURIComponent(year)}`);
+    if (!res.ok) throw new Error('Failed to export CSV');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vanguard_analytics_${year}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Export all analytics as structured PDF report download
+   */
+  exportPDF: async (year: string = '2026'): Promise<void> => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const res = await fetch(`${baseUrl}/analytics/export/pdf?year=${encodeURIComponent(year)}`);
+    if (!res.ok) throw new Error('Failed to export PDF');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vanguard_report_${year}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+  /**
+   * Export State Disaster Summary as CSV (State Summary section)
+   */
+  exportStateSummaryCSV: async (year: string = '2026'): Promise<void> => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const res = await fetch(`${baseUrl}/analytics/export/state-summary-csv?year=${encodeURIComponent(year)}`);
+    if (!res.ok) throw new Error('Failed to export State Summary CSV');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vanguard_state_summary_${year}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
   },
 };

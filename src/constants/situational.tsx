@@ -5,18 +5,18 @@ import type { GISLayerState, SitrepTab } from '../types';
 export const DARK_STYLE = {
   version: 8,
   sources: {
-    carto: {
+    osm: {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
       ],
       tileSize: 256,
-      attribution: '&copy; CARTO &copy; OpenStreetMap',
+      attribution: '&copy; OpenStreetMap contributors',
     },
   },
-  layers: [{ id: 'carto-layer', type: 'raster', source: 'carto', minzoom: 0, maxzoom: 22 }],
+  layers: [{ id: 'osm-layer', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 22 }],
 };
 
 export const TOPOLOGY_PLANES = [

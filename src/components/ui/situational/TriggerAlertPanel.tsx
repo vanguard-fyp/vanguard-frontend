@@ -23,10 +23,10 @@ export const TriggerAlertPanel: React.FC<TriggerAlertPanelProps> = ({ alert, siz
       </div>
 
       <div className="space-y-1.5">
-        {alert.readings.map((r: MetrologyReading) => {
+        {alert.readings.map((r: MetrologyReading, idx: number) => {
           const exceeded = r.value >= r.threshold;
           return (
-            <div key={r.metric} className="flex items-center justify-between text-xs">
+            <div key={`${r.metric}-${idx}`} className="flex items-center justify-between text-xs">
               <span className="text-slate-600 font-medium flex items-center gap-1.5">
                 <Gauge size={12} className={exceeded ? 'text-red-500' : 'text-slate-400'} />
                 {r.metric} ({r.station})

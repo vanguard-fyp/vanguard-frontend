@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, ClipboardCheck, Send, Layers } from 'lucide-react';
+import { Warehouse, ClipboardCheck, Send, GitFork } from 'lucide-react';
 import { useInventory, useResourceRequests, useApproveResourceRequest, useRejectResourceRequest, useCreateResourceRequest } from '../../../hooks';
 import { InventoryStage } from '../../../components/ui/coordination/resource/InventoryStage';
 import { RequestApprovalStage } from '../../../components/ui/coordination/resource/RequestApprovalStage';
 import { AllocationTrackerStage } from '../../../components/ui/coordination/resource/AllocationTrackerStage';
-import { PipelineConnector } from '../../../components/ui/coordination/resource/PipelineConnector';
+import { PipelineFlowDiagram } from '../../../components/ui/coordination/resource/PipelineFlowDiagram';
+import { SkeletonTable } from '../../../components/ui/shared/SkeletonLoader';
 import type { ResourceRequest } from '../../../types';
 
 const containerAnim = {
@@ -20,8 +21,8 @@ const itemAnim = {
 type ViewMode = 1 | 2 | 3 | 'all';
 
 const ResourceManagement: React.FC = () => {
-  const { data: inventory = [] } = useInventory();
-  const { data: requests = [] } = useResourceRequests();
+  const { data: inventory = [], isLoading: isInventoryLoading } = useInventory();
+  const { data: requests = [], isLoading: isRequestsLoading } = useResourceRequests();
   const approveMutation = useApproveResourceRequest();
   const rejectMutation = useRejectResourceRequest();
   const createMutation = useCreateResourceRequest();
@@ -75,6 +76,16 @@ const ResourceManagement: React.FC = () => {
     },
   ];
 
+  const isLoading = isInventoryLoading || isRequestsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <SkeletonTable rows={5} cols={4} />
+      </div>
+    );
+  }
+
   return (
     <motion.div
       variants={containerAnim}
@@ -100,17 +111,17 @@ const ResourceManagement: React.FC = () => {
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
               }`}
           >
-            Stage View
+            Stage-by-Stage View
           </button>
           <button
             onClick={() => setActiveStep('all')}
-            className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${activeStep === 'all'
-                ? 'bg-blue-600 text-white shadow-2xs font-bold'
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeStep === 'all'
+                ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
               }`}
           >
-            <Layers size={13} />
-            Full Pipeline View
+            <GitFork size={13} className={activeStep === 'all' ? 'text-blue-600' : 'text-slate-500'} />
+            <span>Full Pipeline Flow</span>
           </button>
         </div>
       </motion.div>
@@ -139,45 +150,47 @@ const ResourceManagement: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Sleek Segmented Pipeline Navigation Bar */}
-      <motion.div variants={itemAnim} className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
-          {steps.map((s) => {
-            const isActive = activeStep === s.id;
+      {/* Sleek Segmented Pipeline Navigation Bar (Hidden when in Full Pipeline Flow view) */}
+      {activeStep !== 'all' && (
+        <motion.div variants={itemAnim} className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
+            {steps.map((s) => {
+              const isActive = activeStep === s.id;
 
-            return (
-              <button
-                key={s.id}
-                onClick={() => setActiveStep(s.id)}
-                className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left cursor-pointer border ${isActive
-                    ? 'bg-white text-slate-900 shadow-xs border-blue-500 ring-2 ring-blue-500/20'
-                    : 'bg-white/50 border-slate-200/80 text-slate-600 hover:text-blue-950 hover:bg-white hover:border-blue-400 hover:shadow-xs hover:-translate-y-0.5'
-                  }`}
-              >
-                <div
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${isActive
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'bg-slate-200 text-slate-600 group-hover:bg-blue-100 group-hover:text-blue-700 font-bold'
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setActiveStep(s.id)}
+                  className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left cursor-pointer border ${isActive
+                      ? 'bg-white text-slate-900 shadow-xs border-blue-500 ring-2 ring-blue-500/20'
+                      : 'bg-white/50 border-slate-200/80 text-slate-600 hover:text-blue-950 hover:bg-white hover:border-blue-400 hover:shadow-xs hover:-translate-y-0.5'
                     }`}
                 >
-                  {s.num}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className={`text-xs font-bold truncate transition-colors ${isActive ? 'text-blue-950' : 'text-slate-700 group-hover:text-blue-900'}`}>
-                      {s.title}
-                    </p>
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${isActive
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-slate-200 text-slate-600 group-hover:bg-blue-100 group-hover:text-blue-700 font-bold'
+                      }`}
+                  >
+                    {s.num}
                   </div>
-                  <p className="text-[10px] text-slate-500 font-medium truncate">{s.sub}</p>
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 transition-all ${s.badgeStyle} ${!isActive ? 'group-hover:border-blue-300 group-hover:shadow-2xs' : ''}`}>
-                  {s.badge}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </motion.div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className={`text-xs font-bold truncate transition-colors ${isActive ? 'text-blue-950' : 'text-slate-700 group-hover:text-blue-900'}`}>
+                        {s.title}
+                      </p>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium truncate">{s.sub}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 transition-all ${s.badgeStyle} ${!isActive ? 'group-hover:border-blue-300 group-hover:shadow-2xs' : ''}`}>
+                    {s.badge}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
       {/* Content Area */}
       <AnimatePresence mode="wait">
@@ -230,31 +243,11 @@ const ResourceManagement: React.FC = () => {
             exit={{ opacity: 0, y: -6 }}
             className="space-y-4"
           >
-            <InventoryStage
+            <PipelineFlowDiagram
               inventory={inventory}
               requests={requests}
-              onRequestCreated={handleCreateRequest}
+              onNavigateStage={(stage) => setActiveStep(stage)}
             />
-
-            <PipelineConnector
-              fromLabel="1. Inventory Stock"
-              toLabel="2. Request & HIL Approval"
-              count={pendingRequestsCount}
-            />
-
-            <RequestApprovalStage
-              requests={requests}
-              onApprove={handleApprove}
-              onReject={handleReject}
-            />
-
-            <PipelineConnector
-              fromLabel="2. Approved Requests"
-              toLabel="3. Allocation Tracker"
-              count={activeAllocationsCount}
-            />
-
-            <AllocationTrackerStage requests={requests} />
           </motion.div>
         )}
       </AnimatePresence>

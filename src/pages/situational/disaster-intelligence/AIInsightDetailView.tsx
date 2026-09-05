@@ -64,6 +64,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
       <AIImpactPanel incident={incident} rank={rank || undefined} size="full" />
 
       <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
+        {/* TODO: CHANGE THIS SECTION TO AI SUMMARY SOON */}
         <h2 className="text-sm font-bold text-slate-900 mb-3">Why this incident ranks {rank ? `#${rank}` : 'here'}</h2>
         <p className="text-sm text-slate-600 leading-relaxed">
           The priority score is driven primarily by <strong className="text-slate-900">{drivers[0]}</strong> and{' '}

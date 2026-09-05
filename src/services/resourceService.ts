@@ -67,9 +67,17 @@ export const resourceService = {
   },
 
   /**
+   * Update status of a resource request (e.g. Dispatched, Delivered)
+   */
+  updateRequestStatus: async (requestId: string, status: string): Promise<ResourceRequest> => {
+    return apiClient.patch<ResourceRequest>(`/resources/requests/${requestId}/status?status=${encodeURIComponent(status)}`);
+  },
+
+  /**
    * Delete a resource request
    */
   deleteRequest: async (requestId: string): Promise<void> => {
     return apiClient.delete<void>(`/resources/requests/${requestId}`);
   },
 };
+

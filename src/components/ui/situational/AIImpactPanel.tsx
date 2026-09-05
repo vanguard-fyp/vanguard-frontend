@@ -61,6 +61,7 @@ export const AIImpactPanel: React.FC<AIImpactPanelProps> = ({
     </div>
   );
 
+  // TODO: CHANGE THIS SECTION TO AI DECISION BRIEF SOON
   const brief = !hideBrief && (
     <div className={isFull ? 'lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-xs' : 'mt-3 bg-slate-50 border border-slate-100 rounded-lg p-3'}>
       {isFull && <h2 className="text-sm font-bold text-slate-900 mb-3">Decision brief</h2>}

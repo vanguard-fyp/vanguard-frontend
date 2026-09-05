@@ -85,3 +85,22 @@ export function useDeleteRescueTeam() {
     },
   });
 }
+
+export function useTeamRecommendation(teamId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['missions', 'team', teamId, 'recommendation'],
+    queryFn: () => missionService.getTeamRecommendation(teamId!),
+    enabled: !!teamId,
+    staleTime: 60_000,
+  });
+}
+
+export function useGenerateTeamRecommendation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (teamId: string) => missionService.generateTeamRecommendation(teamId),
+    onSuccess: (_, teamId) => {
+      qc.invalidateQueries({ queryKey: ['missions', 'team', teamId, 'recommendation'] });
+    },
+  });
+}

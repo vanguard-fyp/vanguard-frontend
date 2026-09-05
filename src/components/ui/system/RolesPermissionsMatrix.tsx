@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, CheckCircle2 } from 'lucide-react';
-import type { UserRole, MatrixRow } from '../../../types';
+import type { MatrixRow } from '../../../types';
+
 import { permOptions, userRolesList as rolesList } from '../../../constants';
 
 const initialMatrix: MatrixRow[] = [

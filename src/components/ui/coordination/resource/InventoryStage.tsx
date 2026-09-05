@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, Search, ChevronDown, ChevronUp, Plus, Send, History, Sparkles, ThumbsUp } from 'lucide-react';
+import { Warehouse, Search, ChevronDown, ChevronUp, Plus, History, Sparkles } from 'lucide-react';
+
 import type { ResourceItem, ResourceRequest, AIStockAdvisory } from '../../../../types';
+import { ResupplyRequestModal } from './ResupplyRequestModal';
 
 interface InventoryStageProps {
   inventory: ResourceItem[];
@@ -52,15 +54,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [requestingItemId, setRequestingItemId] = useState<string | null>(null);
-
-  // Form fields for resupply request
-  const [reqQty, setReqQty] = useState<number>(100);
-  const [reqDistrict, setReqDistrict] = useState<string>('Kota Bharu');
-  const [reqAgency, setReqAgency] = useState<string>('JKM Kelantan');
-  const [reqUrgency, setReqUrgency] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
-  const [reqJustification, setReqJustification] = useState<string>('');
-  const [, setHilDecision] = useState<'applied' | 'overridden' | null>(null);
+  const [modalItem, setModalItem] = useState<ResourceItem | null>(null);
 
   const filteredInventory = inventory.filter((item) =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -69,34 +63,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
   );
 
   const handleOpenRequest = (item: ResourceItem) => {
-    const aiAdvisory = getAIStockAdvisory(item);
-    setRequestingItemId(item.id);
-    setReqQty(aiAdvisory.suggestedQty);
-    setReqUrgency(aiAdvisory.urgency);
-    setReqJustification(`[HIL AI Advisory] Emergency resupply request for ${item.name} at ${item.warehouseLocation}. ${aiAdvisory.forecastRationale}`);
-    setHilDecision(null);
-  };
-
-  const handleApplyAISuggestion = (item: ResourceItem) => {
-    const aiAdvisory = getAIStockAdvisory(item);
-    setReqQty(aiAdvisory.suggestedQty);
-    setReqUrgency(aiAdvisory.urgency);
-    setHilDecision('applied');
-  };
-
-  const handleSubmitRequest = (item: ResourceItem) => {
-    onRequestCreated({
-      itemRequested: item.name,
-      resourceCategory: item.category,
-      quantityRequested: reqQty,
-      unit: item.unit,
-      district: reqDistrict,
-      agency: reqAgency,
-      urgency: reqUrgency,
-      justification: reqJustification,
-      requestorName: 'Logistics Officer (HIL AI Supported)',
-    });
-    setRequestingItemId(null);
+    setModalItem(item);
   };
 
   return (
@@ -134,7 +101,6 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
       <div className="divide-y divide-slate-100">
         {filteredInventory.map((item) => {
           const isExpanded = expandedItemId === item.id;
-          const isRequesting = requestingItemId === item.id;
           const itemRequests = requests.filter((r) => r.itemRequested === item.name);
           const pct = Math.min((item.stockLevel / (item.minThreshold * 4)) * 100, 100);
           const aiAdvisory = getAIStockAdvisory(item);
@@ -148,7 +114,9 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-[11px] font-mono font-bold text-slate-400">{item.id}</span>
+                    <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                      {item.displayId || (item.id.startsWith('res-') ? item.id.split('-').slice(0, 3).join('-').toUpperCase() : item.id.length > 13 ? `RES-${item.id.slice(0, 6).toUpperCase()}` : item.id)}
+                    </span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${categoryColors[item.category]}`}>
                       {item.category}
                     </span>
@@ -241,109 +209,28 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                       </div>
                     </div>
 
-                    {/* HIL AI Stock Analytics & Depletion Forecast */}
-                    <div className="border border-violet-200 bg-gradient-to-r from-violet-50/90 to-indigo-50/90 rounded-xl p-4 space-y-3">
+                    {/* HIL AI Analytics Card */}
+                    <div className="bg-gradient-to-br from-violet-50 to-indigo-50/60 border border-violet-200 rounded-xl p-4 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
-                            <Sparkles size={12} className="text-white" />
+                          <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-white">
+                            <Sparkles size={11} />
                           </div>
                           <span className="text-xs font-bold text-violet-900">HIL AI Inventory Analytics</span>
                         </div>
-                        <span className="text-[11px] font-bold text-violet-700">{aiAdvisory.confidence}% confidence</span>
+                        <span className="text-[11px] font-bold text-violet-700 font-mono">{aiAdvisory.confidence}% confidence</span>
                       </div>
 
                       <p className="text-xs text-slate-700 leading-relaxed font-normal">{aiAdvisory.forecastRationale}</p>
                       <p className="text-[11px] font-semibold text-violet-800 italic">{aiAdvisory.depletionTrend}</p>
 
                       <div className="flex items-center gap-2 pt-1">
-                        <button
-                          onClick={() => {
-                            handleOpenRequest(item);
-                            handleApplyAISuggestion(item);
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold rounded-lg transition-colors shadow-2xs"
-                        >
-                          <ThumbsUp size={12} />
-                          Apply AI Suggested Resupply ({aiAdvisory.suggestedQty} {item.unit})
-                        </button>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/80 text-violet-900 border border-violet-200 text-xs font-semibold rounded-lg shadow-2xs">
+                          <Sparkles size={12} className="text-violet-600" />
+                          <span>AI Target Buffer: <strong>+{aiAdvisory.suggestedQty} {item.unit}</strong></span>
+                        </span>
                       </div>
                     </div>
-
-                    {/* Resupply Request Inline Form */}
-                    {isRequesting && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-blue-50/60 border border-blue-200 rounded-lg p-4 space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <h5 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                            <Plus size={14} className="text-blue-600" />
-                            Create Resource Request for: {item.name}
-                          </h5>
-                          <button
-                            onClick={() => setRequestingItemId(null)}
-                            className="text-xs text-slate-400 hover:text-slate-600 font-bold"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase">Quantity ({item.unit})</label>
-                            <input
-                              type="number"
-                              value={reqQty}
-                              onChange={(e) => {
-                                setReqQty(Number(e.target.value));
-                                setHilDecision('overridden');
-                              }}
-                              className="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-bold"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase">Target District</label>
-                            <input
-                              type="text"
-                              value={reqDistrict}
-                              onChange={(e) => setReqDistrict(e.target.value)}
-                              className="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase">Requesting Agency</label>
-                            <input
-                              type="text"
-                              value={reqAgency}
-                              onChange={(e) => setReqAgency(e.target.value)}
-                              className="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-medium"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase">Official Justification</label>
-                          <textarea
-                            rows={2}
-                            value={reqJustification}
-                            onChange={(e) => setReqJustification(e.target.value)}
-                            className="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-normal resize-none"
-                          />
-                        </div>
-
-                        <div className="flex justify-end">
-                          <button
-                            onClick={() => handleSubmitRequest(item)}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
-                          >
-                            <Send size={13} />
-                            Submit to Approval Pipeline
-                          </button>
-                        </div>
-                      </motion.div>
-                    )}
 
                     {/* Related Requests History */}
                     <div>
@@ -359,7 +246,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                               className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between text-xs"
                             >
                               <div>
-                                <span className="font-mono font-bold text-slate-400 mr-2">{req.requestId}</span>
+                                <span className="font-mono font-bold text-slate-400 mr-2">{req.requestId || req.id}</span>
                                 <span className="font-bold text-slate-800">{req.quantityRequested} {req.unit}</span>
                                 <span className="text-slate-500 ml-2">by {req.agency} ({req.district})</span>
                               </div>
@@ -388,6 +275,18 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
           );
         })}
       </div>
+
+      {/* Resupply Request Modal */}
+      <AnimatePresence>
+        {modalItem && (
+          <ResupplyRequestModal
+            item={modalItem}
+            onClose={() => setModalItem(null)}
+            onSubmit={onRequestCreated}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
+

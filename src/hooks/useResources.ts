@@ -86,7 +86,19 @@ export function useRejectResourceRequest() {
   });
 }
 
+export function useUpdateRequestStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      resourceService.updateRequestStatus(id, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RESOURCE_KEYS.requests });
+    },
+  });
+}
+
 export function useDeleteResourceRequest() {
+
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => resourceService.deleteRequest(id),

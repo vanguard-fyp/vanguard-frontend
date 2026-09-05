@@ -57,16 +57,35 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
 
   const selectedIncident = incidents.find((i) => i.id === selectedIncidentId) || null;
   const aiRec = getAIRecommendation(selectedIncident, teams);
-  const selectedTeam = teams.find((t) => t.id === selectedTeamId) || null;
+  const selectedTeam = teams.find((t) => t.id === (selectedTeamId || aiRec?.teamId)) || null;
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Pre-fill objective when incident is selected if objective is empty
+  React.useEffect(() => {
+    if (selectedIncident && !objective) {
+      setObjective(`Conduct immediate Search and Rescue and evacuation operations for ${selectedIncident.title} at ${selectedIncident.location}.`);
+      setPriority(selectedIncident.severity);
+    }
+  }, [selectedIncident, objective]);
 
   const canProceed = (): boolean => {
     if (step === 0) return !!selectedIncidentId;
-    if (step === 1) return !!selectedTeamId;
-    if (step === 2) return objective.trim().length > 5;
+    if (step === 1) return !!(selectedTeamId || aiRec?.teamId);
+    if (step === 2) return objective.trim().length > 3;
     return true;
   };
 
   const handleNext = () => {
+    if (step === 0 && selectedIncidentId && aiRec && !selectedTeamId) {
+      setSelectedTeamId(aiRec.teamId);
+    }
     if (step === 1 && !selectedTeamId && aiRec) {
       setSelectedTeamId(aiRec.teamId);
     }
@@ -76,17 +95,22 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
   const handleBack = () => { if (step > 0) setStep((s) => s - 1); };
 
   const handleDispatch = () => {
-    if (!selectedIncidentId || !selectedTeamId) return;
-    onDispatch({ incidentId: selectedIncidentId, teamId: selectedTeamId, objective, priority, durationHrs, notes });
+    const finalTeamId = selectedTeamId || aiRec?.teamId;
+    if (!selectedIncidentId || !finalTeamId) return;
+    onDispatch({ incidentId: selectedIncidentId, teamId: finalTeamId, objective: objective || 'Emergency search and rescue operation', priority, durationHrs, notes });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 16 }}
+        onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Wizard Header */}
@@ -95,7 +119,7 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
             <h2 className="text-sm font-bold text-white">Assign Rescue Mission</h2>
             <p className="text-[11px] text-blue-200 font-medium mt-0.5">Step {step + 1} of {steps.length} — {steps[step]}</p>
           </div>
-          <button onClick={onClose} className="text-blue-200 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-blue-200 hover:text-white transition-colors cursor-pointer">
             <X size={18} />
           </button>
         </div>
@@ -136,7 +160,7 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
                   <button
                     key={inc.id}
                     onClick={() => setSelectedIncidentId(inc.id)}
-                    className={`w-full text-left rounded-xl border p-4 transition-all ${selectedIncidentId === inc.id ? 'border-blue-400 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
+                    className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${selectedIncidentId === inc.id ? 'border-blue-400 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
                   >
                     <div className="flex items-center justify-between gap-3 mb-1.5">
                       <span className="text-[11px] font-mono font-bold text-slate-400">{inc.id}</span>
@@ -345,26 +369,26 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
           <button
             onClick={handleBack}
             disabled={step === 0}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
             <ChevronLeft size={14} /> Back
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+            <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer">
               Cancel
             </button>
             {step < steps.length - 1 ? (
               <button
                 onClick={handleNext}
                 disabled={!canProceed()}
-                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
               >
                 Continue <ChevronRight size={14} />
               </button>
             ) : (
               <button
                 onClick={handleDispatch}
-                className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs"
+                className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
               >
                 <Send size={13} /> Dispatch Mission
               </button>

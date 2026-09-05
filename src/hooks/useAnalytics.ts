@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { analyticsService } from '../services/analyticsService';
 
 export const ANALYTICS_KEYS = {
+  summary: ['analytics', 'summary'] as const,
   kpiTrends: ['analytics', 'kpi-trends'] as const,
   activityFeed: ['analytics', 'activity-feed'] as const,
   severityDist: ['analytics', 'severity-distribution'] as const,
@@ -16,6 +17,15 @@ export const ANALYTICS_KEYS = {
   agencyResponseTimes: ['analytics', 'agency-response-times'] as const,
   stateHeatmap: ['analytics', 'state-heatmap'] as const,
 };
+
+export function useAnalyticsSummary(params?: { year?: string }) {
+  const year = params?.year || '2026';
+  return useQuery({
+    queryKey: [...ANALYTICS_KEYS.summary, year],
+    queryFn: () => analyticsService.getSummary(year),
+    staleTime: 30_000,
+  });
+}
 
 export function useKpiTrends() {
   return useQuery({
@@ -73,11 +83,12 @@ export function useNetworkGraph() {
   });
 }
 
-export function useMonthlyTrends() {
+export function useMonthlyTrends(params?: { year?: string }) {
+  const year = params?.year || '2026';
   return useQuery({
-    queryKey: ANALYTICS_KEYS.monthlyTrends,
-    queryFn: () => analyticsService.getMonthlyTrends(),
-    staleTime: 60_000,
+    queryKey: [...ANALYTICS_KEYS.monthlyTrends, year],
+    queryFn: () => analyticsService.getMonthlyTrends(year),
+    staleTime: 30_000,
   });
 }
 
@@ -97,10 +108,11 @@ export function useAgencyResponseTimes() {
   });
 }
 
-export function useStateHeatmap() {
+export function useStateHeatmap(params?: { year?: string }) {
+  const year = params?.year || '2026';
   return useQuery({
-    queryKey: ANALYTICS_KEYS.stateHeatmap,
-    queryFn: () => analyticsService.getStateHeatmap(),
+    queryKey: [...ANALYTICS_KEYS.stateHeatmap, year],
+    queryFn: () => analyticsService.getStateHeatmap(year),
     staleTime: 60_000,
   });
 }

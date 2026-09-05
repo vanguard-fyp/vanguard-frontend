@@ -1,6 +1,8 @@
 import { apiClient } from './apiClient';
 import type { Incident, MapPOI } from '../types';
 
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+
 export const incidentService = {
   /**
    * List all disaster incidents with optional filters
@@ -38,9 +40,39 @@ export const incidentService = {
   },
 
   /**
+   * Resolve an incident — marks it Resolved, releases teams, synthesizes outcome
+   */
+  resolveIncident: async (id: string, payload?: { outcomeNotes?: string; resolverName?: string }): Promise<Incident> => {
+    return apiClient.post<Incident>(`/incidents/${id}/resolve`, payload || {});
+  },
+
+  /**
+   * Download official NADMA SITREP PDF for an incident
+   */
+  downloadSitrepPdf: (id: string): void => {
+    window.open(`${BASE_URL}/incidents/${id}/sitrep-pdf`, '_blank');
+  },
+
+  /**
+   * Download creative AI Disaster Warning Poster PDF for an incident
+   */
+  downloadSitrepPoster: (id: string): void => {
+    window.open(`${BASE_URL}/incidents/${id}/sitrep-poster`, '_blank');
+  },
+
+  /**
    * Retrieve GIS Map Points of Interest (Shelters, Hospitals, Utilities)
    */
   getMapPOIs: async (): Promise<MapPOI[]> => {
     return apiClient.get<MapPOI[]>('/incidents/pois');
   },
+
+  /**
+   * Retrieve dynamic cities search index from backend
+   */
+  getCities: async (): Promise<{ id: string; title: string; subtitle: string; lat: number; lng: number }[]> => {
+    return apiClient.get<{ id: string; title: string; subtitle: string; lat: number; lng: number }[]>('/incidents/cities');
+  },
 };
+
+

@@ -18,7 +18,8 @@ import {
   CheckSquare,
   X,
 } from 'lucide-react';
-import type { GISLayerState, LayerDef, LayerGroup } from '../../../types';
+import type { GISLayerState, LayerGroup } from '../../../types';
+
 
 const groups: LayerGroup[] = [
   {

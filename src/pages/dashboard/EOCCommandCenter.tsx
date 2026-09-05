@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   AlertTriangle, Users, ShieldAlert, Activity,
-  MapPin, Share2, Radio, Sparkles, ChevronDown, ChevronUp,
+  MapPin, Share2, Sparkles, ChevronDown, ChevronUp,
   TrendingUp, Clock, Zap,
 } from 'lucide-react';
 
@@ -48,8 +48,13 @@ const EOCCommandCenter: React.FC = () => {
 
   // ── Derived Values ─────────────────────────────────────────────────
   const criticalIncidents = incidents.filter((i) => i.severity === 'Critical');
-  const totalAffected = incidents.reduce((sum, i) => sum + i.affectedPopulation, 0);
-  const deployedTeams = rescueTeams.filter((t) => t.status === 'Deployed');
+  const totalAffected = incidents.reduce((sum, i) => sum + (i.affectedPopulation || 0), 0);
+  const deployedTeams = rescueTeams.filter((t) => t.status === 'Deployed' || t.status === 'En Route');
+  const uniqueDistricts = Array.from(new Set(incidents.map((i) => i.district || i.state).filter(Boolean)));
+  const deployedAgencies = Array.from(new Set(deployedTeams.map((t) => t.agency))).slice(0, 4).join(' · ') || 'Active Standby';
+  const capacityPct = rescueTeams.length > 0 ? Math.round((deployedTeams.length / rescueTeams.length) * 100) : 0;
+  const inProgressMissions = missions.filter((m) => m.status === 'In Progress');
+  const pendingMissions = missions.filter((m) => m.status === 'Pending');
 
   const priorityChartData = [...incidents]
     .sort((a, b) => b.aiPriorityScore - a.aiPriorityScore)
@@ -61,7 +66,23 @@ const EOCCommandCenter: React.FC = () => {
   }));
 
   const topRoster = [...incidents].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore).slice(0, 5);
-  const criticalLogs = activityFeed.filter((e) => e.type === 'critical' || e.type === 'alert').slice(0, 5);
+
+  const [filterLogsByIncident, setFilterLogsByIncident] = useState(true);
+
+  const incidentSpecificLogs = React.useMemo(() => {
+    if (!selectedIncident || !filterLogsByIncident) return activityFeed;
+    const targets = [
+      selectedIncident.id.toLowerCase(),
+      (selectedIncident.district || '').toLowerCase(),
+      (selectedIncident.location || '').toLowerCase(),
+    ].filter(Boolean);
+    const filtered = activityFeed.filter((e) => {
+      const text = `${e.event} ${e.actor || ''}`.toLowerCase();
+      return targets.some((t) => t.length > 2 && text.includes(t));
+    });
+    return filtered.length > 0 ? filtered : activityFeed;
+  }, [activityFeed, selectedIncident, filterLogsByIncident]);
+
 
   // Set first incident as default selection when loaded
   React.useEffect(() => {
@@ -69,6 +90,11 @@ const EOCCommandCenter: React.FC = () => {
       setSelectedIncident(incidents[0]);
     }
   }, [incidents]);
+
+  // ── Derived Response Trend Metrics ────────────────────────────────
+  const latestResp = responseTrend.length > 0 ? (responseTrend[responseTrend.length - 1]?.response_min ?? responseTrend[responseTrend.length - 1]?.responseMin ?? 22) : 22;
+  const firstResp = responseTrend.length > 0 ? (responseTrend[0]?.response_min ?? responseTrend[0]?.responseMin ?? 22) : 22;
+  const respDeltaPct = firstResp > 0 ? Math.round(((latestResp - firstResp) / firstResp) * 100) : 0;
 
   return (
     <motion.div variants={DASHBOARD_ANIMATIONS.container} initial="hidden" animate="show"
@@ -80,53 +106,39 @@ const EOCCommandCenter: React.FC = () => {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">EOC Command Center</h1>
-            <span className="px-2 py-0.5 text-[9px] sm:text-[10px] font-bold bg-blue-100 text-blue-800 rounded border border-blue-200 uppercase tracking-wide">
-              Level 3 Federal Ops
-            </span>
           </div>
           <p className="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 leading-snug">
             National Disaster Response Platform · Real-time Analytics &amp; Network Intelligence
           </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 shadow-xs text-slate-700">
-            <Radio size={13} className="text-emerald-600 animate-pulse" />
-            <span className="hidden xs:inline">Live Telemetry</span>
-            <span className="xs:hidden">Live</span>
-          </div>
-          <span className="inline-flex items-center px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 mr-1.5" />
-            Operational
-          </span>
         </div>
       </motion.div>
 
       {/* ─── KPI Cards Grid ─────────────────────────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KPICard title="Active Incidents" value={incidents.length}
-          subtitle={`${criticalIncidents.length} Critical`}
+          subtitle={`${criticalIncidents.length} Critical Priority`}
           icon={<AlertTriangle size={18} />} accentColor="red"
           sparkData={kpiTrends?.incidents} chartType="area"
-          trend={{ direction: 'up', label: '+2 in 4h' }}
+          trend={{ direction: criticalIncidents.length > 0 ? 'up' : 'stable', label: `${criticalIncidents.length} Urgent` }}
         />
         <KPICard title="Affected Population" value={totalAffected.toLocaleString()}
-          subtitle="Across 5 districts"
+          subtitle={`Across ${uniqueDistricts.length} affected zones`}
           icon={<Users size={18} />} accentColor="orange"
           sparkData={kpiTrends?.population} chartType="bar"
-          trend={{ direction: 'up', label: '+12.4k updated' }}
+          trend={{ direction: totalAffected > 10000 ? 'up' : 'stable', label: `${uniqueDistricts.length} Active Sectors` }}
         />
         <KPICard title="Teams Deployed" value={`${deployedTeams.length}/${rescueTeams.length}`}
-          subtitle="SMART · BOMBA · APM"
+          subtitle={deployedAgencies}
           icon={<ShieldAlert size={18} />} accentColor="blue"
-          donutValue={rescueTeams.length > 0 ? Math.round((deployedTeams.length / rescueTeams.length) * 100) : 0}
+          donutValue={capacityPct}
           chartType="donut"
-          trend={{ direction: 'stable', label: '85% capacity' }}
+          trend={{ direction: capacityPct > 60 ? 'up' : 'stable', label: `${capacityPct}% capacity` }}
         />
         <KPICard title="Active Missions" value={missions.length}
-          subtitle="Rescue &amp; Relief Ops"
+          subtitle={`${inProgressMissions.length} Active · ${pendingMissions.length} Queued`}
           icon={<Activity size={18} />} accentColor="purple"
           sparkData={kpiTrends?.missions} chartType="area"
-          trend={{ direction: 'down', label: '1 completing' }}
+          trend={{ direction: inProgressMissions.length > 0 ? 'stable' : 'down', label: `${inProgressMissions.length} in progress` }}
         />
       </motion.div>
 
@@ -176,7 +188,13 @@ const EOCCommandCenter: React.FC = () => {
               <TrendingUp size={14} className="text-emerald-600 shrink-0" />
               <p className="text-xs font-bold text-slate-800 uppercase tracking-wider truncate">Avg Response Time</p>
             </div>
-            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded shrink-0">↓ 50%</span>
+            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 border ${
+              respDeltaPct <= 0
+                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                : 'text-amber-700 bg-amber-50 border-amber-200'
+            }`}>
+              {respDeltaPct <= 0 ? `↓ ${Math.abs(respDeltaPct)}%` : `↑ ${respDeltaPct}%`}
+            </span>
           </div>
           <div className="h-[90px] w-full my-auto">
             <ResponsiveContainer width="100%" height="100%">
@@ -185,12 +203,14 @@ const EOCCommandCenter: React.FC = () => {
                 <XAxis dataKey="time" tick={{ fill: '#94a3b8', fontSize: 9 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 9 }} axisLine={false} tickLine={false} unit="m" />
                 <Tooltip formatter={(v) => [`${v} min`, 'Response']} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-                <Line type="monotone" dataKey="responseMin" stroke="#10b981" strokeWidth={2.5}
+                <Line type="monotone" dataKey="response_min" stroke="#10b981" strokeWidth={2.5}
                   dot={{ fill: '#10b981', r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-[10px] text-slate-400 mt-1 text-right font-mono">Latest: <span className="font-bold text-slate-700">14 min</span></p>
+          <p className="text-[10px] text-slate-400 mt-1 text-right font-mono">
+            Latest: <span className="font-bold text-slate-700">{latestResp} min</span>
+          </p>
         </div>
 
         {/* Resource Utilisation Radial */}
@@ -373,21 +393,56 @@ const EOCCommandCenter: React.FC = () => {
             )}
 
             {activeBottomTab === 'logs' && (
-              <div className="space-y-2">
-                {criticalLogs.map((evt) => (
-                  <div key={evt.id} className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-red-50/60 border border-red-100">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0 animate-pulse" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-slate-900 leading-snug">{evt.event}</p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <span className="text-[11px] text-slate-500 font-medium">{evt.actor}</span>
-                        <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
-                          <Clock size={10} />{evt.time}
-                        </span>
+              <div className="space-y-3">
+                {selectedIncident && (
+                  <div className="flex items-center justify-between bg-blue-50/70 border border-blue-200 rounded-lg px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                      <span className="font-bold text-blue-900">
+                        {filterLogsByIncident ? `Filtered for ${selectedIncident.title} (${selectedIncident.district})` : 'Showing All Regional Logs'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setFilterLogsByIncident(!filterLogsByIncident)}
+                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                    >
+                      {filterLogsByIncident ? 'Show All Logs' : 'Filter by Selected Node'}
+                    </button>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {incidentSpecificLogs.map((evt) => (
+                    <div
+                      key={evt.id}
+                      className={`flex items-start gap-2.5 px-3 py-2.5 rounded-lg border ${
+                        evt.type === 'critical' || evt.type === 'alert'
+                          ? 'bg-red-50/60 border-red-100'
+                          : evt.type === 'warning'
+                          ? 'bg-amber-50/60 border-amber-100'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                          evt.type === 'critical' || evt.type === 'alert'
+                            ? 'bg-red-500 animate-pulse'
+                            : evt.type === 'warning'
+                            ? 'bg-amber-500'
+                            : 'bg-blue-500'
+                        }`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-900 leading-snug">{evt.event}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <span className="text-[11px] text-slate-500 font-medium">{evt.actor}</span>
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
+                            <Clock size={10} />{evt.time}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
 

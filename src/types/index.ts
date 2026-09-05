@@ -24,8 +24,42 @@ export type SeverityLevel = 'Critical' | 'High' | 'Medium' | 'Low';
 
 export type DisasterLevel = 'Level 1: District' | 'Level 2: State' | 'Level 3: Federal';
 
+export interface IncidentLog {
+  id: string;
+  incidentId: string;
+  actor: string;
+  action: string;
+  detail?: string;
+  loggedAt: string;
+}
+
+export interface CityItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  lat: number;
+  lng: number;
+}
+
+export interface AIRecommendation {
+  id: string;
+  entity_type: 'team' | 'resource' | 'incident';
+  entity_id: string;
+  action_text: string;
+  rationale: string;
+  confidence: number;
+  risk_level: 'Low' | 'Medium' | 'High' | 'Critical';
+  stream_status: 'pending' | 'streaming' | 'complete' | 'error';
+  model_used: string;
+  is_streaming: boolean;
+  generated_at: string;
+  completed_at?: string;
+  is_active: boolean;
+}
+
 export interface Incident {
   id: string;
+  displayId?: string;
   title: string;
   type: DisasterType;
   location: string;
@@ -36,7 +70,7 @@ export interface Incident {
   disasterLevel: DisasterLevel;
   timestamp: string;
   source: 'Citizen Report' | 'JPS Water Sensor' | 'MetMalaysia Radar' | 'APM Patrol';
-  status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved';
+  status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected';
   affectedPopulation: number;
   casualtiesCount: number;
   infrastructureDamage: 'Severe' | 'Moderate' | 'Minor' | 'None';
@@ -45,9 +79,12 @@ export interface Incident {
   description: string;
   reporterContact?: string;
   verifiedBy?: string;
+  verifiedAt?: string;
+  rejectionReason?: string;
   aiPriorityScore: number; // Computed score 0 - 100
   triggerAlert?: TriggerAlert;
   impactTimeline?: ImpactSnapshot[];
+  actionLog?: IncidentLog[];
 }
 
 export interface GISLayerState {
@@ -79,6 +116,7 @@ export interface MapPOI {
 
 export interface RescueTeam {
   id: string;
+  displayId?: string;
   name: string;
   agency: 'SMART' | 'BOMBA' | 'APM' | 'PDRM' | 'ATM';
   personnelCount: number;
@@ -93,6 +131,7 @@ export interface RescueTeam {
 
 export interface Mission {
   id: string;
+  displayId?: string;
   title: string;
   incidentId: string;
   incidentLocation: string;
@@ -108,6 +147,7 @@ export interface Mission {
 
 export interface ResourceItem {
   id: string;
+  displayId?: string;
   name: string;
   category: 'Food' | 'Medical supplies' | 'Rescue equipment' | 'Vehicles' | 'Emergency supplies';
   unit: string;
@@ -119,6 +159,7 @@ export interface ResourceItem {
 
 export interface ResourceRequest {
   id: string;
+  displayId?: string;
   requestId: string;
   requestorName: string;
   agency: string;
@@ -128,7 +169,7 @@ export interface ResourceRequest {
   quantityRequested: number;
   unit: string;
   urgency: SeverityLevel;
-  status: 'Pending Approval' | 'Approved' | 'Rejected' | 'Dispatched';
+  status: 'Pending Approval' | 'Approved' | 'Rejected' | 'Dispatched' | 'Delivered' | 'Fulfilled';
   timestamp: string;
   justification: string;
   approvedBy?: string;
@@ -136,6 +177,7 @@ export interface ResourceRequest {
 
 export interface PublicAnnouncement {
   id: string;
+  displayId?: string;
   title: string;
   category: 'Emergency Alert' | 'Evacuation Order' | 'Safety Announcement';
   targetState: string;
@@ -184,12 +226,11 @@ export interface TopoEdge {
   type: TopoEdgeType;
 }
 
-/* ─── Dashboard Activity Feed ───────────────────────────────── */
 export interface ActivityEvent {
   id: string;
   time: string;
   event: string;
-  type: 'critical' | 'alert' | 'info' | 'success';
+  type: 'critical' | 'alert' | 'warning' | 'info' | 'success';
   actor: string;
 }
 
@@ -228,3 +269,15 @@ export interface ImpactSnapshot {
   impactRadiusKm: number;
   note?: string;
 }
+
+export interface AnalyticsSummary {
+  totalIncidents: number;
+  totalResolved: number;
+  resolutionRate: number;
+  totalEvacuated: number;
+  avgResponseTimeMin: number;
+  incidentTrendPct: number;
+  resolutionRateImprovementPct: number;
+  responseTimeDeltaMin: number;
+}
+

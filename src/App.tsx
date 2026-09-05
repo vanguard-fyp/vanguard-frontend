@@ -8,12 +8,14 @@ import Header from './components/layout/Header';
 // Pages
 import EOCCommandCenter from './pages/dashboard/EOCCommandCenter';
 import IncidentManagement from './pages/situational/incident-management/IncidentManagement';
+import IncidentDetailPage from './pages/situational/incident-management/IncidentDetailPage';
 import DisasterIntelligence from './pages/situational/disaster-intelligence/DisasterIntelligence';
 import RescueOperations from './pages/coordination/rescue-operations/RescueOperations';
 import ResourceManagement from './pages/coordination/resource-management/ResourceManagement';
 import PublicCommunication from './pages/communication/PublicCommunication';
 import ReportsAnalytics from './pages/analytics/ReportsAnalytics';
 import SystemAdministration from './pages/system/SystemAdministration';
+
 
 import type { UserRole } from './types';
 
@@ -51,6 +53,7 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<EOCCommandCenter />} />
               <Route path="/situational/incidents" element={<IncidentManagement />} />
+              <Route path="/situational/incidents/:id" element={<IncidentDetailPage />} />
               <Route path="/situational/intelligence" element={<DisasterIntelligence />} />
               <Route path="/response/rescue" element={<RescueOperations />} />
               <Route path="/response/resources" element={<ResourceManagement />} />

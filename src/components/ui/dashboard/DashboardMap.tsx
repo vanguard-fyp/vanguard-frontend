@@ -38,19 +38,21 @@ export const DashboardMap: React.FC<DashboardMapProps> = ({
 
     leafletMapRef.current = map;
 
-    // Add Light Mode CartoDB Positron Tile Layer
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // Add OpenStreetMap Tile Layer (100% free, no API key required)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
 
     // Custom Zoom Control top-right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Add Incident Markers with custom HTML DivIcons
+    // Add Incident Markers with custom HTML DivIcons (Active Unresolved Only)
     markersRef.current = {};
 
-    incidents.forEach((inc, idx) => {
+    const activeIncidents = incidents.filter(inc => inc.status !== 'Resolved' && inc.status !== 'Rejected');
+
+    activeIncidents.forEach((inc, idx) => {
       const isCritical = inc.severity === 'Critical';
       const colorBg =
         inc.severity === 'Critical' ? '#dc2626' :
@@ -136,7 +138,7 @@ export const DashboardMap: React.FC<DashboardMapProps> = ({
         </div>
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 font-mono">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>CartoDB Positron Tiles Active</span>
+          <span>OpenStreetMap Active</span>
         </div>
       </div>
 
@@ -152,7 +154,9 @@ export const DashboardMap: React.FC<DashboardMapProps> = ({
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-100 text-red-800 uppercase border border-red-200">
                   {selectedIncident.severity}
                 </span>
-                <span className="text-xs font-mono text-slate-400 font-bold">{selectedIncident.id}</span>
+                <span className="text-xs font-mono text-slate-500 font-bold">
+                  {selectedIncident.displayId || (selectedIncident.id.length > 15 ? `INC-${selectedIncident.id.slice(0, 8).toUpperCase()}` : selectedIncident.id)}
+                </span>
               </div>
               <p className="text-xs font-bold text-slate-900 mt-1 truncate">{selectedIncident.title}</p>
               <p className="text-[11px] text-slate-600 mt-0.5 truncate">{selectedIncident.description}</p>

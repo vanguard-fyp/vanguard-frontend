@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 
-import type { AgencyFilter, StatusFilter, TeamSortBy as SortBy } from '../../../../types';
+import type { AgencyFilter, StatusFilter, TeamSortBy } from '../../../../types';
 
 interface TeamListFiltersProps {
   searchQuery: string;
@@ -10,8 +10,8 @@ interface TeamListFiltersProps {
   onAgencyChange: (v: AgencyFilter) => void;
   filterStatus: StatusFilter;
   onStatusChange: (v: StatusFilter) => void;
-  sortBy: SortBy;
-  onSortChange: (v: SortBy) => void;
+  sortBy: TeamSortBy;
+  onSortChange: (v: TeamSortBy) => void;
   totalCount: number;
   filteredCount: number;
 }
@@ -51,7 +51,7 @@ export const TeamListFilters: React.FC<TeamListFiltersProps> = ({
         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium shrink-0">
           <ArrowUpDown size={12} className="text-slate-400" />
           <span>Sort:</span>
-          {(['default', 'personnel', 'status'] as SortBy[]).map((s) => (
+          {(['default', 'personnel', 'status'] as TeamSortBy[]).map((s) => (
             <button
               key={s}
               onClick={() => onSortChange(s)}
@@ -73,11 +73,10 @@ export const TeamListFilters: React.FC<TeamListFiltersProps> = ({
               <button
                 key={a}
                 onClick={() => onAgencyChange(a)}
-                className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition-colors ${
-                  filterAgency === a
+                className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition-colors cursor-pointer ${filterAgency === a
                     ? a === 'All' ? 'bg-slate-700 text-white border-slate-700' : `${agencyAccent[a]} border-2`
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                }`}
+                  }`}
               >
                 {a}
               </button>
@@ -92,11 +91,10 @@ export const TeamListFilters: React.FC<TeamListFiltersProps> = ({
               <button
                 key={s}
                 onClick={() => onStatusChange(s)}
-                className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition-colors ${
-                  filterStatus === s
+                className={`px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition-colors cursor-pointer ${filterStatus === s
                     ? 'bg-slate-700 text-white border-slate-700'
                     : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                }`}
+                  }`}
               >
                 {s}
               </button>

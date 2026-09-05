@@ -2,17 +2,12 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
-  LayoutDashboard,
-  FileText,
   MapPin,
-  Radio,
   Users,
   Building2,
   CloudRain,
   ShieldAlert,
   AlertTriangle,
-  CheckCircle2,
-  Clock,
   Printer,
   Activity,
   TrendingUp,
@@ -192,65 +187,38 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   );
 };
 
-/** EXECUTIVE TAB: Official Malaysian Government Situational Report (PDF/Poster format) */
+/** EXECUTIVE TAB: Official SITREP PDF & AI Poster — downloads from backend */
 const ExecutiveTab: React.FC<{ incident: Incident }> = ({ incident }) => {
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    const content = document.getElementById('malaysia-gov-sitrep-print');
-    if (!content) return;
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>SITREP OFFICIAL REPORT - ${incident.id}</title>
-        <style>
-          @page { size: A4; margin: 15mm; }
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #0f172a; margin: 0; padding: 20px; background: #ffffff; }
-          .header-banner { border-bottom: 3px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-start; }
-          .gov-title { font-size: 14px; font-weight: 800; text-transform: uppercase; color: #1e3a8a; letter-spacing: 0.05em; }
-          .sub-gov { font-size: 10px; text-transform: uppercase; color: #475569; letter-spacing: 0.1em; font-weight: 700; margin-top: 2px; }
-          .doc-ref { font-family: monospace; font-size: 10px; color: #64748b; text-align: right; }
-          .classification { font-size: 9px; font-weight: bold; background: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; display: inline-block; text-transform: uppercase; }
-          h1 { font-size: 18px; font-weight: 800; color: #0f172a; margin: 12px 0 4px; }
-          .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
-          .meta-card { background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 6px; }
-          .meta-card .label { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #64748b; }
-          .meta-card .val { font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 2px; }
-          table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11px; }
-          th, td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
-          th { background: #f1f5f9; font-weight: 700; text-transform: uppercase; font-size: 9px; color: #334155; }
-          .section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-top: 18px; }
-          .sig-block { margin-top: 30px; display: flex; justify-content: space-between; }
-          .sig-line { width: 200px; border-top: 1px solid #475569; margin-top: 40px; text-align: center; font-size: 10px; font-weight: 700; }
-        </style>
-      </head>
-      <body>
-        ${content.innerHTML}
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 300);
-  };
+  const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+  const handleDownloadSitrep = () => window.open(`${BASE_URL}/incidents/${incident.id}/sitrep-pdf`, '_blank');
+  const handleDownloadPoster = () => window.open(`${BASE_URL}/incidents/${incident.id}/sitrep-poster`, '_blank');
 
   return (
     <div className="space-y-4">
       {/* Export action bar */}
       <div className="flex gap-2">
         <button
-          onClick={handlePrint}
+          onClick={handleDownloadSitrep}
           className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
         >
-          <Printer size={14} /> Print / Export Official PDF
+          <Printer size={14} /> Official NADMA SITREP PDF
         </button>
         <button
-          onClick={handlePrint}
-          className="flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+          onClick={handleDownloadPoster}
+          className="flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg border border-amber-400 transition-colors cursor-pointer"
         >
-          <Download size={14} /> Poster
+          <Download size={14} /> AI Poster
         </button>
+      </div>
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center space-y-2">
+        <ShieldCheck className="size-8 text-blue-900 mx-auto" />
+        <p className="text-sm font-extrabold text-slate-900">NADMA Official Situational Report</p>
+        <p className="text-xs text-slate-500">
+          Click <strong>Official NADMA SITREP PDF</strong> to download the full government situational report for <strong>{incident.id}</strong> with live incident data, casualty table, assigned teams, and official signature block.
+        </p>
+        <p className="text-xs text-slate-500 mt-2">
+          Click <strong>AI Poster</strong> to download the creative bilingual public warning poster with evacuation directives and emergency hotlines.
+        </p>
       </div>
 
       {/* Official Government Template View */}
@@ -353,19 +321,6 @@ const ExecutiveTab: React.FC<{ incident: Incident }> = ({ incident }) => {
             {incident.description} Laporan meterologi terkini menunjukkan status cuaca: <strong>{incident.weatherCondition}</strong>. Sumber data diperoleh daripada {incident.source}.
           </p>
         </div>
-
-        {/* Signature & Verification Block */}
-        <div className="pt-4 border-t border-slate-200 flex justify-between items-end">
-          <div>
-            <p className="text-[9px] font-bold text-slate-500 uppercase">Disahkan Oleh:</p>
-            <p className="text-xs font-bold text-slate-900 mt-0.5">{incident.verifiedBy ?? 'Pusat Kawalan Operasi NADMA'}</p>
-            <p className="text-[9px] text-slate-500">Pusat Kawalan Operasi Bencana Negara (NDCC)</p>
-          </div>
-          <div className="text-right">
-            <div className="w-24 border-b border-slate-400 mb-1 ml-auto" />
-            <p className="text-[9px] font-bold text-slate-600 uppercase">Cop & Tandatangan Pengesahan</p>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -401,9 +356,8 @@ const TacticalTab: React.FC<{ incident: Incident }> = ({ incident }) => {
             scrollWheelZoom={false}
           >
             <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              attribution="&copy; CARTO"
-              subdomains={['a', 'b', 'c', 'd'] as any}
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
 
             <Circle
@@ -461,47 +415,169 @@ const TacticalTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   );
 };
 
-/** OPERATIONS TAB: Properly formatted Light-Mode Activity Feed */
+/** OPERATIONS TAB: Filtered activity feed & operational logs for selected incident */
 const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   const { data: activityFeed = [] } = useActivityFeed();
+  const [streamScope, setStreamScope] = useState<'incident' | 'global'>('incident');
+
+  // Filter global feed strictly for entries related to this incident
+  const incidentDisplayId = incident.displayId || incident.id;
+  const incidentFeed = activityFeed.filter((evt) => {
+    const text = `${evt.event} ${evt.actor || ''}`.toLowerCase();
+    return (
+      text.includes(incident.id.toLowerCase()) ||
+      text.includes(incidentDisplayId.toLowerCase()) ||
+      (incident.district && text.includes(incident.district.toLowerCase())) ||
+      (incident.location && text.includes(incident.location.toLowerCase()))
+    );
+  });
+
+  const actionLogs = incident.actionLog || [];
+  const hasIncidentLogs = actionLogs.length > 0 || incidentFeed.length > 0;
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
-          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            Live Incident Stream
-          </h4>
+    <div className="space-y-4">
+      {/* Stream Scope Selector */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <button
+            onClick={() => setStreamScope('incident')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+              streamScope === 'incident'
+                ? 'bg-white text-blue-700 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Incident Feed ({actionLogs.length + incidentFeed.length})
+          </button>
+          <button
+            onClick={() => setStreamScope('global')}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+              streamScope === 'global'
+                ? 'bg-white text-blue-700 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Global EOC Stream
+          </button>
         </div>
-        <span className="text-[10px] font-mono text-slate-400">{incident.id}</span>
+        <span className="text-[10px] font-mono text-slate-400 truncate max-w-[120px]">
+          {incident.district}, {incident.state}
+        </span>
       </div>
 
-      {/* Timeline items */}
-      <div className="space-y-2.5">
-        {activityFeed.map((evt) => {
-          const style = activityTypeStyle[evt.type] ?? activityTypeStyle.info;
-          return (
-            <div
-              key={evt.id}
-              className={`p-3 rounded-xl border flex items-start gap-3 transition-all ${style.bg} border-slate-200 shadow-2xs`}
-            >
-              <span className={`size-2.5 rounded-full ${style.dot} mt-1 shrink-0`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
-                    {style.label} · {evt.actor}
-                  </span>
-                  <span className="text-[10px] font-mono font-bold text-slate-400">{evt.time}</span>
-                </div>
-                <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
+      {streamScope === 'incident' ? (
+        <div className="space-y-3">
+          {/* Incident Action Audit Log */}
+          {actionLogs.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Incident Action & Audit Trail
+              </h5>
+              <div className="space-y-2">
+                {actionLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-start gap-2.5 shadow-2xs"
+                  >
+                    <span className="size-2 rounded-full bg-blue-600 mt-1.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[10px] font-extrabold uppercase text-blue-900">
+                          {log.action} · {log.actor}
+                        </span>
+                        <span className="text-[9px] font-mono text-slate-400 font-bold">
+                          {formatDateTime(log.loggedAt)}
+                        </span>
+                      </div>
+                      {log.detail && (
+                        <p className="text-xs text-slate-700 font-medium leading-snug">{log.detail}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          {/* Incident-specific Event Stream */}
+          {incidentFeed.length > 0 && (
+            <div className="space-y-2">
+              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Correlated Live Telemetry
+              </h5>
+              <div className="space-y-2">
+                {incidentFeed.map((evt) => {
+                  const style = activityTypeStyle[evt.type] ?? activityTypeStyle.info;
+                  return (
+                    <div
+                      key={evt.id}
+                      className={`p-3 rounded-xl border flex items-start gap-3 transition-all ${style.bg} border-slate-200 shadow-2xs`}
+                    >
+                      <span className={`size-2.5 rounded-full ${style.dot} mt-1 shrink-0`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
+                            {style.label} · {evt.actor}
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-slate-400">{evt.time}</span>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {!hasIncidentLogs && (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center space-y-3">
+              <Activity size={20} className="text-slate-400 mx-auto" />
+              <p className="text-xs font-bold text-slate-700">
+                No specific live dispatch logs recorded for {incident.title} yet.
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Logs will appear automatically when teams are deployed, status updates occur, or resources are requisitioned.
+              </p>
+              <button
+                onClick={() => setStreamScope('global')}
+                className="px-3 py-1.5 bg-white border border-slate-300 hover:border-slate-800 text-slate-700 text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
+              >
+                View Global EOC Feed
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Global Feed */
+        <div className="space-y-2.5">
+          {activityFeed.map((evt) => {
+            const style = activityTypeStyle[evt.type] ?? activityTypeStyle.info;
+            return (
+              <div
+                key={evt.id}
+                className={`p-3 rounded-xl border flex items-start gap-3 transition-all ${style.bg} border-slate-200 shadow-2xs`}
+              >
+                <span className={`size-2.5 rounded-full ${style.dot} mt-1 shrink-0`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
+                      {style.label} · {evt.actor}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-slate-400">{evt.time}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main SitrepPanel Component (Light Theme, Backdrop Click-to-Close)

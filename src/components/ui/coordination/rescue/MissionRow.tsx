@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronUp, Target, MapPin, Clock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { DisasterBadge } from '../../dashboard/DisasterBadge';
+import { formatDateTime } from '../../../../utils/dateFormatter';
 import type { Mission } from '../../../../types';
 import { milestones } from '../../../../constants';
 
@@ -94,14 +95,14 @@ export const MissionRow: React.FC<MissionRowProps> = ({ mission, isExpanded, onT
                   <Clock size={13} className="text-slate-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Assigned Time</p>
-                    <p className="text-xs font-semibold text-slate-700">{mission.assignedTime}</p>
+                    <p className="text-xs font-semibold text-slate-700">{formatDateTime(mission.assignedTime)}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <Clock size={13} className="text-blue-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Est. Completion</p>
-                    <p className="text-xs font-semibold text-slate-700">{mission.estimatedCompletion}</p>
+                    <p className="text-xs font-semibold text-slate-700">{formatDateTime(mission.estimatedCompletion)}</p>
                   </div>
                 </div>
               </div>

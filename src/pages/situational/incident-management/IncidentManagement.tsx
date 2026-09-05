@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -12,13 +13,14 @@ import {
   Flame,
   Activity,
   ChevronRight,
-  ArrowUpRight,
+  ChevronDown,
+  XCircle,
 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
-import { useIncidents, useUpdateIncident } from '../../../hooks';
+import { useIncidents } from '../../../hooks';
+import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
 import type { Incident } from '../../../types';
-import { IncidentDetailView } from './IncidentDetailView';
 
 const typeIcons: Record<string, React.ReactNode> = {
   Flood: <Droplets size={16} className="text-blue-600" />,
@@ -33,6 +35,7 @@ const statusIcons: Record<string, React.ReactNode> = {
   Verified: <CheckCircle size={14} className="text-blue-600" />,
   Responding: <Radio size={14} className="text-orange-600 animate-pulse" />,
   Resolved: <CheckCircle size={14} className="text-emerald-600" />,
+  Rejected: <XCircle size={14} className="text-rose-600" />,
 };
 
 const DISASTER_TYPES = ['All', 'Flood', 'Flash Flood', 'Landslide', 'Forest Fire', 'Severe Storm'] as const;
@@ -51,15 +54,26 @@ interface IncidentManagementProps {
   onTrackInIntelligence?: (incident: Incident) => void;
 }
 
-const IncidentManagement: React.FC<IncidentManagementProps> = ({ onTrackInIntelligence }) => {
-  const { data: incidents = [] } = useIncidents();
-  const updateIncident = useUpdateIncident();
+function getCleanDisplayId(id: string, displayId?: string): string {
+  if (displayId) return displayId;
+  if (id.startsWith('inc-')) {
+    const parts = id.split('-');
+    if (parts.length >= 3) return `${parts[0].toUpperCase()}-${parts[1]}-${parts[2]}`;
+  }
+  if (id.length > 13) {
+    return `INC-${id.slice(0, 8).toUpperCase()}`;
+  }
+  return id.toUpperCase();
+}
+
+const IncidentManagement: React.FC<IncidentManagementProps> = () => {
+  const navigate = useNavigate();
+  const { data: incidents = [], isLoading } = useIncidents();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSeverity, setFilterSeverity] = useState<string>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All');
-
-  const [activeIncident, setActiveIncident] = useState<Incident | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(6);
 
   const filteredIncidents = incidents.filter((inc) => {
     const matchCategory = selectedCategory === 'All' || inc.type === selectedCategory;
@@ -67,36 +81,22 @@ const IncidentManagement: React.FC<IncidentManagementProps> = ({ onTrackInIntell
       inc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
       inc.state.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      inc.id.toLowerCase().includes(searchQuery.toLowerCase());
+      inc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (inc.displayId && inc.displayId.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchSeverity = filterSeverity === 'All' || inc.severity === filterSeverity;
-    const matchStatus = filterStatus === 'All' || inc.status === filterStatus;
+    // Hide Resolved and Rejected incidents unless user explicitly chooses their status filter
+    const matchStatus = filterStatus === 'All' ? (inc.status !== 'Resolved' && inc.status !== 'Rejected') : inc.status === filterStatus;
     return matchCategory && matchSearch && matchSeverity && matchStatus;
   });
 
+  const displayedIncidents = filteredIncidents.slice(0, visibleCount);
+
   const categoryCounts = DISASTER_TYPES.reduce((acc, cat) => {
-    acc[cat] = cat === 'All' ? incidents.length : incidents.filter((i) => i.type === cat).length;
+    // When "All Statuses" is selected, only count active (non-resolved, non-rejected) incidents
+    const eligible = filterStatus === 'All' ? incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected') : incidents.filter((i) => i.status === filterStatus);
+    acc[cat] = cat === 'All' ? eligible.length : eligible.filter((i) => i.type === cat).length;
     return acc;
   }, {} as Record<string, number>);
-
-  const handleVerify = (id: string) => {
-    updateIncident.mutate({ id, updates: { status: 'Verified', verifiedBy: 'Officer Rosli (NADMA)' } });
-    if (activeIncident?.id === id) {
-      setActiveIncident((prev) =>
-        prev ? { ...prev, status: 'Verified', verifiedBy: 'Officer Rosli (NADMA)' } : null
-      );
-    }
-  };
-
-  if (activeIncident) {
-    return (
-      <IncidentDetailView
-        incident={activeIncident}
-        onBack={() => setActiveIncident(null)}
-        onVerify={handleVerify}
-        onTrackInIntelligence={onTrackInIntelligence}
-      />
-    );
-  }
 
   return (
     <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-6">
@@ -114,7 +114,10 @@ const IncidentManagement: React.FC<IncidentManagementProps> = ({ onTrackInIntell
           return (
             <button
               key={type}
-              onClick={() => setSelectedCategory(type)}
+              onClick={() => {
+                setSelectedCategory(type);
+                setVisibleCount(6);
+              }}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 flex items-center gap-2 border ${isSelected
                 ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -139,8 +142,11 @@ const IncidentManagement: React.FC<IncidentManagementProps> = ({ onTrackInIntell
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search external reports by ID, title, location..."
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setVisibleCount(6);
+              }}
+              placeholder="Search reports by clean ID (e.g. INC-2026-001), title, location..."
               className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-slate-900 focus:bg-white transition-all"
             />
           </div>
@@ -149,7 +155,10 @@ const IncidentManagement: React.FC<IncidentManagementProps> = ({ onTrackInIntell
             <Filter size={14} className="text-slate-400" />
             <select
               value={filterSeverity}
-              onChange={(e) => setFilterSeverity(e.target.value)}
+              onChange={(e) => {
+                setFilterSeverity(e.target.value);
+                setVisibleCount(6);
+              }}
               className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-slate-900"
             >
               <option value="All">All Severities</option>
@@ -160,74 +169,119 @@ const IncidentManagement: React.FC<IncidentManagementProps> = ({ onTrackInIntell
             </select>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
+              onChange={(e) => {
+                setFilterStatus(e.target.value);
+                setVisibleCount(6);
+              }}
               className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-slate-900"
             >
-              <option value="All">All Statuses</option>
+              <option value="All">Active Incidents (Excl. Resolved & Rejected)</option>
               <option value="Unverified">Unverified (predicted)</option>
               <option value="Verified">Verified</option>
               <option value="Responding">Responding</option>
-              <option value="Resolved">Resolved</option>
+              <option value="Resolved">Resolved (Archived)</option>
+              <option value="Rejected">Rejected</option>
             </select>
           </div>
         </div>
       </motion.div>
 
-      <motion.div variants={itemAnim} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredIncidents.map((incident) => (
-          <div
-            key={incident.id}
-            onClick={() => setActiveIncident(incident)}
-            className="bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-400 hover:shadow-md transition-all cursor-pointer relative group flex flex-col justify-between"
-          >
-            <div>
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    {incident.id}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {statusIcons[incident.status]}
-                    <span className="text-xs font-bold text-slate-700">{incident.status}</span>
+      {isLoading ? (
+        <SkeletonList count={4} />
+      ) : filteredIncidents.length === 0 ? (
+        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
+          <p className="text-sm font-semibold">No incidents found matching criteria.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <motion.div variants={itemAnim} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {displayedIncidents.map((incident) => {
+              const isInactive = incident.status === 'Resolved' || incident.status === 'Rejected';
+              return (
+                <div
+                  key={incident.id}
+                  onClick={() => navigate(`/situational/incidents/${incident.displayId || incident.id}`)}
+                  className={`border rounded-xl p-5 transition-all cursor-pointer relative group flex flex-col justify-between ${
+                    isInactive
+                      ? 'bg-slate-100/75 border-slate-300 text-slate-500 hover:border-slate-400'
+                      : 'bg-white border-slate-200 hover:border-slate-400 hover:shadow-md'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+                          isInactive
+                            ? 'text-slate-500 bg-slate-200/70 border-slate-300'
+                            : 'text-slate-600 bg-slate-100 border-slate-200'
+                        }`}>
+                          {getCleanDisplayId(incident.id, incident.displayId)}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {statusIcons[incident.status]}
+                          <span className={`text-xs font-bold ${isInactive ? 'text-slate-500' : 'text-slate-700'}`}>
+                            {incident.status}
+                          </span>
+                        </div>
+                      </div>
+                      <DisasterBadge type="severity" value={incident.severity} />
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-2">
+                      {typeIcons[incident.type]}
+                      <h3 className={`text-sm font-extrabold truncate transition-colors ${
+                        isInactive
+                          ? 'text-slate-600 group-hover:text-slate-800'
+                          : 'text-slate-900 group-hover:text-blue-600'
+                      }`}>
+                        {incident.title}
+                      </h3>
+                    </div>
+
+                    <p className={`text-xs line-clamp-2 leading-relaxed mb-3 ${
+                      isInactive ? 'text-slate-500' : 'text-slate-600'
+                    }`}>
+                      {incident.description}
+                    </p>
+
+                    {incident.status === 'Unverified' && incident.triggerAlert && (
+                      <div className="mb-3">
+                        <TriggerAlertPanel alert={incident.triggerAlert} size="compact" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`pt-3 border-t flex items-center justify-between text-xs font-medium ${
+                    isInactive ? 'border-slate-200 text-slate-400' : 'border-slate-100 text-slate-500'
+                  }`}>
+                    <span className="flex items-center gap-1 truncate">
+                      <MapPin size={12} className={`shrink-0 ${isInactive ? 'text-slate-400' : 'text-slate-400'}`} />
+                      {incident.location}, {incident.state}
+                    </span>
+                    <span className={`flex items-center gap-1 font-bold shrink-0 ${
+                      isInactive ? 'text-slate-600 group-hover:text-slate-800' : 'text-blue-600'
+                    }`}>
+                      View Details <ChevronRight size={14} />
+                    </span>
                   </div>
                 </div>
-                <DisasterBadge type="severity" value={incident.severity} />
-              </div>
+              );
+            })}
+          </motion.div>
 
-              <div className="flex items-center gap-2 mb-2">
-                {typeIcons[incident.type]}
-                <h3 className="text-sm font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
-                  {incident.title}
-                </h3>
-              </div>
-
-              <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-3">{incident.description}</p>
-
-              {incident.status === 'Unverified' && incident.triggerAlert && (
-                <div className="mb-3">
-                  <TriggerAlertPanel alert={incident.triggerAlert} size="compact" />
-                </div>
-              )}
-
-              {incident.status !== 'Unverified' && (
-                <div className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 w-fit">
-                  <ArrowUpRight size={12} /> Tracked in Disaster Intelligence
-                </div>
-              )}
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span className="flex items-center gap-1 truncate">
-                <MapPin size={12} className="shrink-0 text-slate-400" />
-                {incident.location}, {incident.state}
-              </span>
-              <span className="flex items-center gap-1 font-bold text-blue-600 shrink-0">
-                View Details <ChevronRight size={14} />
-              </span>
-            </div>
-          </div>
-        ))}
-      </motion.div>
+          {filteredIncidents.length > visibleCount && (
+            <motion.div variants={itemAnim} className="flex justify-center pt-2">
+              <button
+                onClick={() => setVisibleCount((prev) => prev + 6)}
+                className="px-5 py-2.5 bg-white border border-slate-300 hover:border-slate-900 text-slate-800 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-2 cursor-pointer hover:bg-slate-50"
+              >
+                <ChevronDown size={14} />
+                Show More Incidents ({filteredIncidents.length - visibleCount} remaining)
+              </button>
+            </motion.div>
+          )}
+        </div>
+      )}
     </motion.div>
   );
 };

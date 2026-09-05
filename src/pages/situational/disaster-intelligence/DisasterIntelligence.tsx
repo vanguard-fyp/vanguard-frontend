@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Map, Search, Layers, X, MapPin, AlertTriangle, Navigation, Box, Square } from 'lucide-react';
-import type { Incident, GISLayerState } from '../../../types';
+import type { Incident, GISLayerState, FlyToTarget } from '../../../types';
 import { IntelligenceOverview } from './IntelligenceOverview';
 import { LayerPanel } from '../../../components/ui/situational/LayerPanel';
 import { AIInsightDetailView } from './AIInsightDetailView';
-import { MapCanvas3D, type FlyToTarget } from '../../../components/ui/situational/MapCanvas';
+import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
-import { useIncidents, useMapPOIs } from '../../../hooks';
+import { useIncidents, useMapPOIs, useCities } from '../../../hooks';
 
 const containerAnim = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const itemAnim      = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -30,19 +30,6 @@ const defaultLayers: GISLayerState = {
   rescueTeamLocations: true,
 };
 
-const CITIES_INDEX = [
-  { title: 'Kota Bharu', subtitle: 'District Capital · Kelantan', lat: 6.1254, lng: 102.2381 },
-  { title: 'Temerloh', subtitle: 'Town Sector · Pahang', lat: 3.4482, lng: 102.4176 },
-  { title: 'Hulu Langat', subtitle: 'District Sector · Selangor', lat: 3.1098, lng: 101.7952 },
-  { title: 'Segamat', subtitle: 'District Sector · Johor', lat: 2.5064, lng: 102.8158 },
-  { title: 'Ranau & Kundasang', subtitle: 'Foothills Sector · Sabah', lat: 5.9531, lng: 116.6642 },
-  { title: 'Kuala Lumpur', subtitle: 'Federal Territory · Malaysia', lat: 3.1390, lng: 101.6869 },
-  { title: 'George Town', subtitle: 'State Capital · Penang', lat: 5.4164, lng: 100.3327 },
-  { title: 'Kuantan', subtitle: 'State Capital · Pahang', lat: 3.8077, lng: 103.3260 },
-  { title: 'Kota Kinabalu', subtitle: 'State Capital · Sabah', lat: 5.9804, lng: 116.0735 },
-  { title: 'Kuching', subtitle: 'State Capital · Sarawak', lat: 1.5533, lng: 110.3592 },
-];
-
 interface DisasterIntelligenceProps {
   focusIncident?: Incident | null;
   onFocusHandled?: () => void;
@@ -61,7 +48,13 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   const [sitrepOpen, setSitrepOpen] = useState(false);
 
   const { data: incidents = [] } = useIncidents();
+  const activeIncidents = useMemo(
+    () => incidents.filter(inc => inc.status !== 'Resolved' && inc.status !== 'Rejected'),
+    [incidents]
+  );
+
   const { data: mapPOIs = [] } = useMapPOIs();
+  const { data: backendCities = [] } = useCities();
 
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +92,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       incidentObj?: Incident;
     }[] = [];
 
-    incidents.forEach(inc => {
+    activeIncidents.forEach(inc => {
       list.push({
         id: `inc-${inc.id}`,
         title: inc.title,
@@ -122,9 +115,9 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       });
     });
 
-    CITIES_INDEX.forEach((c, idx) => {
+    backendCities.forEach((c) => {
       list.push({
-        id: `city-${idx}`,
+        id: c.id || `city-${c.title}`,
         title: c.title,
         subtitle: c.subtitle,
         type: 'city',
@@ -134,7 +127,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     });
 
     return list;
-  }, [incidents, mapPOIs]);
+  }, [incidents, mapPOIs, backendCities]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -365,7 +358,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                 flyToTarget={flyToTarget}
                 onSelectIncident={handleSelectIncident}
                 onToggleLayer={toggleLayer}
-                incidents={incidents}
+                incidents={activeIncidents}
                 pois={mapPOIs}
               />
             </div>

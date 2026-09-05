@@ -2,10 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Megaphone, AlertTriangle, Shield, CheckCircle2 } from 'lucide-react';
 import { useAnnouncements, useCreateAnnouncement, useUpdateAnnouncement, useDeleteAnnouncement } from '../../hooks';
-import { CommunicationFilters, type CommunicationCategoryFilter, type CommunicationChannelFilter, type CommunicationSortBy } from '../../components/ui/communication/CommunicationFilters';
+import { CommunicationFilters } from '../../components/ui/communication/CommunicationFilters';
 import { CommunicationCard } from '../../components/ui/communication/CommunicationCard';
 import { ComposeBroadcastModal } from '../../components/ui/communication/ComposeBroadcastModal';
-import type { PublicAnnouncement } from '../../types';
+import type { PublicAnnouncement, CommunicationCategoryFilter, CommunicationChannelFilter, CommunicationSortBy } from '../../types';
+
 
 const containerAnim = {
   hidden: { opacity: 0 },
@@ -184,6 +185,7 @@ const PublicCommunication: React.FC = () => {
                     setExpandedId(expandedId === ann.id ? null : ann.id)
                   }
                   onToggleActive={handleToggleActive}
+                  onDelete={handleDelete}
                 />
               </motion.div>
             ))

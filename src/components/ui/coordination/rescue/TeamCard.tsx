@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, MapPin, Phone, UserCheck, ChevronDown, ChevronUp,
-  Truck, ShieldCheck, Target, Navigation
+  Truck, ShieldCheck, Target, Navigation, ArrowUpRight, Sparkles
 } from 'lucide-react';
-import { MissionRow } from './MissionRow';
-import { HILAdvisory } from './HILAdvisory';
 import type { RescueTeam, Mission, Incident } from '../../../../types';
 
 interface TeamCardProps {
@@ -14,6 +12,7 @@ interface TeamCardProps {
   incidents: Incident[];
   isExpanded: boolean;
   onToggle: () => void;
+  onViewOperations?: (team: RescueTeam) => void;
 }
 
 const agencyColors: Record<string, string> = {
@@ -32,9 +31,8 @@ const statusConfig: Record<string, { dot: string; badge: string }> = {
 };
 
 export const TeamCard: React.FC<TeamCardProps> = ({
-  team, missions, incidents, isExpanded, onToggle
+  team, missions, incidents, isExpanded, onToggle, onViewOperations
 }) => {
-  const [expandedMissionId, setExpandedMissionId] = useState<string | null>(null);
   const teamMissions = missions.filter((m) => m.assignedTeamId === team.id);
   const assignedIncident = incidents.find((i) => i.id === team.assignedIncidentId);
   const sc = statusConfig[team.status] || statusConfig['Off Duty'];
@@ -43,10 +41,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
   return (
     <div className={`bg-white border rounded-xl overflow-hidden transition-all duration-200 ${isExpanded ? 'border-blue-300 shadow-md' : 'border-slate-200 shadow-xs hover:border-slate-300'}`}>
       {/* Team Row Header */}
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-slate-50/50 transition-colors"
-      >
+      <div className="flex items-center gap-4 px-5 py-4 text-left">
         {/* Agency badge */}
         <span className={`text-[11px] font-bold px-2.5 py-1 rounded border shrink-0 ${ac}`}>
           {team.agency}
@@ -57,7 +52,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
           <div className="flex items-center gap-2">
             <p className="text-sm font-bold text-slate-900 truncate">{team.name}</p>
           </div>
-          <div className="flex items-center gap-3 mt-0.5">
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <Users size={11} className="text-slate-400" />
               {team.personnelCount} personnel
@@ -79,23 +74,39 @@ export const TeamCard: React.FC<TeamCardProps> = ({
             <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
             {team.status}
           </span>
-          {isExpanded
-            ? <ChevronUp size={15} className="text-slate-400" />
-            : <ChevronDown size={15} className="text-slate-400" />}
-        </div>
-      </button>
+          
+          {onViewOperations && (
+            <button
+              onClick={() => onViewOperations(team)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer"
+            >
+              <span>Operations</span>
+              <ArrowUpRight size={13} />
+            </button>
+          )}
 
-      {/* Expanded Detail Panel */}
+          <button
+            onClick={onToggle}
+            className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+          >
+            {isExpanded
+              ? <ChevronUp size={16} />
+              : <ChevronDown size={16} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded Quick Info Panel */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="border-t border-slate-100 px-5 py-4 space-y-5">
+            <div className="border-t border-slate-100 px-5 py-4 bg-slate-50/50 space-y-4">
               {/* Info Grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="flex items-start gap-2">
@@ -115,7 +126,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                 <div className="flex items-start gap-2">
                   <Navigation size={14} className="text-slate-400 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Current Position</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Current Location</p>
                     <p className="text-xs font-semibold text-slate-800">{team.currentLocation}</p>
                   </div>
                 </div>
@@ -123,13 +134,13 @@ export const TeamCard: React.FC<TeamCardProps> = ({
 
               {/* Vehicles */}
               <div>
-                <div className="flex items-center gap-1.5 mb-2">
+                <div className="flex items-center gap-1.5 mb-1.5">
                   <Truck size={13} className="text-slate-400" />
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Assets & Vehicles</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {team.vehicles.map((v) => (
-                    <span key={v} className="text-[11px] font-semibold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg border border-slate-200">
+                    <span key={v} className="text-[11px] font-semibold px-2.5 py-0.5 bg-white text-slate-700 rounded-md border border-slate-200">
                       {v}
                     </span>
                   ))}
@@ -139,45 +150,27 @@ export const TeamCard: React.FC<TeamCardProps> = ({
               {/* Assigned Incident */}
               {assignedIncident && (
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 mb-1">
+                  <div className="flex items-center gap-1.5 mb-0.5">
                     <ShieldCheck size={13} className="text-orange-600" />
                     <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wide">Active Incident Assignment</p>
                   </div>
                   <p className="text-xs font-bold text-orange-900">{assignedIncident.title}</p>
-                  <p className="text-[11px] text-orange-700 font-medium mt-0.5">
+                  <p className="text-[11px] text-orange-700 font-medium">
                     {assignedIncident.location}, {assignedIncident.state} · Severity: {assignedIncident.severity}
                   </p>
                 </div>
               )}
 
-              {/* Missions Section */}
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                  <Target size={11} />
-                  Mission Assignments ({teamMissions.length})
-                </p>
-                {teamMissions.length > 0 ? (
-                  <div className="space-y-2">
-                    {teamMissions.map((mission) => (
-                      <MissionRow
-                        key={mission.id}
-                        mission={mission}
-                        isExpanded={expandedMissionId === mission.id}
-                        onToggle={() =>
-                          setExpandedMissionId(expandedMissionId === mission.id ? null : mission.id)
-                        }
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 border border-slate-100 rounded-lg px-4 py-3 text-center">
-                    <p className="text-xs text-slate-400 font-medium">No missions assigned to this team</p>
-                  </div>
-                )}
+              {/* Quick Summary Info */}
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-violet-600" />
+                  {teamMissions.length} active/queued mission(s) for this squad
+                </span>
+                <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  {team.displayId || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
+                </span>
               </div>
-
-              {/* HIL AI Advisory */}
-              <HILAdvisory team={team} />
             </div>
           </motion.div>
         )}

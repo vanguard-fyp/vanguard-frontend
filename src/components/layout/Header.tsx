@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Clock, Search, ChevronDown, Menu } from 'lucide-react';
+import { Bell, Clock, Search, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import type { HeaderProps } from '../../types';
-import { USER_ROLES } from '../../types';
-
 
 interface ExtendedHeaderProps extends HeaderProps {
   onMobileMenuToggle?: () => void;
 }
 
-const Header: React.FC<ExtendedHeaderProps> = ({ currentRole, onRoleChange, onMobileMenuToggle }) => {
+const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
   const [now, setNow] = useState(new Date());
-  const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
   useEffect(() => {
@@ -77,7 +74,7 @@ const Header: React.FC<ExtendedHeaderProps> = ({ currentRole, onRoleChange, onMo
         {/* Notifications Bell */}
         <div className="relative">
           <button
-            onClick={() => { setNotifOpen(!notifOpen); setRoleDropdownOpen(false); }}
+            onClick={() => setNotifOpen(!notifOpen)}
             className="relative p-2 rounded-lg transition-all text-slate-600 hover:bg-slate-100 cursor-pointer"
             title="Notifications"
           >
@@ -126,46 +123,48 @@ const Header: React.FC<ExtendedHeaderProps> = ({ currentRole, onRoleChange, onMo
         </div>
 
         {/* Role Selector Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => { setRoleDropdownOpen(!roleDropdownOpen); setNotifOpen(false); }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 border border-slate-200 hover:bg-slate-200/70 transition-all cursor-pointer text-slate-700 max-w-[140px] sm:max-w-none truncate"
-          >
-            <span className="truncate">{currentRole}</span>
-            <ChevronDown size={14} className="shrink-0 text-slate-500" />
-          </button>
+        {/* {currentRole && onRoleChange && (
+          <div className="relative">
+            <button
+              onClick={() => { setRoleDropdownOpen(!roleDropdownOpen); setNotifOpen(false); }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 border border-slate-200 hover:bg-slate-200/70 transition-all cursor-pointer text-slate-700 max-w-[140px] sm:max-w-none truncate"
+            >
+              <span className="truncate">{currentRole}</span>
+              <ChevronDown size={14} className="shrink-0 text-slate-500" />
+            </button>
 
-          <AnimatePresence>
-            {roleDropdownOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-12 w-56 rounded-xl overflow-hidden z-50 bg-white border border-slate-200 shadow-xl py-1"
-              >
-                <div className="px-3 py-2 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Switch Active Persona
-                </div>
-                {USER_ROLES.map((role) => (
-                  <button
-                    key={role}
-                    onClick={() => {
-                      onRoleChange(role);
-                      setRoleDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                      currentRole === role ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="truncate">{role}</span>
-                    {currentRole === role && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+            <AnimatePresence>
+              {roleDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-12 w-56 rounded-xl overflow-hidden z-50 bg-white border border-slate-200 shadow-xl py-1"
+                >
+                  <div className="px-3 py-2 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Switch Active Persona
+                  </div>
+                  {USER_ROLES.map((role) => (
+                    <button
+                      key={role}
+                      onClick={() => {
+                        onRoleChange(role);
+                        setRoleDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                        currentRole === role ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">{role}</span>
+                      {currentRole === role && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )} */}
       </div>
     </header>
   );

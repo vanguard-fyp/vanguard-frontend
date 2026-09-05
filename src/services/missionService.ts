@@ -64,4 +64,18 @@ export const missionService = {
   deleteRescueTeam: async (id: string): Promise<void> => {
     return apiClient.delete<void>(`/missions/teams/${id}`);
   },
+
+  /**
+   * Get AI Recommendation for a rescue team
+   */
+  getTeamRecommendation: async (teamId: string): Promise<any> => {
+    return apiClient.get<any>(`/missions/team/${teamId}/recommendation`);
+  },
+
+  /**
+   * Force generate/regenerate AI Recommendation for a rescue team
+   */
+  generateTeamRecommendation: async (teamId: string): Promise<any> => {
+    return apiClient.post<any>(`/missions/team/${teamId}/recommendation/generate`, {});
+  },
 };

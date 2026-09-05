@@ -11,6 +11,7 @@ export const INCIDENT_KEYS = {
   list: (filters?: Record<string, string>) => [...INCIDENT_KEYS.lists(), filters] as const,
   detail: (id: string) => [...INCIDENT_KEYS.all, 'detail', id] as const,
   pois: () => ['incidents', 'pois'] as const,
+  cities: () => ['incidents', 'cities'] as const,
 };
 
 export function useIncidents(filters?: { severity?: string; status?: string; district?: string }) {
@@ -21,12 +22,12 @@ export function useIncidents(filters?: { severity?: string; status?: string; dis
   });
 }
 
-export function useIncident(id: string) {
+export function useIncident(id: string | null | undefined) {
   return useQuery({
-    queryKey: INCIDENT_KEYS.detail(id),
-    queryFn: () => incidentService.getIncidentById(id),
+    queryKey: INCIDENT_KEYS.detail(id || ''),
+    queryFn: () => incidentService.getIncidentById(id!),
     enabled: !!id,
-    staleTime: 30_000,
+    staleTime: 10_000,
   });
 }
 
@@ -34,6 +35,14 @@ export function useMapPOIs() {
   return useQuery({
     queryKey: INCIDENT_KEYS.pois(),
     queryFn: () => incidentService.getMapPOIs(),
+    staleTime: 60_000,
+  });
+}
+
+export function useCities() {
+  return useQuery({
+    queryKey: INCIDENT_KEYS.cities(),
+    queryFn: () => incidentService.getCities(),
     staleTime: 60_000,
   });
 }
@@ -68,3 +77,15 @@ export function useDeleteIncident() {
     },
   });
 }
+
+export function useResolveIncident() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, outcomeNotes, resolverName }: { id: string; outcomeNotes?: string; resolverName?: string }) =>
+      incidentService.resolveIncident(id, { outcomeNotes, resolverName }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: INCIDENT_KEYS.all });
+    },
+  });
+}
+

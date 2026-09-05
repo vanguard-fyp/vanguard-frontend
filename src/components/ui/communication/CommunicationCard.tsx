@@ -1,23 +1,20 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertTriangle,
-  Shield,
-  Bell,
   ChevronDown,
   ChevronUp,
   MapPin,
-  Smartphone,
-  Globe,
-  Tv,
   Radio,
   UserCheck,
   Clock,
   Send,
   EyeOff,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import { DisasterBadge } from '../dashboard/DisasterBadge';
+import { formatDateTime } from '../../../utils/dateFormatter';
+
 import type { PublicAnnouncement } from '../../../types';
 import { channelIcons, categoryIcons, categoryBadgeStyle } from '../../../constants';
 
@@ -26,6 +23,7 @@ interface CommunicationCardProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   onToggleActive: (id: string) => void;
+  onDelete?: (id: string) => void;
 }
 
 export const CommunicationCard: React.FC<CommunicationCardProps> = ({
@@ -33,7 +31,9 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
   isExpanded,
   onToggleExpand,
   onToggleActive,
+  onDelete,
 }) => {
+
   return (
     <div
       className={`bg-white border rounded-xl overflow-hidden transition-all duration-200 ${
@@ -54,7 +54,9 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
 
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono font-bold text-slate-400">{announcement.id}</span>
+              <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                {announcement.displayId || (announcement.id.startsWith('ann-') ? announcement.id.split('-').slice(0, 3).join('-').toUpperCase() : announcement.id.length > 15 ? `ANN-${announcement.id.slice(0, 8).toUpperCase()}` : announcement.id)}
+              </span>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                   categoryBadgeStyle[announcement.category] || 'bg-slate-100 text-slate-700'
@@ -90,7 +92,7 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
               <span>·</span>
               <span className="flex items-center gap-1">
                 <Clock size={11} className="text-slate-400" />
-                {announcement.timestamp}
+                {formatDateTime(announcement.timestamp)}
               </span>
               <span>·</span>
               <span>Issued by: {announcement.issuedBy}</span>
@@ -179,9 +181,18 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
                   {announcement.active ? 'Retract Announcement' : 'Reactivate Announcement'}
                 </button>
 
+                {onDelete && (
+                  <button
+                    onClick={() => onDelete(announcement.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Trash2 size={13} />
+                    Delete
+                  </button>
+                )}
                 <button
                   onClick={() => alert(`Resending broadcast for ${announcement.title} across active channels.`)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
                 >
                   <Send size={13} />
                   Resend Broadcast
