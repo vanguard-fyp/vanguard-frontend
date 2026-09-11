@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -74,11 +74,17 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [visibleCount, setVisibleCount] = useState<number>(6);
 
-  // Dynamically extract disaster types that actually exist in the database
+  // Dynamically extract disaster types that actually exist for the currently
+  // selected status filter. A category is only shown when at least one disaster
+  // of that type exists in the eligible set (0-count categories are hidden).
   const dynamicDisasterTypes = useMemo(() => {
-    const typesInDb = Array.from(new Set(incidents.map((i) => i.type))).filter(Boolean);
+    const eligible =
+      filterStatus === 'All'
+        ? incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected')
+        : incidents.filter((i) => i.status === filterStatus);
+    const typesInDb = Array.from(new Set(eligible.map((i) => i.type))).filter(Boolean);
     return ['All', ...typesInDb];
-  }, [incidents]);
+  }, [incidents, filterStatus]);
 
   // Dynamically extract severities that exist
   const dynamicSeverities = useMemo(() => {
@@ -86,6 +92,15 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     const order = ['Critical', 'High', 'Medium', 'Low'];
     return ['All', ...order.filter((s) => sevsInDb.has(s as any))];
   }, [incidents]);
+
+  // If the selected disaster category no longer has any eligible incidents
+  // (e.g. after changing the status filter), fall back to "All" so the UI
+  // never highlights a category that is no longer shown.
+  useEffect(() => {
+    if (selectedCategory !== 'All' && !dynamicDisasterTypes.includes(selectedCategory)) {
+      setSelectedCategory('All');
+    }
+  }, [dynamicDisasterTypes, selectedCategory]);
 
   const filteredIncidents = incidents.filter((inc) => {
     const matchCategory = selectedCategory === 'All' || inc.type === selectedCategory;
