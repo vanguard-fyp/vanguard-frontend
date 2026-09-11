@@ -47,17 +47,35 @@ export const incidentService = {
   },
 
   /**
-   * Download official NADMA SITREP PDF for an incident
+   * Download official NADMA SITREP PDF for an incident.
+   * Uses displayId (e.g. INC-2026-001) as the saved filename when provided.
    */
-  downloadSitrepPdf: (id: string): void => {
-    window.open(`${BASE_URL}/incidents/${id}/sitrep-pdf`, '_blank');
+  downloadSitrepPdf: (id: string, displayId?: string): void => {
+    const url = `${BASE_URL}/incidents/${id}/sitrep-pdf`;
+    const filename = displayId ? `SITREP-${displayId}.pdf` : 'sitrep.pdf';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   },
 
   /**
-   * Download creative AI Disaster Warning Poster PDF for an incident
+   * Download creative AI Disaster Warning Poster PDF for an incident.
+   * Uses displayId (e.g. INC-2026-001) as the saved filename when provided.
    */
-  downloadSitrepPoster: (id: string): void => {
-    window.open(`${BASE_URL}/incidents/${id}/sitrep-poster`, '_blank');
+  downloadSitrepPoster: (id: string, displayId?: string): void => {
+    const url = `${BASE_URL}/incidents/${id}/sitrep-poster`;
+    const filename = displayId ? `WARNING-POSTER-${displayId}.pdf` : 'warning-poster.pdf';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   },
 
   /**

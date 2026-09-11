@@ -62,7 +62,30 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
   const pendingRequests = requests.filter((r) => r.status === 'Pending Approval');
   const approvedRequests = requests.filter((r) => r.status === 'Approved');
   const inTransitRequests = requests.filter((r) => r.status === 'Dispatched');
-  const deliveredRequests = requests.filter((r) => r.status === 'Dispatched');
+  const deliveredRequests = requests.filter((r) => r.status === 'Delivered' || r.status === 'Fulfilled');
+
+  // ── Live-computed pipeline metrics ──────────────────────────────────────────
+  const totalRequested = requests.reduce((sum, r) => sum + (r.quantityRequested || 0), 0);
+  const deliveredQty = deliveredRequests.reduce((sum, r) => sum + (r.quantityRequested || 0), 0);
+  const reliefCapacityPct = totalRequested > 0 ? Math.round((deliveredQty / totalRequested) * 100) : (deliveredRequests.length > 0 ? 100 : 0);
+
+  // Average ETA: estimate from dispatched request count (2h base + 0.3h per convoy)
+  const avgEtaHours = inTransitRequests.length > 0
+    ? (2.0 + inTransitRequests.length * 0.3).toFixed(1)
+    : null;
+
+  // Fleet route status: alert if any pending/in-transit to flood-prone districts
+  const floodDistricts = ['Kelantan', 'Pahang', 'Terengganu', 'Johor', 'Perak'];
+  const hasWeatherAlert = inTransitRequests.some((r) =>
+    floodDistricts.some((d) => (r.district || '').includes(d))
+  );
+  const fleetRouteStatus = inTransitRequests.length === 0
+    ? 'No Active Convoys'
+    : hasWeatherAlert
+    ? 'Weather Advisory Active'
+    : 'Routes Clear';
+
+  const uniqueHubs = new Set(deliveredRequests.map((r) => r.district)).size;
 
   const stages: Stage[] = [
     {
@@ -127,8 +150,8 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
       badgeText: `${inTransitRequests.length} Shipments Rolling`,
       stats: [
         { label: 'Active Convoys', value: `${inTransitRequests.length} in-transit` },
-        { label: 'Average ETA', value: '~2.4 hours' },
-        { label: 'Fleet Route Status', value: 'High Waterway Alert' },
+        { label: 'Average ETA', value: avgEtaHours ? `~${avgEtaHours} hours` : 'N/A', alert: inTransitRequests.length > 3 },
+        { label: 'Fleet Route Status', value: fleetRouteStatus, alert: hasWeatherAlert },
       ],
       items: inTransitRequests.map((r) => ({
         title: `${r.itemRequested} — Dispatched`,
@@ -151,13 +174,13 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
       badgeText: `${deliveredRequests.length} Deliveries Received`,
       stats: [
         { label: 'Fulfilled Missions', value: `${deliveredRequests.length} completed` },
-        { label: 'Relief Capacity', value: '88% Supplied' },
-        { label: 'Field Status', value: 'Active Distribution' },
+        { label: 'Relief Capacity', value: `${reliefCapacityPct}% Supplied`, alert: reliefCapacityPct < 50 },
+        { label: 'Field Status', value: uniqueHubs > 0 ? `${uniqueHubs} Relief Hubs Supplied` : 'Awaiting Deliveries' },
       ],
       items: deliveredRequests.map((r) => ({
         title: `${r.itemRequested} (${r.quantityRequested} ${r.unit})`,
         meta: `Delivered to ${r.district} (${r.agency})`,
-        badge: 'Dispatched',
+        badge: r.status,
         badgeColor: 'bg-emerald-100 text-emerald-800',
       })),
     },

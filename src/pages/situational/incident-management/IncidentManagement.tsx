@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -15,6 +15,7 @@ import {
   ChevronRight,
   ChevronDown,
   XCircle,
+  ShieldAlert,
 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
@@ -37,8 +38,6 @@ const statusIcons: Record<string, React.ReactNode> = {
   Resolved: <CheckCircle size={14} className="text-emerald-600" />,
   Rejected: <XCircle size={14} className="text-rose-600" />,
 };
-
-const DISASTER_TYPES = ['All', 'Flood', 'Flash Flood', 'Landslide', 'Forest Fire', 'Severe Storm'] as const;
 
 const containerAnim = {
   hidden: { opacity: 0 },
@@ -75,6 +74,19 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [visibleCount, setVisibleCount] = useState<number>(6);
 
+  // Dynamically extract disaster types that actually exist in the database
+  const dynamicDisasterTypes = useMemo(() => {
+    const typesInDb = Array.from(new Set(incidents.map((i) => i.type))).filter(Boolean);
+    return ['All', ...typesInDb];
+  }, [incidents]);
+
+  // Dynamically extract severities that exist
+  const dynamicSeverities = useMemo(() => {
+    const sevsInDb = new Set(incidents.map((i) => i.severity).filter(Boolean));
+    const order = ['Critical', 'High', 'Medium', 'Low'];
+    return ['All', ...order.filter((s) => sevsInDb.has(s as any))];
+  }, [incidents]);
+
   const filteredIncidents = incidents.filter((inc) => {
     const matchCategory = selectedCategory === 'All' || inc.type === selectedCategory;
     const matchSearch =
@@ -91,7 +103,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
   const displayedIncidents = filteredIncidents.slice(0, visibleCount);
 
-  const categoryCounts = DISASTER_TYPES.reduce((acc, cat) => {
+  const categoryCounts = dynamicDisasterTypes.reduce((acc, cat) => {
     // When "All Statuses" is selected, only count active (non-resolved, non-rejected) incidents
     const eligible = filterStatus === 'All' ? incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected') : incidents.filter((i) => i.status === filterStatus);
     acc[cat] = cat === 'All' ? eligible.length : eligible.filter((i) => i.type === cat).length;
@@ -107,8 +119,9 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         </p>
       </motion.div>
 
+      {/* Dynamic Disaster Category Pills (Only shows types with existing incidents) */}
       <motion.div variants={itemAnim} className="flex items-center gap-2 overflow-x-auto pb-1">
-        {DISASTER_TYPES.map((type) => {
+        {dynamicDisasterTypes.map((type) => {
           const isSelected = selectedCategory === type;
           const count = categoryCounts[type] || 0;
           return (
@@ -123,6 +136,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                 }`}
             >
+              {type !== 'All' && typeIcons[type]}
               <span>{type === 'All' ? 'All Disasters' : type}</span>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
@@ -161,11 +175,11 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
               }}
               className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-slate-900"
             >
-              <option value="All">All Severities</option>
-              <option value="Critical">Critical</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
+              {dynamicSeverities.map((sev) => (
+                <option key={sev} value={sev}>
+                  {sev === 'All' ? 'All Severities' : `${sev} Severity`}
+                </option>
+              ))}
             </select>
             <select
               value={filterStatus}

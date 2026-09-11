@@ -122,6 +122,24 @@ export const analyticsService = {
     window.URL.revokeObjectURL(url);
   },
   /**
+   * Export all analytics as formatted Excel workbook (.xlsx)
+   */
+  exportExcel: async (year: string = '2026'): Promise<void> => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const res = await fetch(`${baseUrl}/analytics/export/excel?year=${encodeURIComponent(year)}`);
+    if (!res.ok) throw new Error('Failed to export Excel');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vanguard_analytics_${year}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
    * Export State Disaster Summary as CSV (State Summary section)
    */
   exportStateSummaryCSV: async (year: string = '2026'): Promise<void> => {

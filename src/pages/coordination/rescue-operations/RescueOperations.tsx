@@ -5,6 +5,7 @@ import { TeamCard } from '../../../components/ui/coordination/rescue/TeamCard';
 import { TeamDetailSlideOver } from '../../../components/ui/coordination/rescue/TeamDetailSlideOver';
 import { useRescueTeams, useMissions, useIncidents, useCreateMission } from '../../../hooks';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
+import { useToast } from '../../../context/ToastContext';
 
 import type { AgencyFilter, SeverityLevel, StatusFilter, TeamSortBy, RescueTeam } from '../../../types';
 import { MissionWizard } from './MissionWizard';
@@ -24,6 +25,7 @@ const RescueOperations: React.FC = () => {
   const { data: missions = [] } = useMissions();
   const { data: incidents = [] } = useIncidents();
   const createMissionMutation = useCreateMission();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [selectedTeamForSlideOver, setSelectedTeamForSlideOver] = useState<RescueTeam | null>(null);
   const [showWizard, setShowWizard] = useState(false);
@@ -96,6 +98,9 @@ const RescueOperations: React.FC = () => {
       objective: data.objective,
       assignedTime: new Date().toISOString(),
       estimatedCompletion: new Date(Date.now() + (data.durationHrs || 6) * 3600000).toISOString(),
+    }, {
+      onSuccess: () => toastSuccess('Mission Dispatched', `SAR team assigned to ${matchedIncident?.title || 'incident'}`),
+      onError: () => toastError('Dispatch Failed', 'Could not create mission. Please retry.'),
     });
     setShowWizard(false);
   };

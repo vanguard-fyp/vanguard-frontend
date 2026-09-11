@@ -4,23 +4,20 @@ import { ArrowLeft, Users, Building2 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
 import { AIImpactPanel, getTopDrivers } from '../../../components/ui/situational/AIImpactPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
-import { disasterLevelInfo } from '../../../constants/components/disasterLevels';
 import type { Incident } from '../../../types';
 
 interface AIInsightDetailViewProps {
   incident: Incident;
   onBack: () => void;
-  onSelectPeer: (incident: Incident) => void;
+  onSelectPeer?: (incident: Incident) => void;
   allIncidents?: Incident[];
 }
 
-export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incident, onBack, onSelectPeer, allIncidents = [] }) => {
+export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incident, onBack, allIncidents = [] }) => {
   const tracked = allIncidents.filter((i) => i.status !== 'Unverified' && i.impactTimeline?.length);
   const ranked = [...tracked].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore);
   const rank = ranked.findIndex((i) => i.id === incident.id) + 1;
   const drivers = getTopDrivers(incident, 2);
-  const levelInfo = disasterLevelInfo[incident.disasterLevel];
-  const peers = ranked.filter((i) => i.disasterLevel === incident.disasterLevel && i.id !== incident.id);
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="max-w-6xl mx-auto space-y-6">
@@ -59,7 +56,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
         </div>
       </div>
 
-      {incident.impactTimeline && <ImpactTimeline timeline={incident.impactTimeline} size="full" />}
+      {incident.impactTimeline && <ImpactTimeline timeline={incident.impactTimeline} mode="predictive" size="full" />}
 
       <AIImpactPanel incident={incident} rank={rank || undefined} size="full" />
 
@@ -92,7 +89,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
+      {/* <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
         <h2 className="text-sm font-bold text-slate-900">Disaster level context</h2>
         <p className="text-xs text-slate-500 mt-1 leading-relaxed">{levelInfo?.desc}</p>
 
@@ -120,7 +117,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
             </div>
           </div>
         )}
-      </div>
+      </div> */}
     </motion.div>
   );
 };

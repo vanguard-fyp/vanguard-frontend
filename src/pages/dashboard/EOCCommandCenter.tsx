@@ -21,6 +21,7 @@ import {
   DASHBOARD_ANIMATIONS,
 } from '../../constants/theme';
 import type { Incident } from '../../types';
+import { formatDateTime } from '../../utils/dateFormatter';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, LineChart, Line, CartesianGrid,
@@ -46,26 +47,30 @@ const EOCCommandCenter: React.FC = () => {
   const { data: teamCapacity = [] } = useTeamCapacity();
   const { data: resourceRadial = [] } = useResourceUtilization();
 
-  // ── Derived Values ─────────────────────────────────────────────────
-  const criticalIncidents = incidents.filter((i) => i.severity === 'Critical');
-  const totalAffected = incidents.reduce((sum, i) => sum + (i.affectedPopulation || 0), 0);
+  // ── Derived Values: Only show ACTIVE/UNRESOLVED items ─────────────────────
+  const activeIncidents = incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected');
+  const activeMissions = missions.filter((m) => m.status !== 'Completed' && m.status !== 'Aborted');
+  const activeTeams = rescueTeams.filter((t) => t.status === 'Deployed');
+
+  const criticalIncidents = activeIncidents.filter((i) => i.severity === 'Critical');
+  const totalAffected = activeIncidents.reduce((sum, i) => sum + (i.affectedPopulation || 0), 0);
   const deployedTeams = rescueTeams.filter((t) => t.status === 'Deployed' || t.status === 'En Route');
-  const uniqueDistricts = Array.from(new Set(incidents.map((i) => i.district || i.state).filter(Boolean)));
+  const uniqueDistricts = Array.from(new Set(activeIncidents.map((i) => i.district || i.state).filter(Boolean)));
   const deployedAgencies = Array.from(new Set(deployedTeams.map((t) => t.agency))).slice(0, 4).join(' · ') || 'Active Standby';
   const capacityPct = rescueTeams.length > 0 ? Math.round((deployedTeams.length / rescueTeams.length) * 100) : 0;
-  const inProgressMissions = missions.filter((m) => m.status === 'In Progress');
-  const pendingMissions = missions.filter((m) => m.status === 'Pending');
+  const inProgressMissions = activeMissions.filter((m) => m.status === 'In Progress');
+  const pendingMissions = activeMissions.filter((m) => m.status === 'Pending');
 
-  const priorityChartData = [...incidents]
+  const priorityChartData = [...activeIncidents]
     .sort((a, b) => b.aiPriorityScore - a.aiPriorityScore)
     .map((inc) => ({ name: inc.district, score: inc.aiPriorityScore, severity: inc.severity }));
 
-  const incidentList = incidents.map((i) => ({
+  const incidentList = activeIncidents.map((i) => ({
     id: i.id, title: i.title, severity: i.severity, district: i.district,
     affectedPopulation: i.affectedPopulation, aiPriorityScore: i.aiPriorityScore, status: i.status,
   }));
 
-  const topRoster = [...incidents].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore).slice(0, 5);
+  const topRoster = [...activeIncidents].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore).slice(0, 5);
 
   const [filterLogsByIncident, setFilterLogsByIncident] = useState(true);
 
@@ -84,10 +89,10 @@ const EOCCommandCenter: React.FC = () => {
   }, [activityFeed, selectedIncident, filterLogsByIncident]);
 
 
-  // Set first incident as default selection when loaded
+  // Set first active incident as default selection when loaded
   React.useEffect(() => {
-    if (incidents.length > 0 && !selectedIncident) {
-      setSelectedIncident(incidents[0]);
+    if (activeIncidents.length > 0 && !selectedIncident) {
+      setSelectedIncident(activeIncidents[0]);
     }
   }, [incidents]);
 
@@ -115,7 +120,7 @@ const EOCCommandCenter: React.FC = () => {
 
       {/* ─── KPI Cards Grid ─────────────────────────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KPICard title="Active Incidents" value={incidents.length}
+        <KPICard title="Active Incidents" value={activeIncidents.length}
           subtitle={`${criticalIncidents.length} Critical Priority`}
           icon={<AlertTriangle size={18} />} accentColor="red"
           sparkData={kpiTrends?.incidents} chartType="area"
@@ -134,7 +139,7 @@ const EOCCommandCenter: React.FC = () => {
           chartType="donut"
           trend={{ direction: capacityPct > 60 ? 'up' : 'stable', label: `${capacityPct}% capacity` }}
         />
-        <KPICard title="Active Missions" value={missions.length}
+        <KPICard title="Active Missions" value={activeMissions.length}
           subtitle={`${inProgressMissions.length} Active · ${pendingMissions.length} Queued`}
           icon={<Activity size={18} />} accentColor="purple"
           sparkData={kpiTrends?.missions} chartType="area"
@@ -436,7 +441,7 @@ const EOCCommandCenter: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                           <span className="text-[11px] text-slate-500 font-medium">{evt.actor}</span>
                           <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
-                            <Clock size={10} />{evt.time}
+                            <Clock size={10} />{formatDateTime(evt.time)}
                           </span>
                         </div>
                       </div>
@@ -448,7 +453,7 @@ const EOCCommandCenter: React.FC = () => {
 
             {activeBottomTab === 'deployments' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {rescueTeams.map((team) => (
+                {activeTeams.map((team) => (
                   <div key={team.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white transition-colors">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-bold text-slate-900 truncate">{team.name}</p>
@@ -463,10 +468,10 @@ const EOCCommandCenter: React.FC = () => {
 
             {activeBottomTab === 'missions' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {missions.map((mis) => (
+                {activeMissions.map((mis) => (
                   <div key={mis.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white transition-colors">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono font-bold text-blue-700 shrink-0">{mis.id}</span>
+                      <span className="text-[10px] font-mono font-bold text-blue-700 shrink-0">{mis.displayId || mis.id}</span>
                       <DisasterBadge type="severity" value={mis.priority} />
                     </div>
                     <p className="text-xs font-bold text-slate-900 mt-1.5 truncate">{mis.title}</p>

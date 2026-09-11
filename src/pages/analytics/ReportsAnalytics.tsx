@@ -13,6 +13,9 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   Loader2,
+  ChevronDown,
+  ChevronRight,
+  Layers,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -57,7 +60,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 const ReportsAnalytics: React.FC = () => {
   const [dateRange, setDateRange] = useState('2026');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
-  const [isExportingStateSummaryCSV, setIsExportingStateSummaryCSV] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   const { data: summaryData, isLoading: isSummaryLoading } = useAnalyticsSummary({ year: dateRange });
   const { data: monthlyIncidentTrend = [], isLoading: isTrendsLoading } = useMonthlyTrends({ year: dateRange });
@@ -65,6 +68,15 @@ const ReportsAnalytics: React.FC = () => {
   const { data: responseTimeData = [], isLoading: isRespLoading } = useAgencyResponseTimes();
   const { data: rawResourceUtilization = [], isLoading: isResLoading } = useResourceUtilization();
   const { data: stateIncidentHeatmap = [] } = useStateHeatmap({ year: dateRange });
+
+  const [expandedStates, setExpandedStates] = useState<Record<string, boolean>>({});
+
+  const toggleStateExpand = (stateName: string) => {
+    setExpandedStates((prev) => ({
+      ...prev,
+      [stateName]: !prev[stateName],
+    }));
+  };
 
   const handleExportPDF = async () => {
     try {
@@ -77,17 +89,16 @@ const ReportsAnalytics: React.FC = () => {
     }
   };
 
-  const handleExportStateSummaryCSV = async () => {
+  const handleExportExcel = async () => {
     try {
-      setIsExportingStateSummaryCSV(true);
-      await analyticsService.exportStateSummaryCSV(dateRange);
+      setIsExportingExcel(true);
+      await analyticsService.exportExcel(dateRange);
     } catch (err) {
-      console.error('State CSV Export Error:', err);
+      console.error('Excel Export Error:', err);
     } finally {
-      setIsExportingStateSummaryCSV(false);
+      setIsExportingExcel(false);
     }
   };
-
 
   const resourceUtilization = rawResourceUtilization.map((r) => ({
     category: r.name,
@@ -140,6 +151,15 @@ const ReportsAnalytics: React.FC = () => {
             <option value="2026">Year: 2026</option>
             <option value="2025">Year: 2025</option>
           </select>
+
+          <button
+            onClick={handleExportExcel}
+            disabled={isExportingExcel}
+            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+          >
+            {isExportingExcel ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
+            <span>Export Excel (.xlsx)</span>
+          </button>
 
           <button
             onClick={handleExportPDF}
@@ -330,20 +350,15 @@ const ReportsAnalytics: React.FC = () => {
             <FileText size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">State Disaster Impact & Performance Summary ({dateRange})</h3>
           </div>
-          <button
-            onClick={handleExportStateSummaryCSV}
-            disabled={isExportingStateSummaryCSV}
-            className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-50 cursor-pointer bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg"
-          >
-            {isExportingStateSummaryCSV ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
-            Export State Summary CSV
-          </button>
+          <span className="text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md">
+            13 States & Federal Territories
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                {['State', 'Total Incidents', 'Highest Severity', 'Response Rate', 'Avg Resolution (hrs)', 'Affected Population'].map((h) => (
+                {['State / Territory', 'Total Incidents', 'Highest Severity', 'Response Rate', 'Avg Resolution (hrs)', 'Affected Population', 'Districts'].map((h) => (
                   <th key={h} className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-left">{h}</th>
                 ))}
               </tr>
@@ -351,6 +366,8 @@ const ReportsAnalytics: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {stateIncidentHeatmap.map((state: any) => {
                 const hasIncidents = state.count > 0;
+                const isExpanded = !!expandedStates[state.state];
+                const districts = state.districts || [];
                 const respRate = state.responseRate || state.response_rate || (hasIncidents ? (state.severity === 'Critical' ? '94.5%' : state.severity === 'High' ? '96.2%' : '98.0%') : '-');
                 const avgRes = state.avgResolutionHours || state.avg_resolution_hours || (hasIncidents ? `${(4.5 + state.count * 0.5).toFixed(1)} hrs` : '-');
                 const popAffected = typeof state.affectedPopulation === 'number'
@@ -359,24 +376,105 @@ const ReportsAnalytics: React.FC = () => {
                     ? state.affected_population.toLocaleString()
                     : hasIncidents ? (state.count * 2500).toLocaleString() : '0';
                 return (
-                  <tr key={state.state} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 text-xs font-bold text-slate-900">{state.state}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-slate-800">{state.count}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                        !hasIncidents ? 'bg-slate-100 text-slate-500 border border-slate-200' :
-                        state.severity === 'Critical' ? 'bg-red-50 text-red-700 border border-red-200' :
-                        state.severity === 'High' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                        state.severity === 'Medium' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
-                        'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      }`}>
-                        {hasIncidents ? state.severity : 'Low / None'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-bold text-emerald-700">{respRate}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-700">{avgRes}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-800">{popAffected}</td>
-                  </tr>
+                  <React.Fragment key={state.state}>
+                    <tr
+                      onClick={() => districts.length > 0 && toggleStateExpand(state.state)}
+                      className={`transition-colors ${districts.length > 0 ? 'cursor-pointer hover:bg-slate-50' : 'hover:bg-slate-50/60'}`}
+                    >
+                      <td className="px-4 py-3 text-xs font-bold text-slate-900 flex items-center gap-2">
+                        {districts.length > 0 ? (
+                          <span className="text-slate-400 hover:text-slate-700 transition-colors">
+                            {isExpanded ? <ChevronDown size={14} className="text-blue-600" /> : <ChevronRight size={14} />}
+                          </span>
+                        ) : (
+                          <span className="w-3.5" />
+                        )}
+                        {state.state}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold text-slate-800">
+                        <span className={`px-2 py-0.5 rounded font-mono ${hasIncidents ? 'bg-blue-50 text-blue-700 font-bold border border-blue-200' : 'text-slate-500'}`}>
+                          {state.count}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          !hasIncidents ? 'bg-slate-100 text-slate-500 border border-slate-200' :
+                          state.severity === 'Critical' ? 'bg-red-50 text-red-700 border border-red-200' :
+                          state.severity === 'High' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
+                          state.severity === 'Medium' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                          'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}>
+                          {hasIncidents ? state.severity : 'Low / None'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-bold text-emerald-700">{respRate}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-700">{avgRes}</td>
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-800">{popAffected}</td>
+                      <td className="px-4 py-3 text-xs font-medium text-slate-500">
+                        {districts.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleStateExpand(state.state);
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 cursor-pointer"
+                          >
+                            <Layers size={11} /> {districts.length} {districts.length === 1 ? 'district' : 'districts'} {isExpanded ? '▲' : '▼'}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">No reports</span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Expandable District Frequency Breakdown */}
+                    {isExpanded && districts.length > 0 && (
+                      <tr className="bg-slate-50/80">
+                        <td colSpan={7} className="px-6 py-3 border-y border-slate-200">
+                          <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-2xs">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                                <Layers size={13} className="text-blue-600" />
+                                {state.state} · District Incident Breakdown & Frequency
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                Total {state.count} incidents across {districts.length} districts
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                              {districts.map((d: any) => (
+                                <div
+                                  key={d.district}
+                                  className="flex items-center justify-between p-2 rounded-md bg-slate-50 border border-slate-200 text-xs"
+                                >
+                                  <div>
+                                    <p className="font-bold text-slate-800">{d.district}</p>
+                                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                      Pop. ~{(d.affectedPopulation || d.affected_population || 0).toLocaleString()}
+                                    </p>
+                                  </div>
+                                  <div className="text-right flex flex-col items-end gap-1">
+                                    <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                      {d.count} {d.count === 1 ? 'incident' : 'incidents'}
+                                    </span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                                      d.severity === 'Critical' ? 'bg-red-100 text-red-700' :
+                                      d.severity === 'High' ? 'bg-orange-100 text-orange-700' :
+                                      d.severity === 'Medium' ? 'bg-amber-100 text-amber-700' :
+                                      'bg-emerald-100 text-emerald-700'
+                                    }`}>
+                                      {d.severity}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

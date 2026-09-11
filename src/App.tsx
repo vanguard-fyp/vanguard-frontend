@@ -16,6 +16,8 @@ import PublicCommunication from './pages/communication/PublicCommunication';
 import ReportsAnalytics from './pages/analytics/ReportsAnalytics';
 import SystemAdministration from './pages/system/SystemAdministration';
 
+// Toast Notifications
+import { ToastProvider } from './context/ToastContext';
 
 import type { UserRole } from './types';
 
@@ -25,46 +27,48 @@ const App: React.FC = () => {
   const [currentRole, setCurrentRole] = useState<UserRole>('Disaster Management Officer');
 
   return (
-    <Router>
-      <div className="min-h-screen flex" style={{ background: '#f8fafc', fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <ToastProvider>
+      <Router>
+        <div className="min-h-screen flex" style={{ background: '#f8fafc', fontFamily: "'Inter', system-ui, sans-serif" }}>
 
-        {/* Left — calm dark slate sidebar with responsive mobile drawer */}
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          setCollapsed={setSidebarCollapsed}
-          mobileOpen={mobileMenuOpen}
-          setMobileOpen={setMobileMenuOpen}
-        />
-
-        {/* Right — page workspace */}
-        <div
-          className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ml-0 ${sidebarCollapsed ? 'md:ml-[64px]' : 'md:ml-[256px]'
-            }`}
-        >
-          {/* Sticky top header with hamburger for mobile */}
-          <Header
-            currentRole={currentRole}
-            onRoleChange={setCurrentRole}
-            onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+          {/* Left — calm dark slate sidebar with responsive mobile drawer */}
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            setCollapsed={setSidebarCollapsed}
+            mobileOpen={mobileMenuOpen}
+            setMobileOpen={setMobileMenuOpen}
           />
 
-          {/* Page content on calm slate canvas */}
-          <main className="flex-1 p-3 sm:p-6 overflow-y-auto" style={{ background: '#f8fafc' }}>
-            <Routes>
-              <Route path="/" element={<EOCCommandCenter />} />
-              <Route path="/situational/incidents" element={<IncidentManagement />} />
-              <Route path="/situational/incidents/:id" element={<IncidentDetailPage />} />
-              <Route path="/situational/intelligence" element={<DisasterIntelligence />} />
-              <Route path="/response/rescue" element={<RescueOperations />} />
-              <Route path="/response/resources" element={<ResourceManagement />} />
-              <Route path="/communication" element={<PublicCommunication />} />
-              <Route path="/analytics" element={<ReportsAnalytics />} />
-              <Route path="/system" element={<SystemAdministration />} />
-            </Routes>
-          </main>
+          {/* Right — page workspace */}
+          <div
+            className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ml-0 ${sidebarCollapsed ? 'md:ml-[64px]' : 'md:ml-[256px]'
+              }`}
+          >
+            {/* Sticky top header with hamburger for mobile */}
+            <Header
+              currentRole={currentRole}
+              onRoleChange={setCurrentRole}
+              onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+            />
+
+            {/* Page content on calm slate canvas */}
+            <main className="flex-1 p-3 sm:p-6 overflow-y-auto" style={{ background: '#f8fafc' }}>
+              <Routes>
+                <Route path="/" element={<EOCCommandCenter />} />
+                <Route path="/situational/incidents" element={<IncidentManagement />} />
+                <Route path="/situational/incidents/:id" element={<IncidentDetailPage />} />
+                <Route path="/situational/intelligence" element={<DisasterIntelligence />} />
+                <Route path="/response/rescue" element={<RescueOperations />} />
+                <Route path="/response/resources" element={<ResourceManagement />} />
+                <Route path="/communication" element={<PublicCommunication />} />
+                <Route path="/analytics" element={<ReportsAnalytics />} />
+                <Route path="/system" element={<SystemAdministration />} />
+              </Routes>
+            </main>
+          </div>
         </div>
-      </div>
-    </Router>
+      </Router>
+    </ToastProvider>
   );
 };
 

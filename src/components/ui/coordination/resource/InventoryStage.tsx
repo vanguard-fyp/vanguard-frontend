@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Warehouse, Search, ChevronDown, ChevronUp, Plus, History, Sparkles } from 'lucide-react';
 
 import type { ResourceItem, ResourceRequest, AIStockAdvisory } from '../../../../types';
+import { getWarehouseContext } from '../../../../constants/components/resource';
 import { ResupplyRequestModal } from './ResupplyRequestModal';
 
 interface InventoryStageProps {
@@ -34,16 +35,16 @@ function getAIStockAdvisory(item: ResourceItem): AIStockAdvisory {
       suggestedQty: item.minThreshold * 2,
       urgency: 'High',
       confidence: 88,
-      forecastRationale: `Stock level approaching minimum threshold. Preemptive resupply recommended prior to next rain surge.`,
-      depletionTrend: 'Depletion rate: 6% per hour (Projected threshold breach in ~8 hours).',
+      forecastRationale: `Stock below safety reserve at ${item.warehouseLocation}. Proactive replenishment recommended.`,
+      depletionTrend: 'Depletion rate: 6% per hour (Projected zero-stock in ~14 hours).',
     };
   }
   return {
     suggestedQty: item.minThreshold,
     urgency: 'Medium',
-    confidence: 82,
-    forecastRationale: `Current stock buffer is sufficient. Routine restock scheduled to maintain optimal emergency buffer.`,
-    depletionTrend: 'Depletion rate: <2% per hour (Buffer stable).',
+    confidence: 75,
+    forecastRationale: `Stock level optimal at ${item.warehouseLocation}. Standard replenishment scheduled.`,
+    depletionTrend: 'Nominal consumption rate.',
   };
 }
 
@@ -53,68 +54,95 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
   onRequestCreated,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [modalItem, setModalItem] = useState<ResourceItem | null>(null);
+  const [requestModalItem, setRequestModalItem] = useState<ResourceItem | null>(null);
 
-  const filteredInventory = inventory.filter((item) =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.warehouseLocation.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredInventory = inventory.filter((item) => {
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.warehouseLocation.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getWarehouseContext(item.warehouseLocation).nearDisaster.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const categories = ['All', ...Array.from(new Set(inventory.map((i) => i.category)))];
 
   const handleOpenRequest = (item: ResourceItem) => {
-    setModalItem(item);
+    setRequestModalItem(item);
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-      {/* Stage Header */}
-      <div className="px-5 py-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs">
-            1
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+    <div className="space-y-6">
+      {/* Top Banner / Metrics */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
               <Warehouse size={16} className="text-blue-600" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">
               Warehouse Inventory Stock & HIL Analytics
             </h3>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Real-time depot stock tracking & HIL AI depletion forecasting · Click item for AI resupply advisories
-            </p>
           </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Real-time supply depot tracking mapped directly to active disaster zones and evacuation sectors.
+          </p>
         </div>
 
-        <div className="relative">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search inventory items..."
-            className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 w-56 shadow-2xs transition-colors"
-          />
+        {/* Filter Bar */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:w-64">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search items, depots, sectors..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+          >
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       {/* Inventory List */}
-      <div className="divide-y divide-slate-100">
+      <div className="space-y-3">
         {filteredInventory.map((item) => {
           const isExpanded = expandedItemId === item.id;
           const itemRequests = requests.filter((r) => r.itemRequested === item.name);
-          const pct = Math.min((item.stockLevel / (item.minThreshold * 4)) * 100, 100);
+          const pct = Math.min(100, Math.round((item.stockLevel / (item.minThreshold * 2)) * 100));
+          const locCtx = getWarehouseContext(item.warehouseLocation);
           const aiAdvisory = getAIStockAdvisory(item);
 
           return (
-            <div key={item.id} className="transition-colors hover:bg-slate-50/50">
-              {/* Row summary */}
+            <motion.div
+              key={item.id}
+              layout
+              className={`bg-white border rounded-xl overflow-hidden transition-all shadow-2xs ${
+                isExpanded ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              {/* Main Card Row */}
               <div
                 onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                className="px-5 py-3.5 flex items-center justify-between gap-4 cursor-pointer"
+                className="p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50 transition-colors"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                       {item.displayId || (item.id.startsWith('res-') ? item.id.split('-').slice(0, 3).join('-').toUpperCase() : item.id.length > 13 ? `RES-${item.id.slice(0, 6).toUpperCase()}` : item.id)}
                     </span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${categoryColors[item.category]}`}>
@@ -138,7 +166,13 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                     )}
                   </div>
                   <h4 className="text-xs font-bold text-slate-900 truncate">{item.name}</h4>
-                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">{item.warehouseLocation}</p>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
+                    <span className="text-slate-700 font-semibold">{item.warehouseLocation}</span>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
+                      📍 {locCtx.nearDisaster}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-6 shrink-0">
@@ -200,8 +234,9 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                         <p className="text-xs font-bold text-slate-800 mt-0.5">{item.minThreshold.toLocaleString()} {item.unit}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Depot Location</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Depot Location & Sector</p>
                         <p className="text-xs font-bold text-slate-800 mt-0.5">{item.warehouseLocation}</p>
+                        <p className="text-[10px] text-blue-600 font-medium mt-0.5">{locCtx.nearDisaster}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Active Requests</p>
@@ -271,17 +306,17 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+            </motion.div>
           );
         })}
       </div>
 
       {/* Resupply Request Modal */}
       <AnimatePresence>
-        {modalItem && (
+        {requestModalItem && (
           <ResupplyRequestModal
-            item={modalItem}
-            onClose={() => setModalItem(null)}
+            item={requestModalItem}
+            onClose={() => setRequestModalItem(null)}
             onSubmit={onRequestCreated}
           />
         )}

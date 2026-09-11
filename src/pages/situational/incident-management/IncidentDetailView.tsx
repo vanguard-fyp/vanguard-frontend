@@ -34,6 +34,7 @@ import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimelin
 import { useUpdateIncident, useResolveIncident } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
+import { useToast } from '../../../context/ToastContext';
 import type { Incident } from '../../../types';
 
 function getCleanIncidentId(id: string, displayId?: string): string {
@@ -72,6 +73,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const isTracked = incident.status !== 'Unverified' && !!incident.impactTimeline?.length;
   const updateIncident = useUpdateIncident();
   const resolveIncident = useResolveIncident();
+  const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
 
   const [activeCommandTab, setActiveCommandTab] = useState<'verify' | 'deploy' | 'resolve' | 'export'>(() => {
     if (incident.status === 'Unverified') return 'verify';
@@ -104,7 +106,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         onSuccess: () => {
           setShowVerifyModal(false);
           onVerify(incident.id);
+          toastSuccess('Incident Verified', `${getCleanIncidentId(incident.id, incident.displayId)} has been verified and activated.`);
         },
+        onError: () => toastError('Verification Failed', 'Could not verify incident. Please retry.'),
       }
     );
   };
@@ -122,8 +126,10 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       {
         onSuccess: () => {
           setShowRejectModal(false);
+          toastWarning('Incident Rejected', `Report ${getCleanIncidentId(incident.id, incident.displayId)} has been rejected and logged.`);
           onBack();
         },
+        onError: () => toastError('Rejection Failed', 'Could not reject incident. Please retry.'),
       }
     );
   };
@@ -131,7 +137,14 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const handleResolve = () => {
     resolveIncident.mutate(
       { id: incident.id, outcomeNotes, resolverName },
-      { onSuccess: () => { setShowResolveModal(false); onBack(); } }
+      {
+        onSuccess: () => {
+          setShowResolveModal(false);
+          toastSuccess('Incident Resolved', `${getCleanIncidentId(incident.id, incident.displayId)} has been closed and archived.`);
+          onBack();
+        },
+        onError: () => toastError('Resolution Failed', 'Could not close incident. Please retry.'),
+      }
     );
   };
 
@@ -168,7 +181,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono font-medium text-slate-500">
-            LAST SYNC: {formatDateTime(incident.timestamp)}
+            LAST SYNC: {formatDateTime(incident.occurredAt)}
           </span>
           <div className="h-4 w-px bg-slate-200" />
           <DisasterBadge type="severity" value={incident.severity} />
@@ -220,6 +233,12 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             {incident.verifiedAt && (
               <p className="text-[10px] text-emerald-400 font-mono">
                 Verified: {formatDateTime(incident.verifiedAt)}
+              </p>
+            )}
+            {incident.resolvedAt && (
+              <p className="text-[10px] text-emerald-300 font-mono flex items-center gap-1 font-bold">
+                <CheckCircle size={10} className="text-emerald-400" />
+                Resolved: {formatDateTime(incident.resolvedAt)}
               </p>
             )}
           </div>
@@ -278,7 +297,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
           )}
 
           {isTracked && incident.impactTimeline && (
-            <ImpactTimeline timeline={incident.impactTimeline} size="full" />
+            <ImpactTimeline timeline={incident.impactTimeline} mode="confirmed-only" size="full" />
           )}
 
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
@@ -307,56 +326,11 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             </div>
           </div>
 
-          {/* ── Operational Action Log ── */}
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <History size={16} className="text-slate-600" /> Operational Action Log
-            </h2>
-
-            <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-200">
-              {incident.actionLog && incident.actionLog.length > 0 ? (
-                incident.actionLog.map((log, idx) => (
-                  <div key={log.id || idx} className="relative flex items-start gap-4 pl-8">
-                    <div
-                      className={`absolute left-2 top-1.5 -translate-x-1/2 w-3 h-3 rounded-full ring-4 ring-white ${
-                        log.action.toLowerCase().includes('create')
-                          ? 'bg-blue-600'
-                          : log.action.toLowerCase().includes('verif')
-                          ? 'bg-emerald-600'
-                          : log.action.toLowerCase().includes('resolv')
-                          ? 'bg-purple-600'
-                          : log.action.toLowerCase().includes('updat')
-                          ? 'bg-amber-500'
-                          : 'bg-slate-600'
-                      }`}
-                    />
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 w-full">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-bold text-slate-800">{log.action}</span>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {formatDateTime(log.loggedAt, 'Recent')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">
-                        {log.detail || `Action performed by ${log.actor}`}
-                      </p>
-                      <div className="mt-1 text-[10px] font-mono text-slate-400">
-                        Actor: <span className="font-semibold text-slate-600">{log.actor}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="pl-8 py-3 text-xs text-slate-400 font-medium italic">
-                  No operational log entries recorded yet.
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* ── Tabbed Command Actions Sidebar ── */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+        <div className="flex flex-col gap-6">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
           {/* Header & Tabs */}
           <div className="p-4 border-b border-slate-100 bg-slate-50/70">
             <div className="flex items-center justify-between mb-3">
@@ -621,7 +595,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
                 <div className="space-y-2">
                   <button
-                    onClick={() => incidentService.downloadSitrepPdf(incident.id)}
+                    onClick={() => incidentService.downloadSitrepPdf(incident.id, incident.displayId)}
                     className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
@@ -632,7 +606,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   </button>
 
                   <button
-                    onClick={() => incidentService.downloadSitrepPoster(incident.id)}
+                    onClick={() => incidentService.downloadSitrepPoster(incident.id, incident.displayId)}
                     className="w-full flex items-center justify-between px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-lg border border-amber-200 transition-colors cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
@@ -644,6 +618,56 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                 </div>
               </div>
             )}
+          </div>
+          </div>
+
+          {/* ── Operational Action Log (below Command Action Center) ── */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+              <History size={15} className="text-slate-600" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">Operational Action Log</h3>
+            </div>
+            <div className="p-4 max-h-[380px] overflow-y-auto">
+              <div className="space-y-3 relative before:absolute before:inset-0 before:left-3 before:w-0.5 before:bg-slate-200">
+                {incident.actionLog && incident.actionLog.length > 0 ? (
+                  incident.actionLog.map((log, idx) => (
+                    <div key={log.id || idx} className="relative flex items-start gap-3 pl-7">
+                      <div
+                        className={`absolute left-1.5 top-1.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full ring-4 ring-white ${
+                          log.action.toLowerCase().includes('create')
+                            ? 'bg-blue-600'
+                            : log.action.toLowerCase().includes('verif')
+                            ? 'bg-emerald-600'
+                            : log.action.toLowerCase().includes('resolv')
+                            ? 'bg-purple-600'
+                            : log.action.toLowerCase().includes('updat')
+                            ? 'bg-amber-500'
+                            : 'bg-slate-600'
+                        }`}
+                      />
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 w-full">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-bold text-slate-800">{log.action}</span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {formatDateTime(log.loggedAt, 'Recent')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600">
+                          {log.detail || `Action performed by ${log.actor}`}
+                        </p>
+                        <div className="mt-1 text-[10px] font-mono text-slate-400">
+                          Actor: <span className="font-semibold text-slate-600">{log.actor}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium italic">
+                    No operational log entries recorded yet.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -155,27 +155,39 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
             {/* Step 0: Select Incident */}
             {step === 0 && (
               <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Choose an Active Incident to Assign</p>
-                {incidents.filter(i => i.status !== 'Resolved').map((inc) => (
-                  <button
-                    key={inc.id}
-                    onClick={() => setSelectedIncidentId(inc.id)}
-                    className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${selectedIncidentId === inc.id ? 'border-blue-400 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
-                  >
-                    <div className="flex items-center justify-between gap-3 mb-1.5">
-                      <span className="text-[11px] font-mono font-bold text-slate-400">{inc.id}</span>
-                      <DisasterBadge type="severity" value={inc.severity} />
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ml-auto ${inc.status === 'Responding' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                        {inc.status}
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold text-slate-800">{inc.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-medium">
-                      <span className="flex items-center gap-1"><MapPin size={10} />{inc.location}, {inc.state}</span>
-                      <span className="flex items-center gap-1"><Users size={10} />{inc.affectedPopulation.toLocaleString()} affected</span>
-                    </div>
-                  </button>
-                ))}
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Choose a Verified Incident Awaiting Mission Dispatch</p>
+                {(() => {
+                  const assignableIncidents = incidents.filter(i => i.status === 'Verified');
+                  if (assignableIncidents.length === 0) {
+                    return (
+                      <div className="text-center py-8 px-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <CheckCircle2 size={32} className="text-emerald-500 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-slate-800">All Verified Incidents Are Responded To</p>
+                        <p className="text-xs text-slate-500 mt-1">There are no pending verified incidents without active team responses.</p>
+                      </div>
+                    );
+                  }
+                  return assignableIncidents.map((inc) => (
+                    <button
+                      key={inc.id}
+                      onClick={() => setSelectedIncidentId(inc.id)}
+                      className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${selectedIncidentId === inc.id ? 'border-blue-400 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
+                    >
+                      <div className="flex items-center justify-between gap-3 mb-1.5">
+                        <span className="text-[11px] font-mono font-bold text-slate-400">{inc.displayId || inc.id}</span>
+                        <DisasterBadge type="severity" value={inc.severity} />
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border ml-auto bg-emerald-50 text-emerald-700 border-emerald-200">
+                          {inc.status} · Ready for Squad
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-800">{inc.title}</p>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-medium">
+                        <span className="flex items-center gap-1"><MapPin size={10} />{inc.location}, {inc.state}</span>
+                        <span className="flex items-center gap-1"><Users size={10} />{inc.affectedPopulation.toLocaleString()} affected</span>
+                      </div>
+                    </button>
+                  ));
+                })()}
               </motion.div>
             )}
 

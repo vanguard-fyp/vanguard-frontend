@@ -68,7 +68,7 @@ export interface Incident {
   coordinates: [number, number];
   severity: SeverityLevel;
   disasterLevel: DisasterLevel;
-  timestamp: string;
+  occurredAt: string;  // Disaster occurrence / start time (DB column: occurred_at)
   source: 'Citizen Report' | 'JPS Water Sensor' | 'MetMalaysia Radar' | 'APM Patrol';
   status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected';
   affectedPopulation: number;
@@ -80,6 +80,8 @@ export interface Incident {
   reporterContact?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+  resolvedAt?: string;
+  endDate?: string;
   rejectionReason?: string;
   aiPriorityScore: number; // Computed score 0 - 100
   triggerAlert?: TriggerAlert;
@@ -268,6 +270,8 @@ export interface ImpactSnapshot {
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
   impactRadiusKm: number;
   note?: string;
+  isPredicted?: boolean;
+  stage?: string;
 }
 
 export interface AnalyticsSummary {

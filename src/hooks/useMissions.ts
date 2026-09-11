@@ -33,6 +33,8 @@ export function useUpdateMissionStatus() {
       missionService.updateMissionStatus(id, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: MISSION_KEYS.missions });
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.teams });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
     },
   });
 }
@@ -43,6 +45,8 @@ export function useDeleteMission() {
     mutationFn: (id: string) => missionService.deleteMission(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: MISSION_KEYS.missions });
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.teams });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
     },
   });
 }

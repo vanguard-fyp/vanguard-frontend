@@ -7,6 +7,7 @@ import { RequestApprovalStage } from '../../../components/ui/coordination/resour
 import { AllocationTrackerStage } from '../../../components/ui/coordination/resource/AllocationTrackerStage';
 import { PipelineFlowDiagram } from '../../../components/ui/coordination/resource/PipelineFlowDiagram';
 import { SkeletonTable } from '../../../components/ui/shared/SkeletonLoader';
+import { useToast } from '../../../context/ToastContext';
 import type { ResourceRequest } from '../../../types';
 
 const containerAnim = {
@@ -26,18 +27,28 @@ const ResourceManagement: React.FC = () => {
   const approveMutation = useApproveResourceRequest();
   const rejectMutation = useRejectResourceRequest();
   const createMutation = useCreateResourceRequest();
+  const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
 
   const handleApprove = (id: string) => {
-    approveMutation.mutate({ id, approver: 'Resource Manager Ismail (NADMA)' });
+    approveMutation.mutate({ id, approver: 'Resource Manager Ismail (NADMA)' }, {
+      onSuccess: () => toastSuccess('Request Approved', 'Resource request has been approved and enqueued for dispatch.'),
+      onError: () => toastError('Approval Failed', 'Could not approve request. Please try again.'),
+    });
   };
 
   const handleReject = (id: string) => {
-    rejectMutation.mutate({ id, approver: 'Resource Manager Ismail (NADMA)' });
+    rejectMutation.mutate({ id, approver: 'Resource Manager Ismail (NADMA)' }, {
+      onSuccess: () => toastWarning('Request Rejected', 'Resource request has been declined and logged.'),
+      onError: () => toastError('Rejection Failed', 'Could not reject request. Please try again.'),
+    });
   };
 
   const handleCreateRequest = (newReqData: Partial<ResourceRequest>) => {
-    createMutation.mutate(newReqData);
+    createMutation.mutate(newReqData, {
+      onSuccess: () => toastSuccess('Request Submitted', 'New resource request is pending approval.'),
+      onError: () => toastError('Submit Failed', 'Could not submit resource request.'),
+    });
   };
 
   const pendingRequestsCount = requests.filter((r) => r.status === 'Pending Approval').length;

@@ -5,3 +5,4 @@ export * from './useMissions';
 export * from './useAnnouncements';
 export * from './useAnalytics';
 export * from './useUsers';
+export * from './useNotifications';

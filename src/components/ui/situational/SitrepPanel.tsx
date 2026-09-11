@@ -20,6 +20,8 @@ import { DisasterBadge } from '../dashboard/DisasterBadge';
 import { useRescueTeams, useMissions, useActivityFeed } from '../../../hooks';
 import type { Incident, SitrepTab } from '../../../types';
 import { severityHex, statusConfig, activityTypeStyle, TABS } from '../../../constants';
+import { formatDateTime } from '../../../utils/dateFormatter';
+import { useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 
 interface SitrepPanelProps {
@@ -28,14 +30,6 @@ interface SitrepPanelProps {
   onViewFullAnalysis: (incident: Incident) => void;
 }
 
-function formatDateTime(ts: string) {
-  const d = new Date(ts.replace(' ', 'T'));
-  return isNaN(d.getTime())
-    ? ts
-    : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
-    ' · ' +
-    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-tabs (Light Theme)
@@ -210,16 +204,6 @@ const ExecutiveTab: React.FC<{ incident: Incident }> = ({ incident }) => {
           <Download size={14} /> AI Poster
         </button>
       </div>
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center space-y-2">
-        <ShieldCheck className="size-8 text-blue-900 mx-auto" />
-        <p className="text-sm font-extrabold text-slate-900">NADMA Official Situational Report</p>
-        <p className="text-xs text-slate-500">
-          Click <strong>Official NADMA SITREP PDF</strong> to download the full government situational report for <strong>{incident.id}</strong> with live incident data, casualty table, assigned teams, and official signature block.
-        </p>
-        <p className="text-xs text-slate-500 mt-2">
-          Click <strong>AI Poster</strong> to download the creative bilingual public warning poster with evacuation directives and emergency hotlines.
-        </p>
-      </div>
 
       {/* Official Government Template View */}
       <div
@@ -245,7 +229,7 @@ const ExecutiveTab: React.FC<{ incident: Incident }> = ({ incident }) => {
             <span className="inline-block px-2 py-0.5 bg-red-100 text-red-800 text-[9px] font-extrabold uppercase rounded">
               TERHAD / RESTRICTED
             </span>
-            <p className="text-[9px] font-mono text-slate-500 mt-1">REF: {incident.id}</p>
+            <p className="text-[9px] font-mono text-slate-500 mt-1">REF: {incident.displayId}</p>
           </div>
         </div>
 
@@ -262,7 +246,7 @@ const ExecutiveTab: React.FC<{ incident: Incident }> = ({ incident }) => {
         <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
           <div>
             <p className="text-[9px] font-bold text-slate-500 uppercase">Tarikh / Masa</p>
-            <p className="text-xs font-extrabold text-slate-900 mt-0.5">{formatDateTime(incident.timestamp)}</p>
+            <p className="text-xs font-extrabold text-slate-900 mt-0.5">{formatDateTime(incident.occurredAt)}</p>
           </div>
           <div>
             <p className="text-[9px] font-bold text-slate-500 uppercase">Tahap Bencana</p>
@@ -520,7 +504,7 @@ const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
                           <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
                             {style.label} · {evt.actor}
                           </span>
-                          <span className="text-[10px] font-mono font-bold text-slate-400">{evt.time}</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-400">{formatDateTime(evt.time)}</span>
                         </div>
                         <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
                       </div>
@@ -565,7 +549,7 @@ const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
                     <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
                       {style.label} · {evt.actor}
                     </span>
-                    <span className="text-[10px] font-mono font-bold text-slate-400">{evt.time}</span>
+                    <span className="text-[10px] font-mono font-bold text-slate-400">{formatDateTime(evt.time)}</span>
                   </div>
                   <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
                 </div>
@@ -588,6 +572,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
   onViewFullAnalysis,
 }) => {
   const [activeTab, setActiveTab] = useState<SitrepTab>('dashboard');
+  const navigate = useNavigate();
 
   return (
     <AnimatePresence>
@@ -618,7 +603,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
-                      {incident.id}
+                      {incident.displayId || incident.id}
                     </span>
                     <span
                       className="size-2 rounded-full shrink-0"
@@ -682,17 +667,26 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
               </AnimatePresence>
             </div>
 
-            {/* Drawer Footer */}
-            {incident.status !== 'Unverified' && incident.impactTimeline?.length ? (
-              <div className="shrink-0 p-4 border-t border-slate-200 bg-slate-50/50">
+            {/* Drawer Footer with Direct Command Action Navigation */}
+            <div className="shrink-0 p-4 border-t border-slate-200 bg-slate-50/80 space-y-2">
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate(`/situational/incidents/${incident.id}`);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+              >
+                <ShieldCheck size={14} className="text-emerald-400" /> Open Incident Command Center & Actions →
+              </button>
+              {incident.status !== 'Unverified' && incident.impactTimeline?.length ? (
                 <button
                   onClick={() => onViewFullAnalysis(incident)}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-all cursor-pointer"
                 >
-                  <Activity size={14} /> View Full AI Intelligence Analysis
+                  <Activity size={13} className="text-blue-600" /> View AI Predictive Analysis
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </motion.div>
         </>
       )}
