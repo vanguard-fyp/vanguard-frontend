@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Layout
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 
-// Pages
+// Public Pages
+import LandingPage from './pages/public/LandingPage';
+import LoginPage from './pages/public/LoginPage';
+
+// Operational Dashboard Pages
 import EOCCommandCenter from './pages/dashboard/EOCCommandCenter';
 import IncidentManagement from './pages/situational/incident-management/IncidentManagement';
 import IncidentDetailPage from './pages/situational/incident-management/IncidentDetailPage';
@@ -16,59 +20,74 @@ import PublicCommunication from './pages/communication/PublicCommunication';
 import ReportsAnalytics from './pages/analytics/ReportsAnalytics';
 import SystemAdministration from './pages/system/SystemAdministration';
 
-// Toast Notifications
+// AI Copilot Sentinel Chatbot
+import EocCopilotChatbot from './components/copilot/EocCopilotChatbot';
+
+// Providers
 import { ToastProvider } from './context/ToastContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-import type { UserRole } from './types';
-
-const App: React.FC = () => {
+const MainAppLayout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [currentRole, setCurrentRole] = useState<UserRole>('Disaster Management Officer');
+  const { user, loginWithRole } = useAuth();
 
   return (
-    <ToastProvider>
-      <Router>
-        <div className="min-h-screen flex" style={{ background: '#f8fafc', fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen flex" style={{ background: '#f8fafc', fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
+        mobileOpen={mobileMenuOpen}
+        setMobileOpen={setMobileMenuOpen}
+      />
 
-          {/* Left — calm dark slate sidebar with responsive mobile drawer */}
-          <Sidebar
-            collapsed={sidebarCollapsed}
-            setCollapsed={setSidebarCollapsed}
-            mobileOpen={mobileMenuOpen}
-            setMobileOpen={setMobileMenuOpen}
-          />
+      <div
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ml-0 ${
+          sidebarCollapsed ? 'md:ml-[64px]' : 'md:ml-[256px]'
+        }`}
+      >
+        <Header
+          currentRole={user?.role || 'NADMA Lead Officer'}
+          onRoleChange={(role) => loginWithRole(role)}
+          onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
+        />
 
-          {/* Right — page workspace */}
-          <div
-            className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ml-0 ${sidebarCollapsed ? 'md:ml-[64px]' : 'md:ml-[256px]'
-              }`}
-          >
-            {/* Sticky top header with hamburger for mobile */}
-            <Header
-              currentRole={currentRole}
-              onRoleChange={setCurrentRole}
-              onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
-            />
+        {/* Page content */}
+        <main className="flex-1 p-3 sm:p-6 overflow-y-auto" style={{ background: '#f8fafc' }}>
+          <Routes>
+            <Route path="/dashboard" element={<EOCCommandCenter />} />
+            <Route path="/situational/incidents" element={<IncidentManagement />} />
+            <Route path="/situational/incidents/:id" element={<IncidentDetailPage />} />
+            <Route path="/situational/intelligence" element={<DisasterIntelligence />} />
+            <Route path="/response/rescue" element={<RescueOperations />} />
+            <Route path="/response/resources" element={<ResourceManagement />} />
+            <Route path="/communication" element={<PublicCommunication />} />
+            <Route path="/analytics" element={<ReportsAnalytics />} />
+            <Route path="/system" element={<SystemAdministration />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </main>
+      </div>
 
-            {/* Page content on calm slate canvas */}
-            <main className="flex-1 p-3 sm:p-6 overflow-y-auto" style={{ background: '#f8fafc' }}>
-              <Routes>
-                <Route path="/" element={<EOCCommandCenter />} />
-                <Route path="/situational/incidents" element={<IncidentManagement />} />
-                <Route path="/situational/incidents/:id" element={<IncidentDetailPage />} />
-                <Route path="/situational/intelligence" element={<DisasterIntelligence />} />
-                <Route path="/response/rescue" element={<RescueOperations />} />
-                <Route path="/response/resources" element={<ResourceManagement />} />
-                <Route path="/communication" element={<PublicCommunication />} />
-                <Route path="/analytics" element={<ReportsAnalytics />} />
-                <Route path="/system" element={<SystemAdministration />} />
-              </Routes>
-            </main>
-          </div>
-        </div>
-      </Router>
-    </ToastProvider>
+      {/* ── Intelligent EOC Copilot / AI Sentinel Assistant ── */}
+      <EocCopilotChatbot />
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/*" element={<MainAppLayout />} />
+          </Routes>
+        </Router>
+      </ToastProvider>
+    </AuthProvider>
   );
 };
 

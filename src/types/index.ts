@@ -6,16 +6,22 @@ export * from './situational';
 export * from './system';
 
 export type UserRole =
+  | 'NADMA Lead Officer'
   | 'Disaster Management Officer'
   | 'Rescue Coordinator'
   | 'Resource Manager'
-  | 'Government Administrator';
+  | 'Government Administrator'
+  | 'Citizen Reporter'
+  | 'System / Sensor Bot';
 
 export const USER_ROLES: UserRole[] = [
+  'NADMA Lead Officer',
   'Disaster Management Officer',
   'Rescue Coordinator',
   'Resource Manager',
   'Government Administrator',
+  'Citizen Reporter',
+  'System / Sensor Bot',
 ];
 
 export type DisasterType = 'Flood' | 'Landslide' | 'Flash Flood' | 'Forest Fire' | 'Severe Storm';
@@ -27,7 +33,10 @@ export type DisasterLevel = 'Level 1: District' | 'Level 2: State' | 'Level 3: F
 export interface IncidentLog {
   id: string;
   incidentId: string;
+  actorUserId?: string;
   actor: string;
+  actorRole?: string;
+  actorAgency?: string;
   action: string;
   detail?: string;
   loggedAt: string;
@@ -39,6 +48,25 @@ export interface CityItem {
   subtitle: string;
   lat: number;
   lng: number;
+}
+
+export interface GdacsEvent {
+  id: string;
+  eventId: string;
+  title: string;
+  description: string;
+  hazardType: string;
+  hazardCode: string;
+  alertLevel: 'Red' | 'Orange' | 'Green';
+  country: string;
+  lat: number;
+  lng: number;
+  date: string;
+  severity: string;
+  affectedPopulation: number;
+  link: string;
+  isCurrent: boolean;
+  source: string;
 }
 
 export interface AIRecommendation {
@@ -69,7 +97,10 @@ export interface Incident {
   severity: SeverityLevel;
   disasterLevel: DisasterLevel;
   occurredAt: string;  // Disaster occurrence / start time (DB column: occurred_at)
-  source: 'Citizen Report' | 'JPS Water Sensor' | 'MetMalaysia Radar' | 'APM Patrol';
+  source: string;
+  sourceType?: 'Metrological / Sensor' | 'Citizen Reported' | 'Agency Patrol' | 'Emergency 999';
+  reportedByUserId?: string;
+  reporterName?: string;
   status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected';
   affectedPopulation: number;
   casualtiesCount: number;
@@ -79,14 +110,49 @@ export interface Incident {
   description: string;
   reporterContact?: string;
   verifiedBy?: string;
+  verifiedByUserId?: string;
   verifiedAt?: string;
   resolvedAt?: string;
+  resolvedByUserId?: string;
   endDate?: string;
   rejectionReason?: string;
   aiPriorityScore: number; // Computed score 0 - 100
   triggerAlert?: TriggerAlert;
   impactTimeline?: ImpactSnapshot[];
   actionLog?: IncidentLog[];
+}
+
+export interface CopilotTask {
+  id: string;
+  category: string;
+  priority: SeverityLevel | string;
+  title: string;
+  description: string;
+  actionLabel: string;
+  link: string;
+  displayId?: string;
+  badge?: string;
+  icon?: string;
+  dueTime?: string;
+}
+
+export interface CopilotMessage {
+  id: string;
+  sender: 'user' | 'copilot';
+  text: string;
+  timestamp: string;
+  suggestions?: string[];
+  tasks?: CopilotTask[];
+}
+
+export interface CopilotChatResponse {
+  reply: string;
+  timestamp: string;
+  role: string;
+  suggestions: string[];
+  activeIncidentsCount: number;
+  criticalCount: number;
+  unreadAlertsCount: number;
 }
 
 export interface GISLayerState {

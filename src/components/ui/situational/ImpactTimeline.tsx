@@ -1,6 +1,6 @@
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { TrendingUp, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
 import type { ImpactSnapshot } from '../../../types';
 
 interface ImpactTimelineProps {

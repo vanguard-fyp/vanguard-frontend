@@ -10,9 +10,18 @@ export const INCIDENT_KEYS = {
   lists: () => [...INCIDENT_KEYS.all, 'list'] as const,
   list: (filters?: Record<string, string>) => [...INCIDENT_KEYS.lists(), filters] as const,
   detail: (id: string) => [...INCIDENT_KEYS.all, 'detail', id] as const,
+  global: () => ['incidents', 'global'] as const,
   pois: () => ['incidents', 'pois'] as const,
   cities: () => ['incidents', 'cities'] as const,
 };
+
+export function useGlobalIncidents(refresh?: boolean) {
+  return useQuery({
+    queryKey: INCIDENT_KEYS.global(),
+    queryFn: () => incidentService.getGlobalIncidents(refresh),
+    staleTime: 60_000,
+  });
+}
 
 export function useIncidents(filters?: { severity?: string; status?: string; district?: string }) {
   return useQuery({

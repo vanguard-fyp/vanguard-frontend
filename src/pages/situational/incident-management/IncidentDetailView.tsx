@@ -64,6 +64,8 @@ const statusIcons: Record<string, React.ReactNode> = {
   Rejected: <XCircle size={14} className="text-rose-500" />,
 };
 
+import { useAuth } from '../../../context/AuthContext';
+
 export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   incident,
   onBack,
@@ -71,6 +73,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   onTrackInIntelligence,
 }) => {
   const isTracked = incident.status !== 'Unverified' && !!incident.impactTimeline?.length;
+  const { user } = useAuth();
   const updateIncident = useUpdateIncident();
   const resolveIncident = useResolveIncident();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
@@ -86,8 +89,8 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState('');
-  const [resolverName, setResolverName] = useState('EOC Incident Commander');
-  const [verifierName, setVerifierName] = useState("Dato' Ir. Ahmad Rosli (NADMA)");
+  const [resolverName, setResolverName] = useState(user?.name ? `${user.name} (${user.role})` : 'EOC Incident Commander');
+  const [verifierName, setVerifierName] = useState(user?.name ? `${user.name} (${user.role})` : "Dato' Ir. Ahmad Rosli (NADMA)");
   const [rejectReason, setRejectReason] = useState('Duplicate report / ground check unconfirmed');
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [copiedId, setCopiedId] = useState(false);

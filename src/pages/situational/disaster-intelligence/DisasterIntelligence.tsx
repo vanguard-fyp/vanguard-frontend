@@ -6,6 +6,7 @@ import { IntelligenceOverview } from './IntelligenceOverview';
 import { LayerPanel } from '../../../components/ui/situational/LayerPanel';
 import { AIInsightDetailView } from './AIInsightDetailView';
 import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
+import { Gis3DLayerExplorer } from '../../../components/ui/situational/Gis3DLayerExplorer';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
 import { useIncidents, useMapPOIs, useCities } from '../../../hooks';
 
@@ -39,7 +40,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   const [activeTab, setActiveTab] = useState<typeof tabs[number]>('Map');
   const [layers, setLayers] = useState<GISLayerState>(defaultLayers);
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
-  const [is3D, setIs3D] = useState(true);
+  const [mapMode, setMapMode] = useState<'2d' | '3d' | '3d-layers'>('3d-layers');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [flyToTarget, setFlyToTarget] = useState<FlyToTarget | null>(null);
@@ -238,8 +239,8 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                   <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
                     GIS Map Engine
                   </h2>
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
-                    {is3D ? '3D Vector Engine' : '2D Leaflet Vector'}
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">
+                    {mapMode === '3d-layers' ? '3D GIS Layer Stack · Anime.js' : mapMode === '3d' ? '3D Vector Engine' : '2D Leaflet Vector'}
                   </span>
                 </div>
 
@@ -264,7 +265,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                           }
                         }}
                         placeholder="Search location, incident, POI..."
-                        className="pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 w-60 shadow-2xs transition-all"
+                        className="pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 w-56 shadow-2xs transition-all"
                       />
                       {searchQuery && (
                         <button
@@ -303,64 +304,91 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                     )}
                   </div>
 
-                  {/* 2. 2D / 3D Mode Toggle Switch */}
+                  {/* 2. 2D / 3D / 3D GIS Stack Mode Toggle Switch */}
                   <div className="flex bg-slate-200/80 p-0.5 rounded-lg border border-slate-200 shrink-0">
                     <button
-                      onClick={() => setIs3D(false)}
+                      onClick={() => setMapMode('3d-layers')}
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
-                        !is3D
-                          ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Square size={11} /> 2D Map
-                    </button>
-                    <button
-                      onClick={() => setIs3D(true)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
-                        is3D
+                        mapMode === '3d-layers'
                           ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
+                      title="3D Layer Stack View with Anime.js"
                     >
-                      <Box size={11} /> 3D Engine
+                      <Layers size={11} /> 3D GIS Layers (Anime.js)
+                    </button>
+                    <button
+                      onClick={() => setMapMode('3d')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
+                        mapMode === '3d'
+                          ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="3D Vector Terrain & Columns"
+                    >
+                      <Box size={11} /> 3D Globe
+                    </button>
+                    <button
+                      onClick={() => setMapMode('2d')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
+                        mapMode === '2d'
+                          ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="2D Standard Leaflet Map"
+                    >
+                      <Square size={11} /> 2D Map
                     </button>
                   </div>
 
-                  {/* 3. Layers Button */}
-                  <button
-                    onClick={() => setLayerPanelOpen(v => !v)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                      layerPanelOpen
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Layers size={14} /> Layers ({Object.values(layers).filter(Boolean).length})
-                  </button>
+                  {/* 3. Layers Filter Panel (applicable in standard 2D/3D map mode) */}
+                  {mapMode !== '3d-layers' && (
+                    <button
+                      onClick={() => setLayerPanelOpen(v => !v)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        layerPanelOpen
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Layers size={14} /> Layers ({Object.values(layers).filter(Boolean).length})
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Floating layer matrix overlay */}
-              <LayerPanel
-                layers={layers}
-                isOpen={layerPanelOpen}
-                onClose={() => setLayerPanelOpen(false)}
-                onToggleLayer={toggleLayer}
-                onResetLayers={handleResetLayers}
-                onSelectAllLayers={handleSelectAllLayers}
-              />
+              {mapMode !== '3d-layers' && (
+                <LayerPanel
+                  layers={layers}
+                  isOpen={layerPanelOpen}
+                  onClose={() => setLayerPanelOpen(false)}
+                  onToggleLayer={toggleLayer}
+                  onResetLayers={handleResetLayers}
+                  onSelectAllLayers={handleSelectAllLayers}
+                />
+              )}
 
-              {/* Map canvas */}
-              <MapCanvas3D
-                layers={layers}
-                is3D={is3D}
-                flyToTarget={flyToTarget}
-                onSelectIncident={handleSelectIncident}
-                onToggleLayer={toggleLayer}
-                incidents={activeIncidents}
-                pois={mapPOIs}
-              />
+              {/* Dynamic Map Canvas Mode */}
+              {mapMode === '3d-layers' ? (
+                <Gis3DLayerExplorer
+                  layers={layers}
+                  incidents={activeIncidents}
+                  pois={mapPOIs}
+                  onSelectIncident={handleSelectIncident}
+                  onToggleLayer={toggleLayer}
+                />
+              ) : (
+                <MapCanvas3D
+                  layers={layers}
+                  is3D={mapMode === '3d'}
+                  flyToTarget={flyToTarget}
+                  onSelectIncident={handleSelectIncident}
+                  onToggleLayer={toggleLayer}
+                  incidents={activeIncidents}
+                  pois={mapPOIs}
+                />
+              )}
             </div>
           </motion.div>
         )}

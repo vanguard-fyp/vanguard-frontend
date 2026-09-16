@@ -12,6 +12,13 @@ export const incidentService = {
   },
 
   /**
+   * List live global disaster alerts from GDACS (Earthquakes, Cyclones, Floods, Volcanoes)
+   */
+  getGlobalIncidents: async (refresh?: boolean): Promise<any[]> => {
+    return apiClient.get<any[]>('/incidents/global', { refresh });
+  },
+
+  /**
    * Get single incident details by ID
    */
   getIncidentById: async (id: string): Promise<Incident> => {

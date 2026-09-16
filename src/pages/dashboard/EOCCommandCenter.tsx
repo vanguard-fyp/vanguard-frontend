@@ -260,7 +260,7 @@ const EOCCommandCenter: React.FC = () => {
               <Bar dataKey="deployed" name="Deployed" radius={[3, 3, 0, 0]} stackId="a">
                 {teamCapacity.map((t, i) => <Cell key={i} fill={t.fill} />)}
               </Bar>
-              <Bar dataKey="available" name="Available" radius={[3, 3, 0, 0]} stackId="a" fill="#e2e8f0" />
+              <Bar dataKey="available" name="Available" radius={[3, 3, 0, 0]} stackId="a" fill="#9da1a9ff" />
             </BarChart>
           </ResponsiveContainer>
         </div>

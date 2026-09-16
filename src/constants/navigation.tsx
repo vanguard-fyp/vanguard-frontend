@@ -13,7 +13,7 @@ export const NAV_STRUCTURE: NavSection[] = [
   {
     section: 'MAIN',
     items: [
-      { label: 'EOC Dashboard', path: '/', icon: <LayoutDashboard size={18} /> },
+      { label: 'EOC Dashboard', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
     ],
   },
   {
