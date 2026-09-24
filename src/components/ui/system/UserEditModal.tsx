@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Check, UserCheck } from 'lucide-react';
-import type { UserAccount, UserRole } from '../../../types';
+import type { UserEditModalProps, UserRole } from '../../../types';
 import { userRolesList as rolesList, agencyOptions } from '../../../constants';
-
-interface UserEditModalProps {
-  isOpen: boolean;
-  user: UserAccount | null;
-  onClose: () => void;
-  onSave: (data: Partial<UserAccount>) => void;
-}
 
 export const UserEditModal: React.FC<UserEditModalProps> = ({
   isOpen,
@@ -51,18 +44,24 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
       email,
       agency,
       role,
-      status,
+      status: user ? status : 'Active',
       lastActive: user ? user.lastActive : 'Just now',
     });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 12 }}
+        onClick={(e) => e.stopPropagation()}
         className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col"
       >
         {/* Header */}
@@ -119,7 +118,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
               <select
                 value={agency}
                 onChange={(e) => setAgency(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
               >
                 {agencyOptions.map((a) => (
                   <option key={a} value={a}>
@@ -136,7 +135,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as UserRole)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
               >
                 {rolesList.map((r) => (
                   <option key={r} value={r}>
@@ -147,36 +146,39 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
-              Account Status
-            </label>
-            <div className="flex items-center gap-3">
-              {(['Active', 'Inactive'] as const).map((st) => (
-                <button
-                  key={st}
-                  type="button"
-                  onClick={() => setStatus(st)}
-                  className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                    status === st
-                      ? st === 'Active'
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
-                        : 'bg-red-50 text-red-800 border-red-300 shadow-2xs'
-                      : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
+          {/* Account Status: Only shown during Edit (New users default to Active) */}
+          {user && (
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
+                Account Status
+              </label>
+              <div className="flex items-center gap-3">
+                {(['Active', 'Inactive'] as const).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setStatus(st)}
+                    className={`flex-1 py-2 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      status === st
+                        ? st === 'Active'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                          : 'bg-red-50 text-red-800 border-red-300 shadow-2xs'
+                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Footer Actions */}
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
             >
               Cancel
             </button>

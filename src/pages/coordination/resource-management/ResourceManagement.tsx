@@ -1,25 +1,23 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, ClipboardCheck, Send, GitFork } from 'lucide-react';
-import { useInventory, useResourceRequests, useApproveResourceRequest, useRejectResourceRequest, useCreateResourceRequest } from '../../../hooks';
+import { Warehouse, ClipboardCheck, Send, GitFork, PackagePlus } from 'lucide-react';
+import {
+  useInventory,
+  useResourceRequests,
+  useApproveResourceRequest,
+  useRejectResourceRequest,
+  useCreateResourceRequest,
+} from '../../../hooks';
 import { InventoryStage } from '../../../components/ui/coordination/resource/InventoryStage';
 import { RequestApprovalStage } from '../../../components/ui/coordination/resource/RequestApprovalStage';
 import { AllocationTrackerStage } from '../../../components/ui/coordination/resource/AllocationTrackerStage';
 import { PipelineFlowDiagram } from '../../../components/ui/coordination/resource/PipelineFlowDiagram';
 import { SkeletonTable } from '../../../components/ui/shared/SkeletonLoader';
+import { RequestDetailModal } from '../../../components/ui/coordination/resource/RequestDetailModal';
+import { CreateResourceRequestModal } from '../../../components/ui/coordination/resource/CreateResourceRequestModal';
 import { useToast } from '../../../context/ToastContext';
-import type { ResourceRequest } from '../../../types';
-
-const containerAnim = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
-const itemAnim = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0 },
-};
-
-type ViewMode = 1 | 2 | 3 | 'all';
+import type { ResourceRequest, ViewMode } from '../../../types';
+import { containerAnim, itemAnim } from '../../../constants';
 
 const ResourceManagement: React.FC = () => {
   const { data: inventory = [], isLoading: isInventoryLoading } = useInventory();
@@ -30,18 +28,30 @@ const ResourceManagement: React.FC = () => {
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
 
+  // Modal states
+  const [selectedRequestForModal, setSelectedRequestForModal] = useState<ResourceRequest | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // TODO: Make the approver link to user id
   const handleApprove = (id: string) => {
-    approveMutation.mutate({ id, approver: 'Resource Manager Ismail (NADMA)' }, {
-      onSuccess: () => toastSuccess('Request Approved', 'Resource request has been approved and enqueued for dispatch.'),
-      onError: () => toastError('Approval Failed', 'Could not approve request. Please try again.'),
-    });
+    approveMutation.mutate(
+      { id, approver: 'Resource Manager Ismail (NADMA)' },
+      {
+        onSuccess: () =>
+          toastSuccess('Request Approved', 'Resource request has been approved and enqueued for dispatch.'),
+        onError: () => toastError('Approval Failed', 'Could not approve request. Please try again.'),
+      }
+    );
   };
 
   const handleReject = (id: string) => {
-    rejectMutation.mutate({ id, approver: 'Resource Manager Ismail (NADMA)' }, {
-      onSuccess: () => toastWarning('Request Rejected', 'Resource request has been declined and logged.'),
-      onError: () => toastError('Rejection Failed', 'Could not reject request. Please try again.'),
-    });
+    rejectMutation.mutate(
+      { id, approver: 'Resource Manager Ismail (NADMA)' },
+      {
+        onSuccess: () => toastWarning('Request Rejected', 'Resource request has been declined and logged.'),
+        onError: () => toastError('Rejection Failed', 'Could not reject request. Please try again.'),
+      }
+    );
   };
 
   const handleCreateRequest = (newReqData: Partial<ResourceRequest>) => {
@@ -74,7 +84,10 @@ const ResourceManagement: React.FC = () => {
       sub: 'AI Decision Advisory',
       icon: ClipboardCheck,
       badge: `${pendingRequestsCount} Pending`,
-      badgeStyle: pendingRequestsCount > 0 ? 'bg-amber-50 text-amber-700 border-amber-200 font-bold' : 'bg-slate-100 text-slate-600 border-slate-200',
+      badgeStyle:
+        pendingRequestsCount > 0
+          ? 'bg-amber-50 text-amber-700 border-amber-200 font-bold'
+          : 'bg-slate-100 text-slate-600 border-slate-200',
     },
     {
       id: 3 as const,
@@ -98,12 +111,7 @@ const ResourceManagement: React.FC = () => {
   }
 
   return (
-    <motion.div
-      variants={containerAnim}
-      initial="hidden"
-      animate="show"
-      className="space-y-6"
-    >
+    <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-6">
       {/* Page Header */}
       <motion.div variants={itemAnim} className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -113,27 +121,39 @@ const ResourceManagement: React.FC = () => {
           </p>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold shadow-2xs">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={() => setActiveStep(1)}
-            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeStep !== 'all'
-                ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
-              }`}
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer"
           >
-            Stage-by-Stage View
+            <PackagePlus size={14} />
+            <span>Create Requisition</span>
           </button>
-          <button
-            onClick={() => setActiveStep('all')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeStep === 'all'
-                ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold shadow-2xs">
+            <button
+              onClick={() => setActiveStep(1)}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeStep !== 'all'
+                  ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
               }`}
-          >
-            <GitFork size={13} className={activeStep === 'all' ? 'text-blue-600' : 'text-slate-500'} />
-            <span>Full Pipeline Flow</span>
-          </button>
+            >
+              Stage View
+            </button>
+            <button
+              onClick={() => setActiveStep('all')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeStep === 'all'
+                  ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
+              }`}
+            >
+              <GitFork size={13} className={activeStep === 'all' ? 'text-blue-600' : 'text-slate-500'} />
+              <span>Pipeline Flow</span>
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -142,7 +162,7 @@ const ResourceManagement: React.FC = () => {
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Total Items Tracked</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{inventory.length}</p>
-          <p className="text-xs text-slate-500 font-medium mt-0.5 font-mono">5 Depot Categories</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">5 Depot Categories</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
           <p className="text-[11px] font-bold text-red-700 uppercase tracking-wide">Critical Stock</p>
@@ -172,28 +192,38 @@ const ResourceManagement: React.FC = () => {
                 <button
                   key={s.id}
                   onClick={() => setActiveStep(s.id)}
-                  className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left cursor-pointer border ${isActive
+                  className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-left cursor-pointer border ${
+                    isActive
                       ? 'bg-white text-slate-900 shadow-xs border-blue-500 ring-2 ring-blue-500/20'
                       : 'bg-white/50 border-slate-200/80 text-slate-600 hover:text-blue-950 hover:bg-white hover:border-blue-400 hover:shadow-xs hover:-translate-y-0.5'
-                    }`}
+                  }`}
                 >
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${isActive
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                      isActive
                         ? 'bg-blue-600 text-white shadow-2xs'
                         : 'bg-slate-200 text-slate-600 group-hover:bg-blue-100 group-hover:text-blue-700 font-bold'
-                      }`}
+                    }`}
                   >
                     {s.num}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
-                      <p className={`text-xs font-bold truncate transition-colors ${isActive ? 'text-blue-950' : 'text-slate-700 group-hover:text-blue-900'}`}>
+                      <p
+                        className={`text-xs font-bold truncate transition-colors ${
+                          isActive ? 'text-blue-950' : 'text-slate-700 group-hover:text-blue-900'
+                        }`}
+                      >
                         {s.title}
                       </p>
                     </div>
                     <p className="text-[10px] text-slate-500 font-medium truncate">{s.sub}</p>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 transition-all ${s.badgeStyle} ${!isActive ? 'group-hover:border-blue-300 group-hover:shadow-2xs' : ''}`}>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 transition-all ${
+                      s.badgeStyle
+                    } ${!isActive ? 'group-hover:border-blue-300 group-hover:shadow-2xs' : ''}`}
+                  >
                     {s.badge}
                   </span>
                 </button>
@@ -231,6 +261,7 @@ const ResourceManagement: React.FC = () => {
               requests={requests}
               onApprove={handleApprove}
               onReject={handleReject}
+              onSelectRequest={(req) => setSelectedRequestForModal(req)}
             />
           </motion.div>
         )}
@@ -248,20 +279,32 @@ const ResourceManagement: React.FC = () => {
 
         {activeStep === 'all' && (
           <motion.div
-            key="stageAll"
+            key="flow"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
-            className="space-y-4"
           >
             <PipelineFlowDiagram
               inventory={inventory}
               requests={requests}
-              onNavigateStage={(stage) => setActiveStep(stage)}
             />
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Request Details Modal */}
+      {selectedRequestForModal && (
+        <RequestDetailModal
+          request={selectedRequestForModal}
+          onClose={() => setSelectedRequestForModal(null)}
+        />
+      )}
+
+      {/* Create Requisition Modal */}
+      <CreateResourceRequestModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+      />
     </motion.div>
   );
 };

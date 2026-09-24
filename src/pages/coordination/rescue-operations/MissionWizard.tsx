@@ -5,34 +5,12 @@ import {
   Sparkles, MapPin, Users, Target, Flag, Clock, FileText, Send
 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
-import type { Incident, RescueTeam, SeverityLevel } from '../../../types';
-
-interface MissionWizardProps {
-  incidents: Incident[];
-  teams: RescueTeam[];
-  onClose: () => void;
-  onDispatch: (data: {
-    incidentId: string;
-    teamId: string;
-    objective: string;
-    priority: SeverityLevel;
-    durationHrs: number;
-    notes: string;
-  }) => void;
-}
-
-const steps = ['Select Incident', 'AI Recommendation', 'Mission Brief', 'Confirm & Dispatch'] as const;
-
-interface AITeamRecommendation {
-  teamId: string;
-  confidence: number;
-  rationale: string;
-  eta: string;
-}
+import type { AITeamRecommendation, Incident, MissionWizardProps, RescueTeam, SeverityLevel } from '../../../types';
+import { steps } from '../../../constants';
 
 function getAIRecommendation(incident: Incident | null, teams: RescueTeam[]): AITeamRecommendation | null {
   if (!incident) return null;
-  // Mock AI logic: pick available team or least-loaded deployed team
+  // TODO: Mock AI logic: pick available team or least-loaded deployed team
   const available = teams.find((t) => t.status === 'Available');
   const candidate = available || teams[0];
   return {
@@ -130,11 +108,10 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
             {steps.map((s, i) => (
               <React.Fragment key={s}>
                 <div className="flex flex-col items-center gap-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-all ${
-                    i < step ? 'bg-blue-600 border-blue-600 text-white' :
-                    i === step ? 'bg-white border-blue-600 text-blue-700' :
-                    'bg-white border-slate-300 text-slate-400'
-                  }`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-all ${i < step ? 'bg-blue-600 border-blue-600 text-white' :
+                      i === step ? 'bg-white border-blue-600 text-blue-700' :
+                        'bg-white border-slate-300 text-slate-400'
+                    }`}>
                     {i < step ? '✓' : i + 1}
                   </div>
                   <span className={`text-[9px] font-bold text-center leading-tight w-16 ${i <= step ? 'text-blue-700' : 'text-slate-400'}`}>

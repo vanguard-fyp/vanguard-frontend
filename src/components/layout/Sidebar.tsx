@@ -12,6 +12,7 @@ import {
 import type { NavChild, SidebarProps } from '../../types';
 import { SIDEBAR_THEME as C, NAV_STRUCTURE, SYSTEM_NAV_ITEM } from '../../constants';
 import { useAuth } from '../../context/AuthContext';
+import { ProfileModal } from '../ui/shared/ProfileModal';
 
 interface ExtendedSidebarProps extends SidebarProps {
   mobileOpen?: boolean;
@@ -47,6 +48,7 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
     'Situational Awareness': true,
     'Response Coordination': true,
   });
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const toggle = (label: string) =>
     setOpenSections((p) => ({ ...p, [label]: !p[label] }));
@@ -200,9 +202,8 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                       >
                         {({ isActive }) => (
                           <div
-                            className={`mx-2 flex items-center gap-3 py-2 transition-all cursor-pointer ${
-                              collapsed ? 'justify-center rounded-lg px-0' : 'px-3 rounded-lg'
-                            }`}
+                            className={`mx-2 flex items-center gap-3 py-2 transition-all cursor-pointer ${collapsed ? 'justify-center rounded-lg px-0' : 'px-3 rounded-lg'
+                              }`}
                             style={{
                               background: isActive ? C.parentActiveBg : 'transparent',
                               color: isActive ? C.parentActiveText : C.parentInactive,
@@ -231,9 +232,8 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                           if (collapsed) setCollapsed(false);
                           toggle(item.label);
                         }}
-                        className={`flex items-center gap-3 py-2 transition-all cursor-pointer ${
-                          collapsed ? 'justify-center rounded-lg px-0' : 'px-3 rounded-lg justify-between'
-                        }`}
+                        className={`flex items-center gap-3 py-2 transition-all cursor-pointer ${collapsed ? 'justify-center rounded-lg px-0' : 'px-3 rounded-lg justify-between'
+                          }`}
                         style={{
                           background: activeChild ? C.parentActiveBg : 'transparent',
                           color: activeChild ? C.parentActiveText : C.parentInactive,
@@ -327,9 +327,8 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
             <NavLink to={SYSTEM_NAV_ITEM.path} title={collapsed ? SYSTEM_NAV_ITEM.label : undefined} onClick={handleNavClick}>
               {({ isActive }) => (
                 <div
-                  className={`mb-2 flex items-center gap-3 py-2 transition-all cursor-pointer ${
-                    collapsed ? 'justify-center rounded-lg' : 'px-2.5 rounded-lg'
-                  }`}
+                  className={`mb-2 flex items-center gap-3 py-2 transition-all cursor-pointer ${collapsed ? 'justify-center rounded-lg' : 'px-2.5 rounded-lg'
+                    }`}
                   style={{
                     background: isActive ? C.parentActiveBg : 'transparent',
                     color: isActive ? C.parentActiveText : C.parentInactive,
@@ -349,31 +348,43 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
             style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.divider}` }}
           >
             {collapsed ? (
-              <div className="flex items-center justify-center py-2">
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                title="View my officer profile"
+                className="w-full flex items-center justify-center py-2 cursor-pointer hover:bg-white/5 transition-colors"
+              >
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                   style={{ background: C.logoBg }}
                 >
                   {user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'}
                 </div>
-              </div>
+              </button>
             ) : (
               <div className="px-3 py-2">
                 <div className="flex items-center gap-2.5">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                    style={{ background: C.logoBg }}
+                  <button
+                    type="button"
+                    onClick={() => setProfileOpen(true)}
+                    title="View my officer profile"
+                    className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer group"
                   >
-                    {user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-semibold truncate" style={{ color: C.profileName }}>
-                      {user?.name || "Dato' Ir. Ahmad Rosli"}
-                    </p>
-                    <p className="text-[10px] font-medium truncate" style={{ color: C.profileRole }}>
-                      {user?.role || 'NADMA Lead Officer'}
-                    </p>
-                  </div>
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 transition-transform group-hover:scale-105"
+                      style={{ background: C.logoBg }}
+                    >
+                      {user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold truncate group-hover:underline" style={{ color: C.profileName }}>
+                        {user?.name || "Dato' Ir. Ahmad Rosli"}
+                      </p>
+                      <p className="text-[10px] font-medium truncate" style={{ color: C.profileRole }}>
+                        {user?.role || 'NADMA Lead Officer'}
+                      </p>
+                    </div>
+                  </button>
                   <button
                     onClick={async () => {
                       await logout();
@@ -390,6 +401,9 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
           </div>
         </div>
       </aside>
+
+      {/* Officer profile — opened from the sidebar avatar / name */}
+      <ProfileModal isOpen={profileOpen} onClose={() => setProfileOpen(false)} />
     </>
   );
 };

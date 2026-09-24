@@ -6,16 +6,7 @@ import { CommunicationFilters } from '../../components/ui/communication/Communic
 import { CommunicationCard } from '../../components/ui/communication/CommunicationCard';
 import { ComposeBroadcastModal } from '../../components/ui/communication/ComposeBroadcastModal';
 import type { PublicAnnouncement, CommunicationCategoryFilter, CommunicationChannelFilter, CommunicationSortBy } from '../../types';
-
-
-const containerAnim = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
-const itemAnim = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0 },
-};
+import { containerAnim, itemAnim } from '../../constants';
 
 const PublicCommunication: React.FC = () => {
   const { data: announcements = [] } = useAnnouncements();

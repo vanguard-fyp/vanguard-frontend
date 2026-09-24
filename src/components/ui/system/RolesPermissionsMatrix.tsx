@@ -1,25 +1,21 @@
-import React, { useState } from 'react';
-import { Shield, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Shield, CheckCircle2, RotateCcw, Save } from 'lucide-react';
 import type { MatrixRow } from '../../../types';
-
-import { permOptions, userRolesList as rolesList } from '../../../constants';
-
-const initialMatrix: MatrixRow[] = [
-  { module: 'Dashboard (Command Center)', officer: 'Full Access', coordinator: 'View Only', manager: 'View Only', admin: 'Full Access' },
-  { module: 'Incident Management', officer: 'Verify & Manage', coordinator: 'View Only', manager: 'View Only', admin: 'Full Access' },
-  { module: 'Disaster Intelligence & GIS Map', officer: 'Full Access', coordinator: 'Full Access', manager: 'View Only', admin: 'Full Access' },
-  { module: 'Rescue Operations & Missions', officer: 'View Only', coordinator: 'Assign & Track', manager: 'View Only', admin: 'Full Access' },
-  { module: 'Resource Inventory & Requests', officer: 'Request Only', coordinator: 'Request Only', manager: 'Approve & Allocate', admin: 'Full Access' },
-  { module: 'Public Alerts & Evacuation Orders', officer: 'Broadcast Access', coordinator: 'No Access', manager: 'No Access', admin: 'Full Access' },
-  { module: 'Reports & Export Analytics', officer: 'Full Access', coordinator: 'View Only', manager: 'View Only', admin: 'Full Access' },
-  { module: 'System Admin & User Control', officer: 'No Access', coordinator: 'No Access', manager: 'No Access', admin: 'Full Access' },
-];
+import { initialMatrix, permOptions, userRolesList as rolesList } from '../../../constants';
 
 export const RolesPermissionsMatrix: React.FC = () => {
   const [matrix, setMatrix] = useState<MatrixRow[]>(initialMatrix);
   const [savedNotice, setSavedNotice] = useState(false);
 
-  const handlePermChange = (moduleIndex: number, roleKey: 'officer' | 'coordinator' | 'manager' | 'admin', newValue: string) => {
+  const isDirty = useMemo(() => {
+    return JSON.stringify(matrix) !== JSON.stringify(initialMatrix);
+  }, [matrix]);
+
+  const handlePermChange = (
+    moduleIndex: number,
+    roleKey: 'officer' | 'coordinator' | 'manager' | 'admin',
+    newValue: string
+  ) => {
     setMatrix((prev) =>
       prev.map((row, i) => (i === moduleIndex ? { ...row, [roleKey]: newValue } : row))
     );
@@ -30,6 +26,10 @@ export const RolesPermissionsMatrix: React.FC = () => {
     setTimeout(() => setSavedNotice(false), 3000);
   };
 
+  const handleResetMatrix = () => {
+    setMatrix(initialMatrix);
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs space-y-0">
       {/* Header */}
@@ -37,20 +37,39 @@ export const RolesPermissionsMatrix: React.FC = () => {
         <div className="flex items-center gap-2">
           <Shield size={16} className="text-blue-600" />
           <h3 className="text-sm font-bold text-slate-800">Operational Role Permissions Matrix (RBAC)</h3>
+          {isDirty && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+              Unsaved Changes
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {savedNotice && (
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1">
               <CheckCircle2 size={13} /> Saved Matrix Changes
             </span>
           )}
-          <button
-            onClick={handleSaveMatrix}
-            className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
-          >
-            Save RBAC Configuration
-          </button>
+
+          {/* Only show Save and Reset button when RBAC is edited */}
+          {isDirty && (
+            <>
+              <button
+                onClick={handleResetMatrix}
+                className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+              >
+                <RotateCcw size={12} />
+                <span>Reset</span>
+              </button>
+              <button
+                onClick={handleSaveMatrix}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition-all shadow-md shadow-blue-600/20 cursor-pointer animate-in fade-in"
+              >
+                <Save size={13} />
+                <span>Save RBAC Configuration</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -79,15 +98,13 @@ export const RolesPermissionsMatrix: React.FC = () => {
                         value={perm}
                         onChange={(e) => handlePermChange(idx, roleKey, e.target.value)}
                         className={`text-[11px] font-bold px-2 py-1 rounded border focus:outline-none cursor-pointer ${
-                          perm === 'Full Access' ||
-                          perm === 'Verify & Manage' ||
-                          perm === 'Assign & Track' ||
-                          perm === 'Approve & Allocate' ||
-                          perm === 'Broadcast Access'
+                          perm === 'Full Access'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : perm === 'View Only' || perm === 'Request Only'
+                            : perm === 'Manage & Action'
                             ? 'bg-blue-50 text-blue-800 border-blue-200'
-                            : 'bg-slate-100 text-slate-500 border-slate-200'
+                            : perm === 'View Only'
+                            ? 'bg-slate-100 text-slate-700 border-slate-200'
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
                         }`}
                       >
                         {permOptions.map((p) => (

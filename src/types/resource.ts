@@ -12,3 +12,5 @@ export interface AIStockAdvisory {
   forecastRationale: string;
   depletionTrend: string;
 }
+
+export type ViewMode = 1 | 2 | 3 | 'all';

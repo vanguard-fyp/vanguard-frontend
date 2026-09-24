@@ -1,11 +1,6 @@
 import React from 'react';
 import { Radio, AlertTriangle, Gauge } from 'lucide-react';
-import type { TriggerAlert, MetrologyReading } from '../../../types';
-
-interface TriggerAlertPanelProps {
-  alert: TriggerAlert;
-  size?: 'compact' | 'full';
-}
+import type { MetrologyReading, TriggerAlertPanelProps } from '../../../types';
 
 export const TriggerAlertPanel: React.FC<TriggerAlertPanelProps> = ({ alert, size = 'compact' }) => {
   const isFull = size === 'full';

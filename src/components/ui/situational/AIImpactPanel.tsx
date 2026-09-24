@@ -8,7 +8,7 @@ import {
   Radar,
   ResponsiveContainer,
 } from 'recharts';
-import type { Incident } from '../../../types';
+import type { AIImpactPanelProps, Incident } from '../../../types';
 
 export const getAIAnalysis = (incident: Incident) => [
   { metric: 'Severity', value: incident.severity === 'Critical' ? 95 : incident.severity === 'High' ? 75 : incident.severity === 'Medium' ? 50 : 25, fullMark: 100 },
@@ -24,13 +24,6 @@ export const getTopDrivers = (incident: Incident, count = 2) =>
     .sort((a, b) => b.value - a.value)
     .slice(0, count)
     .map((d) => d.metric);
-
-interface AIImpactPanelProps {
-  incident: Incident;
-  rank?: number;
-  size?: 'compact' | 'full';
-  hideBrief?: boolean;
-}
 
 export const AIImpactPanel: React.FC<AIImpactPanelProps> = ({
   incident,

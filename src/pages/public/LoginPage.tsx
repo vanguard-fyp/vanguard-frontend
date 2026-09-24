@@ -3,21 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Lock, Mail, ArrowRight, AlertCircle, Activity, Shield, UserCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import type { UserRole } from '../../types';
+import type { AdminRoleOption, UserRole } from '../../types';
+import { PAPER, INK, BLUE } from '../../constants';
 
-const INK = '#0f172a';
-const PAPER = '#eef2f7';
-const BLUE = '#2563eb';
-
-interface AdminRoleOption {
-  role: UserRole;
-  label: string;
-  badge: string;
-  email: string;
-  name: string;
-  description: string;
-}
-
+// TODO: Make this real login
 const ADMIN_ROLES: AdminRoleOption[] = [
   {
     role: 'NADMA Lead Officer',
@@ -125,11 +114,10 @@ export const LoginPage: React.FC = () => {
                       key={r.role}
                       type="button"
                       onClick={() => handleSelectRole(r)}
-                      className={`text-left p-2.5 rounded border transition-all cursor-pointer ${
-                        isSelected
+                      className={`text-left p-2.5 rounded border transition-all cursor-pointer ${isSelected
                           ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-600 shadow-xs'
                           : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}>

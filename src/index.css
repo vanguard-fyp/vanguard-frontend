@@ -74,3 +74,32 @@
   }
 }
 
+/* ==================== Global Dropdown (Select) Styling ====================
+   Applies a consistent, polished look to every native <select> across all
+   modules: removes the default OS chevron, adds a crisp custom slate chevron,
+   reserves right padding for it, and gives a calm focus ring. Existing
+   Tailwind utility classes on each <select> continue to layer on top of this.
+   Opt out on any select with the `.select-native` class if the raw control is
+   needed. */
+select:not([multiple]):not(.select-native) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 0.9rem;
+  padding-right: 2rem !important;
+  cursor: pointer;
+}
+
+select:not([multiple]):not(.select-native):hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232563eb' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* Tidy the option list where the browser honours it */
+select:not([multiple]):not(.select-native) option {
+  color: #0f172a;
+  background-color: #ffffff;
+  padding: 0.4rem 0.6rem;
+}

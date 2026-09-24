@@ -12,7 +12,6 @@ export function formatDateTime(
   try {
     let d: Date;
     if (typeof dateInput === 'string') {
-      // Clean possible spaces or non-standard characters
       const cleaned = dateInput.trim().replace(' ', 'T');
       d = new Date(cleaned);
     } else {

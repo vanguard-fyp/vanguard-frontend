@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Map, Search, Layers, X, MapPin, AlertTriangle, Navigation, Box, Square } from 'lucide-react';
-import type { Incident, GISLayerState, FlyToTarget } from '../../../types';
+import type { Incident, GISLayerState, FlyToTarget, DisasterIntelligenceProps } from '../../../types';
 import { IntelligenceOverview } from './IntelligenceOverview';
 import { LayerPanel } from '../../../components/ui/situational/LayerPanel';
 import { AIInsightDetailView } from './AIInsightDetailView';
@@ -9,32 +9,7 @@ import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
 import { Gis3DLayerExplorer } from '../../../components/ui/situational/Gis3DLayerExplorer';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
 import { useIncidents, useMapPOIs, useCities } from '../../../hooks';
-
-const containerAnim = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
-const itemAnim      = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
-
-const tabs = ['Map', 'Intelligence Overview'] as const;
-
-const defaultLayers: GISLayerState = {
-  disasterHotspots:    true,
-  floodAreas:          true,
-  landslideAreas:      true,
-  fireZones:           false,
-  emergencyShelters:   true,
-  hospitals:           true,
-  evacuationSchools:   true,
-  utilityElectricity:  true,
-  utilityWater:        true,
-  utilityTelecom:      false,
-  trafficConditions:   false,
-  roadAccessibility:   true,
-  rescueTeamLocations: true,
-};
-
-interface DisasterIntelligenceProps {
-  focusIncident?: Incident | null;
-  onFocusHandled?: () => void;
-}
+import { containerAnim, defaultLayers, itemAnim, tabs } from '../../../constants';
 
 const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncident, onFocusHandled }) => {
   const [activeTab, setActiveTab] = useState<typeof tabs[number]>('Map');
@@ -66,18 +41,18 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
   const handleSelectAllLayers = () => {
     setLayers({
-      disasterHotspots:    true,
-      floodAreas:          true,
-      landslideAreas:      true,
-      fireZones:           true,
-      emergencyShelters:   true,
-      hospitals:           true,
-      evacuationSchools:   true,
-      utilityElectricity:  true,
-      utilityWater:        true,
-      utilityTelecom:      true,
-      trafficConditions:   true,
-      roadAccessibility:   true,
+      disasterHotspots: true,
+      floodAreas: true,
+      landslideAreas: true,
+      fireZones: true,
+      emergencyShelters: true,
+      hospitals: true,
+      evacuationSchools: true,
+      utilityElectricity: true,
+      utilityWater: true,
+      utilityTelecom: true,
+      trafficConditions: true,
+      roadAccessibility: true,
       rescueTeamLocations: true,
     });
   };
@@ -214,11 +189,10 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
-                activeTab === tab
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${activeTab === tab
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
             >
               {tab}
             </button>
@@ -308,33 +282,30 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                   <div className="flex bg-slate-200/80 p-0.5 rounded-lg border border-slate-200 shrink-0">
                     <button
                       onClick={() => setMapMode('3d-layers')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
-                        mapMode === '3d-layers'
-                          ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${mapMode === '3d-layers'
+                        ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       title="3D Layer Stack View with Anime.js"
                     >
                       <Layers size={11} /> 3D GIS Layers (Anime.js)
                     </button>
                     <button
                       onClick={() => setMapMode('3d')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
-                        mapMode === '3d'
-                          ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${mapMode === '3d'
+                        ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       title="3D Vector Terrain & Columns"
                     >
                       <Box size={11} /> 3D Globe
                     </button>
                     <button
                       onClick={() => setMapMode('2d')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${
-                        mapMode === '2d'
-                          ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${mapMode === '2d'
+                        ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       title="2D Standard Leaflet Map"
                     >
                       <Square size={11} /> 2D Map
@@ -345,11 +316,10 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                   {mapMode !== '3d-layers' && (
                     <button
                       onClick={() => setLayerPanelOpen(v => !v)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                        layerPanelOpen
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                      }`}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${layerPanelOpen
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
                     >
                       <Layers size={14} /> Layers ({Object.values(layers).filter(Boolean).length})
                     </button>

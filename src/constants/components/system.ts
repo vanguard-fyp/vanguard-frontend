@@ -1,5 +1,6 @@
 // ─── System Administration Constants ─────────────────────────────────────────
-import type { UserRole } from '../../types';
+import { Users, Shield, Sliders } from 'lucide-react';
+import type { AdminTab, MatrixRow, UserRole } from '../../types';
 
 // User role lists — used in dropdowns, filters, and modals
 export const userRolesFilterList = [
@@ -28,14 +29,28 @@ export const agencyOptions = [
   'KKM Health Ministry',
 ];
 
-// Permission level options — used in the roles & permissions matrix
+// Permission level options — streamlined 4-tier standard RBAC permissions
 export const permOptions = [
   'Full Access',
-  'Verify & Manage',
-  'Assign & Track',
-  'Approve & Allocate',
-  'Broadcast Access',
+  'Manage & Action',
   'View Only',
-  'Request Only',
   'No Access',
+];
+
+export const adminTabs: AdminTab[] = [
+  { id: 'users', title: 'User Management', sub: 'Accounts & CRUD', icon: Users },
+  { id: 'rbac', title: 'Roles & Permissions', sub: 'RBAC Access Matrix', icon: Shield },
+  { id: 'settings', title: 'Intelligence Thresholds', sub: 'AI Risk & Alert Triggers', icon: Sliders },
+];
+
+// TODO: Matrix Row need to change to link db
+export const initialMatrix: MatrixRow[] = [
+  { module: 'Dashboard (Command Center)', officer: 'Full Access', coordinator: 'View Only', manager: 'View Only', admin: 'Full Access' },
+  { module: 'Incident Management', officer: 'Manage & Action', coordinator: 'View Only', manager: 'View Only', admin: 'Full Access' },
+  { module: 'Disaster Intelligence & GIS Map', officer: 'Full Access', coordinator: 'Full Access', manager: 'View Only', admin: 'Full Access' },
+  { module: 'Rescue Operations & Missions', officer: 'View Only', coordinator: 'Manage & Action', manager: 'View Only', admin: 'Full Access' },
+  { module: 'Resource Inventory & Requests', officer: 'View Only', coordinator: 'View Only', manager: 'Manage & Action', admin: 'Full Access' },
+  { module: 'Public Alerts & Evacuation Orders', officer: 'Manage & Action', coordinator: 'No Access', manager: 'No Access', admin: 'Full Access' },
+  { module: 'Reports & Export Analytics', officer: 'Full Access', coordinator: 'View Only', manager: 'View Only', admin: 'Full Access' },
+  { module: 'System Admin & User Control', officer: 'No Access', coordinator: 'No Access', manager: 'No Access', admin: 'Full Access' },
 ];

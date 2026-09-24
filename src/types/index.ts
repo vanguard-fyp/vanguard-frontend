@@ -351,3 +351,11 @@ export interface AnalyticsSummary {
   responseTimeDeltaMin: number;
 }
 
+export interface AdminRoleOption {
+  role: UserRole;
+  label: string;
+  badge: string;
+  email: string;
+  name: string;
+  description: string;
+}

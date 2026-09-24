@@ -1,6 +1,6 @@
 import React from 'react';
-import { Activity, CheckCircle2, Clock, LayoutDashboard, FileText, MapPin, Radio, AlertTriangle, Home, Zap } from 'lucide-react';
-import type { GISLayerState, SitrepTab } from '../types';
+import { Activity, CheckCircle2, Clock, LayoutDashboard, FileText, MapPin, Radio, AlertTriangle, Home, Zap, CheckCircle, XCircle, Droplets, Flame, Mountain, CircleDot, CloudRain, Sun, Waves, Wind } from 'lucide-react';
+import type { GdacsHazardDef, GISLayerState, SitrepTab } from '../types';
 
 export const DARK_STYLE = {
   version: 8,
@@ -104,3 +104,107 @@ export const TABS: { id: SitrepTab; label: string; icon: React.ReactNode }[] = [
   { id: 'tactical', label: 'Tactical View', icon: <MapPin size={14} /> },
   { id: 'operations', label: 'Live Ops Feed', icon: <Radio size={14} /> },
 ];
+
+export const tabs = ['Map', 'Intelligence Overview'] as const;
+
+export const defaultLayers: GISLayerState = {
+  disasterHotspots: true,
+  floodAreas: true,
+  landslideAreas: true,
+  fireZones: false,
+  emergencyShelters: true,
+  hospitals: true,
+  evacuationSchools: true,
+  utilityElectricity: true,
+  utilityWater: true,
+  utilityTelecom: false,
+  trafficConditions: false,
+  roadAccessibility: true,
+  rescueTeamLocations: true,
+};
+
+export const MINIMAL_STATUS_FILTERS = [
+  { id: 'active', label: 'Active Incidents' },
+  { id: 'all', label: 'All Tracked' },
+  { id: 'resolved', label: 'Resolved / Archived' },
+] as const;
+
+export const statusIcons: Record<string, React.ReactNode> = {
+  Unverified: <Clock size={14} className="text-amber-600" />,
+  Verified: <CheckCircle size={14} className="text-blue-600" />,
+  Responding: <Radio size={14} className="text-orange-600 animate-pulse" />,
+  Resolved: <CheckCircle size={14} className="text-emerald-600" />,
+  Rejected: <XCircle size={14} className="text-rose-500" />,
+};
+
+export const typeIcons: Record<string, React.ReactNode> = {
+  Flood: <Droplets size={16} className="text-blue-600" />,
+  'Flash Flood': <Droplets size={16} className="text-cyan-600" />,
+  Landslide: <Mountain size={16} className="text-amber-600" />,
+  'Forest Fire': <Flame size={16} className="text-red-600" />,
+  'Severe Storm': <Activity size={16} className="text-purple-600" />,
+};
+
+export const GDACS_HAZARD_DEFS: GdacsHazardDef[] = [
+  {
+    id: 'Tropical Cyclone',
+    label: 'Cyclone',
+    icon: <Wind size={14} className="text-purple-600" />,
+    matches: (h) => /cyclone|typhoon|hurricane/i.test(h),
+  },
+  {
+    id: 'Earthquake',
+    label: 'Earthquake',
+    icon: <CircleDot size={14} className="text-rose-600" />,
+    matches: (h) => /earthquake|seismic/i.test(h),
+  },
+  {
+    id: 'Flood',
+    label: 'Flood',
+    icon: <Droplets size={14} className="text-blue-600" />,
+    matches: (h) => /flood/i.test(h),
+  },
+  {
+    id: 'Volcanic Eruption',
+    label: 'Volcanic',
+    icon: <Mountain size={14} className="text-amber-700" />,
+    matches: (h) => /volcan/i.test(h),
+  },
+  {
+    id: 'Forest Fire / Wildfire',
+    label: 'Wildfire',
+    icon: <Flame size={14} className="text-red-600" />,
+    matches: (h) => /fire|wildfire|peatland/i.test(h),
+  },
+  {
+    id: 'Tsunami',
+    label: 'Tsunami',
+    icon: <Waves size={14} className="text-cyan-600" />,
+    matches: (h) => /tsunami/i.test(h),
+  },
+  {
+    id: 'Drought',
+    label: 'Drought',
+    icon: <Sun size={14} className="text-orange-500" />,
+    matches: (h) => /drought/i.test(h),
+  },
+  {
+    id: 'Storm Surge',
+    label: 'Storm',
+    icon: <CloudRain size={14} className="text-indigo-600" />,
+    matches: (h) => /storm|surge/i.test(h),
+  },
+  {
+    id: 'Landslide',
+    label: 'Landslide',
+    icon: <Mountain size={14} className="text-stone-600" />,
+    matches: (h) => /landslide|mudslide/i.test(h),
+  },
+];
+
+export const SEVERITY_ORDER: Record<string, number> = {
+  Critical: 0,
+  High: 1,
+  Medium: 2,
+  Low: 3,
+};

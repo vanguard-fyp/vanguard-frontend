@@ -21,17 +21,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const DEFAULT_SUPERADMIN_USER: UserProfile = {
-  id: 'usr-8f3e1b2a-0001-4c91-9a72-f1d2e3a4b501',
-  name: "Dato' Ir. Ahmad Rosli",
-  email: 'rosli@nadma.gov.my',
-  agency: 'NADMA Malaysia',
-  role: 'NADMA Lead Officer',
-  status: 'Active',
-  lastActive: 'Just now',
-  permissions: ['SUPERADMIN', 'MANAGE_INCIDENTS', 'VERIFY_INCIDENT', 'RESOLVE_INCIDENT', 'DISPATCH_SQUADS', 'APPROVE_RESOURCES', 'BROADCAST_ALERTS', 'SYSTEM_ADMIN', 'VIEW_ALL'],
-};
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => authService.getStoredUser());
   const [token, setToken] = useState<string | null>(() => authService.getToken());
@@ -115,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Permission Checks
+  // TODO: Permission Checks
   const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false;
     if (user.role === 'NADMA Lead Officer') return true;

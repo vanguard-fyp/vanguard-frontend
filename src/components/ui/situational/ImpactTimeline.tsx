@@ -1,13 +1,7 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
-import type { ImpactSnapshot } from '../../../types';
-
-interface ImpactTimelineProps {
-  timeline: ImpactSnapshot[];
-  size?: 'compact' | 'full';
-  mode?: 'confirmed-only' | 'predictive';
-}
+import type { ImpactSnapshot, ImpactTimelineProps } from '../../../types';
 
 const TimelineTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {

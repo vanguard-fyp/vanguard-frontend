@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   CheckCircle,
-  Clock,
   Radio,
   MapPin,
   Users,
@@ -35,7 +34,9 @@ import { useUpdateIncident, useResolveIncident } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useToast } from '../../../context/ToastContext';
-import type { Incident } from '../../../types';
+import type { CommandTabType, IncidentDetailViewProps } from '../../../types';
+import { useAuth } from '../../../context/AuthContext';
+import { statusIcons } from '../../../constants/situational';
 
 function getCleanIncidentId(id: string, displayId?: string): string {
   if (displayId) return displayId;
@@ -49,23 +50,6 @@ function getCleanIncidentId(id: string, displayId?: string): string {
   return id.toUpperCase();
 }
 
-interface IncidentDetailViewProps {
-  incident: Incident;
-  onBack: () => void;
-  onVerify: (id: string) => void;
-  onTrackInIntelligence?: (incident: Incident) => void;
-}
-
-const statusIcons: Record<string, React.ReactNode> = {
-  Unverified: <Clock size={14} className="text-amber-600" />,
-  Verified: <CheckCircle size={14} className="text-blue-600" />,
-  Responding: <Radio size={14} className="text-orange-600 animate-pulse" />,
-  Resolved: <CheckCircle size={14} className="text-emerald-600" />,
-  Rejected: <XCircle size={14} className="text-rose-500" />,
-};
-
-import { useAuth } from '../../../context/AuthContext';
-
 export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   incident,
   onBack,
@@ -78,7 +62,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const resolveIncident = useResolveIncident();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
 
-  const [activeCommandTab, setActiveCommandTab] = useState<'verify' | 'deploy' | 'resolve' | 'export'>(() => {
+  const [activeCommandTab, setActiveCommandTab] = useState<CommandTabType>(() => {
     if (incident.status === 'Unverified') return 'verify';
     if (incident.status === 'Resolved') return 'resolve';
     return 'deploy';
@@ -89,8 +73,8 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState('');
-  const [resolverName, setResolverName] = useState(user?.name ? `${user.name} (${user.role})` : 'EOC Incident Commander');
-  const [verifierName, setVerifierName] = useState(user?.name ? `${user.name} (${user.role})` : "Dato' Ir. Ahmad Rosli (NADMA)");
+  const [resolverName, setResolverName] = useState(user?.name ?? `${user?.name} (${user?.role})`);
+  const [verifierName, setVerifierName] = useState(user?.name ?? `${user?.name} (${user?.role})`);
   const [rejectReason, setRejectReason] = useState('Duplicate report / ground check unconfirmed');
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
@@ -334,294 +318,290 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         {/* ── Tabbed Command Actions Sidebar ── */}
         <div className="flex flex-col gap-6">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-          {/* Header & Tabs */}
-          <div className="p-4 border-b border-slate-100 bg-slate-50/70">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                  Command Action Center
-                </h3>
+            {/* Header & Tabs */}
+            <div className="p-4 border-b border-slate-100 bg-slate-50/70">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                    Command Action Center
+                  </h3>
+                </div>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/80 text-slate-700">
+                  {incident.status}
+                </span>
               </div>
-              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/80 text-slate-700">
-                {incident.status}
-              </span>
-            </div>
 
-            {/* Segmented Tab Controls */}
-            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/60 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setActiveCommandTab('verify')}
-                className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                  activeCommandTab === 'verify'
+              {/* Segmented Tab Controls */}
+              <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/60 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setActiveCommandTab('verify')}
+                  className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'verify'
                     ? 'bg-white text-blue-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <CheckCircle size={13} />
-                  <span>Verify</span>
-                </div>
-                {incident.status === 'Unverified' && (
-                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
-                )}
-              </button>
+                    }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <CheckCircle size={13} />
+                    <span>Verify</span>
+                  </div>
+                  {incident.status === 'Unverified' && (
+                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  )}
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveCommandTab('deploy')}
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                  activeCommandTab === 'deploy'
+                <button
+                  type="button"
+                  onClick={() => setActiveCommandTab('deploy')}
+                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'deploy'
                     ? 'bg-white text-orange-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <Send size={13} />
-                  <span>Deploy</span>
-                </div>
-              </button>
+                    }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <Send size={13} />
+                    <span>Deploy</span>
+                  </div>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveCommandTab('resolve')}
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                  activeCommandTab === 'resolve'
+                <button
+                  type="button"
+                  onClick={() => setActiveCommandTab('resolve')}
+                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'resolve'
                     ? 'bg-white text-purple-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <CheckSquare size={13} />
-                  <span>Resolve</span>
-                </div>
-              </button>
+                    }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <CheckSquare size={13} />
+                    <span>Resolve</span>
+                  </div>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveCommandTab('export')}
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
-                  activeCommandTab === 'export'
+                <button
+                  type="button"
+                  onClick={() => setActiveCommandTab('export')}
+                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'export'
                     ? 'bg-white text-slate-800 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <Download size={13} />
-                  <span>Export</span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Tab Panel Body */}
-          <div className="p-4 space-y-4">
-            {/* ── TAB 1: VERIFY & TRIAGE ── */}
-            {activeCommandTab === 'verify' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Step 1 · Verification & Triage
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">EOC Directive</span>
-                </div>
-
-                {incident.status === 'Unverified' ? (
-                  <div className="space-y-2.5">
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-                      <p className="font-bold mb-0.5">⚠️ Pending Field Verification</p>
-                      <p className="text-[11px] text-amber-800">
-                        Confirm source validity before dispatching emergency tactical teams.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => setShowVerifyModal(true)}
-                      disabled={updateIncident.isPending}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                    >
-                      <CheckCircle size={14} /> Verify Incident Report
-                    </button>
-
-                    <button
-                      onClick={() => setShowRejectModal(true)}
-                      disabled={updateIncident.isPending}
-                      className="w-full px-4 py-2 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <XCircle size={14} /> Reject / Mark Duplicate
-                    </button>
+                    }`}
+                >
+                  <div className="flex items-center gap-1">
+                    <Download size={13} />
+                    <span>Export</span>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-start gap-2.5">
-                      <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-bold text-emerald-950">Verified & Confirmed</p>
-                        <p className="text-[11px] text-emerald-800 mt-0.5">
-                          Verified by {incident.verifiedBy || 'EOC Watch Commander'}.
+                </button>
+              </div>
+            </div>
+
+            {/* Tab Panel Body */}
+            <div className="p-4 space-y-4">
+              {/* ── TAB 1: VERIFY & TRIAGE ── */}
+              {activeCommandTab === 'verify' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Step 1 · Verification & Triage
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">EOC Directive</span>
+                  </div>
+
+                  {incident.status === 'Unverified' ? (
+                    <div className="space-y-2.5">
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
+                        <p className="font-bold mb-0.5">⚠️ Pending Field Verification</p>
+                        <p className="text-[11px] text-amber-800">
+                          Confirm source validity before dispatching emergency tactical teams.
                         </p>
                       </div>
+
+                      <button
+                        onClick={() => setShowVerifyModal(true)}
+                        disabled={updateIncident.isPending}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                      >
+                        <CheckCircle size={14} /> Verify Incident Report
+                      </button>
+
+                      <button
+                        onClick={() => setShowRejectModal(true)}
+                        disabled={updateIncident.isPending}
+                        className="w-full px-4 py-2 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <XCircle size={14} /> Reject / Mark Duplicate
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-start gap-2.5">
+                        <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-emerald-950">Verified & Confirmed</p>
+                          <p className="text-[11px] text-emerald-800 mt-0.5">
+                            Verified by {incident.verifiedBy || 'EOC Watch Commander'}.
+                          </p>
+                        </div>
+                      </div>
+
+                      {onTrackInIntelligence && (
+                        <button
+                          onClick={() => onTrackInIntelligence(incident)}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                        >
+                          <ArrowUpRight size={14} /> Track in Intelligence Module
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── TAB 2: TACTICAL OPS & CONTACT ── */}
+              {activeCommandTab === 'deploy' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Step 2 · Tactical Operations
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">Response</span>
+                  </div>
+
+                  <a
+                    href="/response/rescue"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer text-center"
+                  >
+                    <Send size={14} /> Dispatch via Rescue Ops →
+                  </a>
+
+                  {/* Field Commander Contact Card */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Field Commander Line
+                      </span>
+                      <PhoneCall size={12} className="text-blue-600" />
                     </div>
 
-                    {onTrackInIntelligence && (
+                    <div className="flex items-center justify-between bg-white border border-slate-200 px-3 py-2 rounded-md">
+                      <span className="text-xs font-mono font-bold text-slate-800">
+                        {fieldCommanderPhone || '03-8888 2010 (NADMA)'}
+                      </span>
                       <button
-                        onClick={() => onTrackInIntelligence(incident)}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                        type="button"
+                        onClick={() => handleCopyPhone(fieldCommanderPhone || '03-8888 2010')}
+                        className="text-slate-400 hover:text-slate-700 text-[11px] flex items-center gap-1 font-medium cursor-pointer"
+                        title="Copy phone number"
                       >
-                        <ArrowUpRight size={14} /> Track in Intelligence Module
+                        {copiedPhone ? (
+                          <>
+                            <Check size={12} className="text-emerald-600" />
+                            <span className="text-emerald-600 font-bold">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={12} />
+                            <span>Copy</span>
+                          </>
+                        )}
                       </button>
-                    )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <a
+                        href={`tel:${(fieldCommanderPhone || '0388882010').replace(/\s/g, '')}`}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Phone size={13} />
+                        <span>Direct Call</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setShowContactModal(true)}
+                        className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                      >
+                        Details
+                      </button>
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* ── TAB 2: TACTICAL OPS & CONTACT ── */}
-            {activeCommandTab === 'deploy' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Step 2 · Tactical Operations
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">Response</span>
                 </div>
+              )}
 
-                <a
-                  href="/response/rescue"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer text-center"
-                >
-                  <Send size={14} /> Dispatch via Rescue Ops →
-                </a>
-
-                {/* Field Commander Contact Card */}
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+              {/* ── TAB 3: RESOLUTION ── */}
+              {activeCommandTab === 'resolve' && (
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Field Commander Line
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Step 3 · Lifecycle Resolution
                     </span>
-                    <PhoneCall size={12} className="text-blue-600" />
+                    <span className="text-[10px] font-mono text-slate-400">Audit</span>
                   </div>
 
-                  <div className="flex items-center justify-between bg-white border border-slate-200 px-3 py-2 rounded-md">
-                    <span className="text-xs font-mono font-bold text-slate-800">
-                      {fieldCommanderPhone || '03-8888 2010 (NADMA)'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopyPhone(fieldCommanderPhone || '03-8888 2010')}
-                      className="text-slate-400 hover:text-slate-700 text-[11px] flex items-center gap-1 font-medium cursor-pointer"
-                      title="Copy phone number"
-                    >
-                      {copiedPhone ? (
-                        <>
-                          <Check size={12} className="text-emerald-600" />
-                          <span className="text-emerald-600 font-bold">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={12} />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <a
-                      href={`tel:${(fieldCommanderPhone || '0388882010').replace(/\s/g, '')}`}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Phone size={13} />
-                      <span>Direct Call</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => setShowContactModal(true)}
-                      className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                    >
-                      Details
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── TAB 3: RESOLUTION ── */}
-            {activeCommandTab === 'resolve' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Step 3 · Lifecycle Resolution
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">Audit</span>
-                </div>
-
-                {incident.status === 'Resolved' ? (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1">
-                    <span className="text-emerald-700 font-bold flex items-center gap-1">
-                      <CheckCircle size={14} /> Incident Resolved & Closed
-                    </span>
-                    <p className="text-[11px] text-emerald-800">
-                      Closed by {incident.verifiedBy || 'EOC Command'}.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900">
-                      <p className="font-bold mb-0.5">🏁 Complete Incident Handover</p>
-                      <p className="text-[11px] text-purple-800">
-                        Closes mission records, releases assigned rescue teams, and files closing audit.
+                  {incident.status === 'Resolved' ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1">
+                      <span className="text-emerald-700 font-bold flex items-center gap-1">
+                        <CheckCircle size={14} /> Incident Resolved & Closed
+                      </span>
+                      <p className="text-[11px] text-emerald-800">
+                        Closed by {incident.verifiedBy || 'EOC Command'}.
                       </p>
                     </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900">
+                        <p className="font-bold mb-0.5">🏁 Complete Incident Handover</p>
+                        <p className="text-[11px] text-purple-800">
+                          Closes mission records, releases assigned rescue teams, and files closing audit.
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setShowResolveModal(true)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                      >
+                        <CheckSquare size={14} /> Mark Incident Resolved
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── TAB 4: OFFICIAL EXPORT ── */}
+              {activeCommandTab === 'export' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Step 4 · Official Documents
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">PDF SITREP</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => incidentService.downloadSitrepPdf(incident.id, incident.displayId)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Download size={14} className="text-blue-600" />
+                        Official SITREP PDF
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">EOC-PDF</span>
+                    </button>
 
                     <button
-                      onClick={() => setShowResolveModal(true)}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                      onClick={() => incidentService.downloadSitrepPoster(incident.id, incident.displayId)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-lg border border-amber-200 transition-colors cursor-pointer"
                     >
-                      <CheckSquare size={14} /> Mark Incident Resolved
+                      <span className="flex items-center gap-2">
+                        <Printer size={14} className="text-amber-700" />
+                        Warning Poster PDF
+                      </span>
+                      <span className="text-[10px] font-mono text-amber-600">A4 Print</span>
                     </button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* ── TAB 4: OFFICIAL EXPORT ── */}
-            {activeCommandTab === 'export' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Step 4 · Official Documents
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-400">PDF SITREP</span>
                 </div>
-
-                <div className="space-y-2">
-                  <button
-                    onClick={() => incidentService.downloadSitrepPdf(incident.id, incident.displayId)}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Download size={14} className="text-blue-600" />
-                      Official SITREP PDF
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">EOC-PDF</span>
-                  </button>
-
-                  <button
-                    onClick={() => incidentService.downloadSitrepPoster(incident.id, incident.displayId)}
-                    className="w-full flex items-center justify-between px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-lg border border-amber-200 transition-colors cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Printer size={14} className="text-amber-700" />
-                      Warning Poster PDF
-                    </span>
-                    <span className="text-[10px] font-mono text-amber-600">A4 Print</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
           </div>
 
           {/* ── Operational Action Log (below Command Action Center) ── */}
@@ -636,17 +616,16 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   incident.actionLog.map((log, idx) => (
                     <div key={log.id || idx} className="relative flex items-start gap-3 pl-7">
                       <div
-                        className={`absolute left-1.5 top-1.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full ring-4 ring-white ${
-                          log.action.toLowerCase().includes('create')
-                            ? 'bg-blue-600'
-                            : log.action.toLowerCase().includes('verif')
+                        className={`absolute left-1.5 top-1.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full ring-4 ring-white ${log.action.toLowerCase().includes('create')
+                          ? 'bg-blue-600'
+                          : log.action.toLowerCase().includes('verif')
                             ? 'bg-emerald-600'
                             : log.action.toLowerCase().includes('resolv')
-                            ? 'bg-purple-600'
-                            : log.action.toLowerCase().includes('updat')
-                            ? 'bg-amber-500'
-                            : 'bg-slate-600'
-                        }`}
+                              ? 'bg-purple-600'
+                              : log.action.toLowerCase().includes('updat')
+                                ? 'bg-amber-500'
+                                : 'bg-slate-600'
+                          }`}
                       />
                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 w-full">
                         <div className="flex justify-between items-center mb-1">

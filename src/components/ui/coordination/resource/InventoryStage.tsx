@@ -309,6 +309,16 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
             </motion.div>
           );
         })}
+
+        {filteredInventory.length === 0 && (
+          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-xs">
+            <Search size={32} className="mx-auto mb-2 text-slate-300" />
+            <p className="text-sm font-bold text-slate-700">No related searching criteria found</p>
+            <p className="text-xs text-slate-400 mt-1">
+              No warehouse inventory items match your search &ldquo;{searchQuery}&rdquo; or category filter.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Resupply Request Modal */}

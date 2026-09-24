@@ -1,14 +1,9 @@
 import React, { useState } from 'react';
 import { Users, Search, Edit2, Trash2, SlidersHorizontal } from 'lucide-react';
-import type { UserAccount } from '../../../types';
+import type { UserAccount, UserManagementTableProps } from '../../../types';
 import { userRolesFilterList as roles } from '../../../constants';
-
-interface UserManagementTableProps {
-  users: UserAccount[];
-  onEditUser: (user: UserAccount) => void;
-  onDeleteUser: (id: string) => void;
-  onToggleUserStatus: (id: string) => void;
-}
+import { useAuth } from '../../../context/AuthContext';
+import { ConfirmationDialog } from '../shared/ConfirmationDialog';
 
 export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   users,
@@ -16,10 +11,18 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   onDeleteUser,
   onToggleUserStatus,
 }) => {
+  const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All');
+  const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
 
-  const filteredUsers = users.filter((u) => {
+  // Exclude current logged in user from management list
+  const managedUsers = users.filter((u) => {
+    if (!currentUser) return true;
+    return u.id !== currentUser.id && u.email !== currentUser.email;
+  });
+
+  const filteredUsers = managedUsers.filter((u) => {
     const matchesSearch =
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -28,6 +31,13 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
     const matchesRole = roleFilter === 'All' || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
+
+  const handleConfirmDelete = () => {
+    if (userToDelete) {
+      onDeleteUser(userToDelete.id);
+      setUserToDelete(null);
+    }
+  };
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs space-y-0">
@@ -49,7 +59,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 font-semibold focus:outline-none focus:border-blue-600 shadow-2xs"
+              className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 font-semibold focus:outline-none focus:border-blue-600 shadow-2xs cursor-pointer"
             >
               {roles.map((r) => (
                 <option key={r} value={r}>
@@ -104,16 +114,14 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                   <td className="px-4 py-3.5">
                     <button
                       onClick={() => onToggleUserStatus(user.id)}
-                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 cursor-pointer transition-colors ${
-                        user.status === 'Active'
+                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 cursor-pointer transition-colors ${user.status === 'Active'
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                           : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                      }`}
+                        }`}
                     >
                       <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          user.status === 'Active' ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'
-                        }`}
+                        className={`w-1.5 h-1.5 rounded-full ${user.status === 'Active' ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'
+                          }`}
                       />
                       {user.status}
                     </button>
@@ -131,9 +139,9 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                         Configure
                       </button>
                       <button
-                        onClick={() => onDeleteUser(user.id)}
+                        onClick={() => setUserToDelete(user)}
                         className="p-1 text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                        title="Remove user"
+                        title="Remove user account"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -144,13 +152,25 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
             ) : (
               <tr>
                 <td colSpan={7} className="px-5 py-8 text-center text-xs text-slate-400 font-medium">
-                  No user accounts match your search filters.
+                  No other user accounts match your search or filter.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmationDialog
+        isOpen={!!userToDelete}
+        title="Remove User Account"
+        message={`Are you sure you want to remove ${userToDelete?.name} (${userToDelete?.email})? This action will revoke their EOC system credentials.`}
+        confirmLabel="Remove User"
+        cancelLabel="Cancel"
+        isDestructive={true}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setUserToDelete(null)}
+      />
     </div>
   );
 };

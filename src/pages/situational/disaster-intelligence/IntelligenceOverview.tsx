@@ -1,44 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
-import { ChevronRight, ChevronDown, ChevronUp, Filter, BarChart3, AlertCircle, Sparkles } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, BarChart3, AlertCircle, Sparkles } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
 import { disasterLevelInfo } from '../../../constants/components/disasterLevels';
-import type { Incident } from '../../../types';
-
-const itemAnim = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0 },
-};
-
-const severityColors: Record<string, string> = {
-  Critical: '#dc2626',
-  High: '#ea580c',
-  Medium: '#d97706',
-  Low: '#16a34a',
-};
-
-const CustomChartTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-lg text-xs">
-        <p className="text-slate-500 font-medium">{label}</p>
-        <p className="text-blue-700 font-bold">Priority Score: {payload[0].value}</p>
-      </div>
-    );
-  }
-  return null;
-};
-
-const STATUS_FILTERS = ['Active Disasters', 'Responding', 'Verified', 'Resolved (Archived)', 'All Tracked'] as const;
-
-interface IntelligenceOverviewProps {
-  onSelectInsight: (incident: Incident) => void;
-  incidents: Incident[];
-}
+import type { IntelligenceOverviewProps } from '../../../types';
+import { itemAnim, MINIMAL_STATUS_FILTERS, SEVERITY_COLORS } from '../../../constants';
+import { CustomChartTooltip } from '../../../components/ui/situational/CustomChartTooltip';
 
 export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSelectInsight, incidents }) => {
-  const [statusFilter, setStatusFilter] = useState<typeof STATUS_FILTERS[number]>('Active Disasters');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'resolved'>('active');
   const [showChart, setShowChart] = useState(false);
   const [expandedLevels, setExpandedLevels] = useState<Record<string, boolean>>({});
 
@@ -51,10 +22,9 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
   const resolvedTracked = tracked.filter((i) => i.status === 'Resolved');
 
   const filtered = tracked.filter((i) => {
-    if (statusFilter === 'Active Disasters') return i.status !== 'Resolved' && i.status !== 'Rejected';
-    if (statusFilter === 'Resolved (Archived)') return i.status === 'Resolved';
-    if (statusFilter === 'All Tracked') return true;
-    return i.status === statusFilter;
+    if (statusFilter === 'active') return i.status !== 'Resolved' && i.status !== 'Rejected';
+    if (statusFilter === 'resolved') return i.status === 'Resolved';
+    return true;
   });
 
   const ranked = [...filtered].sort((a, b) => (b.aiPriorityScore || 0) - (a.aiPriorityScore || 0));
@@ -85,35 +55,28 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
   }
 
   return (
-    <motion.div variants={itemAnim} className="space-y-5">
-      {/* Filter and Chart Toggle Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Filter size={14} className="text-slate-400" />
-          {STATUS_FILTERS.map((f) => {
+    <motion.div variants={itemAnim} className="space-y-4">
+      {/* Minimalist Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-2.5 shadow-xs">
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          {MINIMAL_STATUS_FILTERS.map((f) => {
             const count =
-              f === 'Active Disasters'
-                ? activeTracked.length
-                : f === 'Resolved (Archived)'
-                ? resolvedTracked.length
-                : f === 'All Tracked'
-                ? tracked.length
-                : tracked.filter((i) => i.status === f).length;
+              f.id === 'active' ? activeTracked.length : f.id === 'resolved' ? resolvedTracked.length : tracked.length;
 
             return (
               <button
-                key={f}
-                onClick={() => setStatusFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer flex items-center gap-1.5 ${
-                  statusFilter === f
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
+                key={f.id}
+                onClick={() => setStatusFilter(f.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${statusFilter === f.id
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
-                <span>{f}</span>
-                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                  statusFilter === f ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-                }`}>
+                <span>{f.label}</span>
+                <span
+                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold ${statusFilter === f.id ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                >
                   {count}
                 </span>
               </button>
@@ -125,11 +88,11 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
         {chartData.length > 0 && (
           <button
             onClick={() => setShowChart((prev) => !prev)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
           >
-            <BarChart3 size={14} className="text-blue-600" />
-            <span>{showChart ? 'Hide District Priority Chart' : 'Show District Priority Chart'}</span>
-            {showChart ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            <BarChart3 size={13} className="text-blue-600" />
+            <span>{showChart ? 'Hide Chart' : 'Priority Ranking Chart'}</span>
+            {showChart ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </button>
         )}
       </div>
@@ -141,26 +104,26 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
+            className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs overflow-hidden"
           >
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-blue-600" />
-                  <h3 className="text-sm font-bold text-slate-900">AI Priority Index by District</h3>
-                </div>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Composite score (0–100)
-                </span>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-blue-600" /> AI Severity & Priority Score Matrix
+                </h3>
+                <p className="text-[11px] text-slate-500">Real-time composite urgency ranking across active incident sectors</p>
               </div>
-              <ResponsiveContainer width="100%" height={Math.min(300, Math.max(160, ranked.length * 36))}>
-                <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
-                  <XAxis type="number" domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="name" width={110} tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} />
+            </div>
+
+            <div className="h-44 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                   <Tooltip content={<CustomChartTooltip />} />
-                  <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={20}>
-                    {chartData.map((entry, idx) => (
-                      <Cell key={idx} fill={severityColors[entry.severity] || '#64748b'} />
+                  <Bar dataKey="score" radius={[6, 6, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={SEVERITY_COLORS[entry.severity] || '#3b82f6'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -170,129 +133,101 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
         )}
       </AnimatePresence>
 
-      {/* Disaster Level Groups */}
-      {levelOrder.map((level) => {
-        const info = disasterLevelInfo[level] || {
-          color: 'border-slate-200 bg-slate-50',
-          headerColor: 'text-slate-800',
-          desc: 'Operational management level',
-        };
-        const incidentsAtLevel = ranked.filter((i) => i.disasterLevel === level);
-        if (incidentsAtLevel.length === 0) return null;
+      {/* Grouped Disaster Levels List */}
+      <div className="space-y-4">
+        {levelOrder.map((level) => {
+          const levelIncidents = ranked.filter((i) => i.disasterLevel === level);
+          if (levelIncidents.length === 0) return null;
 
-        const isExpanded = expandedLevels[level] || false;
-        const visibleIncidents = isExpanded ? incidentsAtLevel : incidentsAtLevel.slice(0, 4);
+          const info = disasterLevelInfo[level as keyof typeof disasterLevelInfo];
+          const isExpanded = expandedLevels[level] ?? true;
 
-        return (
-          <div key={level} className={`border rounded-xl overflow-hidden shadow-xs ${info.color}`}>
-            <div className="px-5 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between">
-              <div>
+          return (
+            <div key={level} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+              <button
+                onClick={() => toggleLevelExpansion(level)}
+                className="w-full px-4 py-3 bg-slate-50/75 border-b border-slate-100 flex items-center justify-between cursor-pointer hover:bg-slate-100/70 transition-colors"
+              >
                 <div className="flex items-center gap-2">
-                  <h3 className={`text-sm font-bold ${info.headerColor}`}>{level}</h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-600">
-                    {incidentsAtLevel.length} {incidentsAtLevel.length === 1 ? 'incident' : 'incidents'}
+                  <span className={`w-2.5 h-2.5 rounded-full ${level.includes('3') ? 'bg-red-500' : level.includes('2') ? 'bg-purple-500' : 'bg-blue-500'}`} />
+                  <span className="text-xs font-bold text-slate-900">{level}</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 font-mono">
+                    {levelIncidents.length}
                   </span>
                 </div>
-                <p className="text-xs text-slate-600 font-medium mt-0.5 line-clamp-1">{info.desc}</p>
-              </div>
-            </div>
+                <div className="text-slate-400">
+                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </div>
+              </button>
 
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {visibleIncidents.map((incident) => {
-                const isResolved = incident.status === 'Resolved';
-                const isInactive = isResolved || incident.status === 'Rejected';
+              {/* Level description shown below header always */}
+              {info?.desc && (
+                <div className="px-4 py-2 bg-slate-50/40 border-b border-slate-100">
+                  <p className="text-[11px] text-slate-500 leading-relaxed">{info.desc}</p>
+                </div>
+              )}
 
-                return (
-                  <div
-                    key={incident.displayId || incident.id}
-                    onClick={() => onSelectInsight(incident)}
-                    className={`border rounded-xl p-4 transition-all cursor-pointer flex flex-col justify-between group ${
-                      isInactive
-                        ? 'bg-slate-100/75 border-slate-300 text-slate-500 hover:border-slate-400'
-                        : 'bg-white border-slate-200 hover:border-blue-400 hover:shadow-md'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
-                            isInactive
-                              ? 'text-slate-500 bg-slate-200/70 border-slate-300'
-                              : 'text-slate-500 bg-slate-100 border-slate-200'
-                          }`}>
-                            #{ranked.findIndex((r) => r.id === incident.id) + 1}
-                          </span>
-                          <DisasterBadge type="severity" value={incident.severity} />
-                          <span className="text-[10px] font-mono text-slate-400">
-                            {incident.displayId || incident.id}
-                          </span>
-                          {isResolved && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
-                              Resolved
+              {isExpanded && (
+                <div className="divide-y divide-slate-100">
+                  {levelIncidents.map((incident) => {
+                    const priorityScore = incident.aiPriorityScore || 75;
+                    const isHighPriority = priorityScore >= 80;
+
+                    return (
+                      <div
+                        key={incident.id}
+                        onClick={() => onSelectInsight(incident)}
+                        className="p-4 hover:bg-blue-50/40 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                      >
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {incident.displayId || incident.id}
                             </span>
-                          )}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className={`text-base font-extrabold font-mono leading-none ${
-                            isInactive ? 'text-slate-500' : 'text-blue-700'
-                          }`}>
-                            {incident.aiPriorityScore}
+                            <DisasterBadge type="severity" value={incident.severity} />
+                            <span className="text-xs font-semibold text-slate-600">· {incident.type}</span>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {incident.title}
+                          </h4>
+
+                          <p className="text-xs text-slate-500">
+                            {incident.location}, {incident.district}, {incident.state}
                           </p>
-                          <p className="text-[8px] font-bold text-slate-400 uppercase font-mono mt-0.5">AI Score</p>
+                        </div>
+
+                        <div className="flex items-center gap-4 sm:border-l sm:border-slate-100 sm:pl-4">
+                          <div className="text-right">
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">AI Priority</span>
+                              <span
+                                className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${isHighPriority
+                                  ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                                  : 'bg-blue-100 text-blue-700 border border-blue-200'
+                                  }`}
+                              >
+                                {priorityScore.toFixed(1)}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              {incident.affectedPopulation.toLocaleString()} people at risk
+                            </span>
+                          </div>
+
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center text-slate-500 transition-colors shrink-0">
+                            <ChevronRight size={16} />
+                          </div>
                         </div>
                       </div>
-
-                      <h4 className={`text-xs font-bold transition-colors line-clamp-1 ${
-                        isInactive
-                          ? 'text-slate-700 group-hover:text-slate-900'
-                          : 'text-slate-900 group-hover:text-blue-600'
-                      }`}>
-                        {incident.title}
-                      </h4>
-                      <p className={`text-[11px] mt-0.5 line-clamp-1 ${isInactive ? 'text-slate-400' : 'text-slate-500'}`}>
-                        📍 {incident.location}, {incident.district}, {incident.state}
-                      </p>
-                      <p className={`text-[11px] mt-2 line-clamp-2 leading-relaxed ${
-                        isInactive ? 'text-slate-500' : 'text-slate-600'
-                      }`}>
-                        {incident.description}
-                      </p>
-                    </div>
-
-                    <div className={`mt-3 pt-2.5 border-t flex items-center justify-between text-[11px] ${
-                      isInactive ? 'border-slate-200 text-slate-400' : 'border-slate-100 text-slate-500'
-                    }`}>
-                      <span className="font-medium">
-                        {(incident.affectedPopulation || 0).toLocaleString()} affected
-                      </span>
-                      <span className={`flex items-center gap-1 font-bold group-hover:translate-x-0.5 transition-transform ${
-                        isInactive ? 'text-slate-600 group-hover:text-slate-800' : 'text-blue-600'
-                      }`}>
-                        View Analysis <ChevronRight size={13} />
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-
-            {incidentsAtLevel.length > 4 && (
-              <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 text-center">
-                <button
-                  onClick={() => toggleLevelExpansion(level)}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer inline-flex items-center gap-1"
-                >
-                  {isExpanded ? (
-                    <>Show Less <ChevronUp size={14} /></>
-                  ) : (
-                    <>Show {incidentsAtLevel.length - 4} More Disasters <ChevronDown size={14} /></>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </motion.div>
   );
 };

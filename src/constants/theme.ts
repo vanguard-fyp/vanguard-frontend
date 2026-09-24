@@ -4,10 +4,6 @@ import type { SeverityLevel } from '../types';
    VANGUARD — Central Design System & Theme Constants
    ============================================================ */
 
-/**
- * Harmonious Government Sidebar Design Tokens
- * Soft, unified dark slate navy canvas without harsh multi-tone splits
- */
 export const SIDEBAR_THEME = {
   bg: '#1e293b',   // Unified Slate 800 canvas
   bgHeader: '#1e293b',   // Seamless matching header
@@ -84,3 +80,17 @@ export const DASHBOARD_ANIMATIONS = {
   },
 };
 
+// Landing & login color
+export const INK = '#0f172a';
+export const PAPER = '#eef2f7';
+export const BLUE = '#2563eb';
+
+// Common animation
+export const containerAnim = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
+};
+export const itemAnim = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0 },
+};

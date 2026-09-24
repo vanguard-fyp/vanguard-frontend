@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, ShieldCheck, Users, Target, Navigation } from 'lucide-react';
+import { Plus, ShieldCheck, Users, Target, Navigation, UserPlus } from 'lucide-react';
 import { TeamCard } from '../../../components/ui/coordination/rescue/TeamCard';
 import { TeamDetailSlideOver } from '../../../components/ui/coordination/rescue/TeamDetailSlideOver';
+import { RegisterTeamSlideOver } from '../../../components/ui/coordination/rescue/RegisterTeamSlideOver';
 import { useRescueTeams, useMissions, useIncidents, useCreateMission } from '../../../hooks';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
 import { useToast } from '../../../context/ToastContext';
@@ -10,15 +11,7 @@ import { useToast } from '../../../context/ToastContext';
 import type { AgencyFilter, SeverityLevel, StatusFilter, TeamSortBy, RescueTeam } from '../../../types';
 import { MissionWizard } from './MissionWizard';
 import { TeamListFilters } from '../../../components/ui/coordination/rescue/TeamListFilters';
-
-const containerAnim = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
-};
-const itemAnim = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0 },
-};
+import { containerAnim, itemAnim } from '../../../constants';
 
 const RescueOperations: React.FC = () => {
   const { data: teams = [], isLoading: isTeamsLoading } = useRescueTeams();
@@ -29,6 +22,7 @@ const RescueOperations: React.FC = () => {
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [selectedTeamForSlideOver, setSelectedTeamForSlideOver] = useState<RescueTeam | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [showRegisterSlideOver, setShowRegisterSlideOver] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,42 +80,57 @@ const RescueOperations: React.FC = () => {
     const matchedTeam = teams.find((t) => t.id === data.teamId);
     const matchedIncident = incidents.find((i) => i.id === data.incidentId);
 
-    createMissionMutation.mutate({
-      title: `Tactical SAR Operation - ${matchedIncident?.title || 'Emergency Sector'}`,
-      incidentId: data.incidentId,
-      incidentLocation: matchedIncident?.location || 'Sector 01',
-      assignedTeamId: data.teamId,
-      teamName: matchedTeam?.name || 'SAR Squad',
-      agency: matchedTeam?.agency || 'SMART',
-      priority: data.priority,
-      status: 'In Progress',
-      objective: data.objective,
-      assignedTime: new Date().toISOString(),
-      estimatedCompletion: new Date(Date.now() + (data.durationHrs || 6) * 3600000).toISOString(),
-    }, {
-      onSuccess: () => toastSuccess('Mission Dispatched', `SAR team assigned to ${matchedIncident?.title || 'incident'}`),
-      onError: () => toastError('Dispatch Failed', 'Could not create mission. Please retry.'),
-    });
+    createMissionMutation.mutate(
+      {
+        title: `Tactical SAR Operation - ${matchedIncident?.title || 'Emergency Sector'}`,
+        incidentId: data.incidentId,
+        incidentLocation: matchedIncident?.location || 'Sector 01',
+        assignedTeamId: data.teamId,
+        teamName: matchedTeam?.name || 'SAR Squad',
+        agency: matchedTeam?.agency || 'SMART',
+        priority: data.priority,
+        status: 'In Progress',
+        objective: data.objective,
+        assignedTime: new Date().toISOString(),
+        estimatedCompletion: new Date(Date.now() + (data.durationHrs || 6) * 3600000).toISOString(),
+      },
+      {
+        onSuccess: () =>
+          toastSuccess('Mission Dispatched', `SAR team assigned to ${matchedIncident?.title || 'incident'}`),
+        onError: () => toastError('Dispatch Failed', 'Could not create mission. Please retry.'),
+      }
+    );
     setShowWizard(false);
   };
 
   return (
     <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
       {/* Page Header */}
-      <motion.div variants={itemAnim} className="flex items-center justify-between">
+      <motion.div variants={itemAnim} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Rescue Operations</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Response Coordination · Rescue team assignments, mission tracking, and agency coordination
+            Response Coordination · Rescue team assignments, mission tracking, and agency mobilization
           </p>
         </div>
-        <button
-          onClick={() => setShowWizard(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
-        >
-          <Plus size={15} />
-          Assign Rescue Mission
-        </button>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <button
+            onClick={() => setShowRegisterSlideOver(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors shadow-2xs cursor-pointer"
+          >
+            <UserPlus size={14} className="text-blue-600" />
+            <span>Register Rescue Unit</span>
+          </button>
+
+          <button
+            onClick={() => setShowWizard(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-600/20 cursor-pointer"
+          >
+            <Plus size={14} />
+            <span>Assign Mission</span>
+          </button>
+        </div>
       </motion.div>
 
       {/* Compact Analytics Strip */}
@@ -208,6 +217,12 @@ const RescueOperations: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* Register Team Slide-Over Drawer */}
+      <RegisterTeamSlideOver
+        isOpen={showRegisterSlideOver}
+        onClose={() => setShowRegisterSlideOver(false)}
+      />
 
       {/* Mission Wizard Overlay */}
       <AnimatePresence>

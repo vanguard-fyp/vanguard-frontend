@@ -3,10 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Lock, PhoneCall, ArrowRight, Activity, Radar, ShieldCheck, Radio, Truck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-
-const INK = '#0f172a';
-const PAPER = '#eef2f7';
-const BLUE = '#2563eb';
+import { BLUE, INK, PAPER } from '../../constants/theme';
 
 const HEADLINE = "One command post for every agency in the field.";
 
@@ -39,7 +36,6 @@ const RadarPanel: React.FC<{ size?: number; reduced?: boolean }> = ({ size = 220
           transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
           style={{ transformOrigin: '50px 50px', transformBox: 'view-box' }}
         >
-          {/* <path d="M50 50 L50 4 A46 46 0 0 1 88 28 Z" fill={`${BLUE}22`} /> */}
           <path d="M50 50 L50 6 A46 46 0 0 1 88 28 Z" fill={`${BLUE}22`} />
         </motion.g>
       )}
