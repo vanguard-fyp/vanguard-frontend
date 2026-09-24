@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, Search, ChevronDown, ChevronUp, Plus, History, Sparkles } from 'lucide-react';
+import { Warehouse as WarehouseIcon, Search, ChevronDown, ChevronUp, Plus, History, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
 
-import type { ResourceItem, ResourceRequest, AIStockAdvisory } from '../../../../types';
-import { getWarehouseContext } from '../../../../constants/components/resource';
+import type { ResourceItem, ResourceRequest, AIStockAdvisory, Warehouse } from '../../../../types';
 import { ResupplyRequestModal } from './ResupplyRequestModal';
+import { useDeleteInventoryItem, useWarehouses } from '../../../../hooks';
+import { useToast } from '../../../../context/ToastContext';
 
 interface InventoryStageProps {
   inventory: ResourceItem[];
@@ -57,12 +58,39 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [requestModalItem, setRequestModalItem] = useState<ResourceItem | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const { data: warehouses = [] } = useWarehouses();
+  const deleteItemMutation = useDeleteInventoryItem();
+  const toast = useToast();
+
+  const warehouseMap = useMemo(() => {
+    const map: Record<string, Warehouse> = {};
+    warehouses.forEach((w) => {
+      map[w.id] = w;
+      map[w.name.toLowerCase()] = w;
+    });
+    return map;
+  }, [warehouses]);
+
+  const resolveWarehouseInfo = (item: ResourceItem) => {
+    const fromId = item.warehouseId ? warehouseMap[item.warehouseId] : undefined;
+    const fromName = item.warehouseLocation ? warehouseMap[item.warehouseLocation.toLowerCase()] : undefined;
+    const w = fromId || fromName;
+    return {
+      fullAddress: w?.fullAddress || item.warehouseLocation || 'Strategic National Depot',
+      district: w?.district || item.warehouseLocation || 'Central Logistics Sector',
+      contactNumber: w?.contactNumber || '+603-8888-0000',
+    };
+  };
 
   const filteredInventory = inventory.filter((item) => {
+    const wInfo = resolveWarehouseInfo(item);
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.warehouseLocation.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      getWarehouseContext(item.warehouseLocation).nearDisaster.toLowerCase().includes(searchQuery.toLowerCase());
+      wInfo.district.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      wInfo.fullAddress.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -73,6 +101,17 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
     setRequestModalItem(item);
   };
 
+  const handleDeleteItem = async (item: ResourceItem) => {
+    try {
+      await deleteItemMutation.mutateAsync(item.id);
+      toast.success(`"${item.name}" removed from inventory catalog.`);
+      setConfirmDeleteId(null);
+      if (expandedItemId === item.id) setExpandedItemId(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete inventory item');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Metrics */}
@@ -80,7 +119,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Warehouse size={16} className="text-blue-600" />
+              <WarehouseIcon size={16} className="text-blue-600" />
             </div>
             <h3 className="text-sm font-bold text-slate-800">
               Warehouse Inventory Stock & HIL Analytics
@@ -124,7 +163,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
           const isExpanded = expandedItemId === item.id;
           const itemRequests = requests.filter((r) => r.itemRequested === item.name);
           const pct = Math.min(100, Math.round((item.stockLevel / (item.minThreshold * 2)) * 100));
-          const locCtx = getWarehouseContext(item.warehouseLocation);
+          const locCtx = resolveWarehouseInfo(item);
           const aiAdvisory = getAIStockAdvisory(item);
 
           return (
@@ -170,7 +209,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                     <span className="text-slate-700 font-semibold">{item.warehouseLocation}</span>
                     <span className="text-slate-300">·</span>
                     <span className="text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
-                      📍 {locCtx.nearDisaster}
+                      📍 {locCtx.district}
                     </span>
                   </div>
                 </div>
@@ -207,6 +246,37 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                     Request Resupply
                   </button>
 
+                  {confirmDeleteId === item.id ? (
+                    <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg p-1.5" onClick={(e) => e.stopPropagation()}>
+                      <AlertTriangle size={12} className="text-red-500 shrink-0" />
+                      <span className="text-[10px] text-red-700 font-bold whitespace-nowrap">Remove?</span>
+                      <button
+                        onClick={() => handleDeleteItem(item)}
+                        disabled={deleteItemMutation.isPending}
+                        className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold rounded cursor-pointer"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded cursor-pointer"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDeleteId(item.id);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="Remove catalog item"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+
                   <div className="text-slate-400">
                     {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </div>
@@ -236,7 +306,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Depot Location & Sector</p>
                         <p className="text-xs font-bold text-slate-800 mt-0.5">{item.warehouseLocation}</p>
-                        <p className="text-[10px] text-blue-600 font-medium mt-0.5">{locCtx.nearDisaster}</p>
+                        <p className="text-[10px] text-blue-600 font-medium mt-0.5">{locCtx.district}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Active Requests</p>

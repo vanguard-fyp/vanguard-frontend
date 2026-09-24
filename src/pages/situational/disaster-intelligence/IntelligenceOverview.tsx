@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
-import { ChevronRight, ChevronDown, ChevronUp, BarChart3, AlertCircle, Sparkles } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, BarChart3, AlertCircle, Sparkles, ShieldCheck } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
 import { disasterLevelInfo } from '../../../constants/components/disasterLevels';
 import type { IntelligenceOverviewProps } from '../../../types';
 import { itemAnim, MINIMAL_STATUS_FILTERS, SEVERITY_COLORS } from '../../../constants';
 import { CustomChartTooltip } from '../../../components/ui/situational/CustomChartTooltip';
+import { getConfidenceScore } from '../../../components/ui/situational/AIImpactPanel';
 
 export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSelectInsight, incidents }) => {
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'resolved'>('active');
@@ -197,21 +198,28 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-4 sm:border-l sm:border-slate-100 sm:pl-4">
-                          <div className="text-right">
+                      <div className="flex items-center gap-4 sm:border-l sm:border-slate-100 sm:pl-4">
+                          <div className="text-right space-y-1">
                             <div className="flex items-center gap-1.5 justify-end">
                               <span className="text-[10px] font-bold text-slate-400 uppercase">AI Priority</span>
                               <span
-                                className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${isHighPriority
-                                  ? 'bg-rose-100 text-rose-700 border border-rose-200'
-                                  : 'bg-blue-100 text-blue-700 border border-blue-200'
-                                  }`}
+                                className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full ${
+                                  isHighPriority
+                                    ? 'bg-rose-100 text-rose-700 border border-rose-200'
+                                    : 'bg-blue-100 text-blue-700 border border-blue-200'
+                                }`}
                               >
                                 {priorityScore.toFixed(1)}
                               </span>
                             </div>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">
-                              {incident.affectedPopulation.toLocaleString()} people at risk
+                            <div className="flex items-center gap-1 justify-end">
+                              <ShieldCheck size={10} className="text-emerald-500" />
+                              <span className="text-[10px] font-mono text-emerald-600 font-bold">
+                                {getConfidenceScore(incident)}% ML
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block">
+                              {incident.affectedPopulation.toLocaleString()} at risk
                             </span>
                           </div>
 

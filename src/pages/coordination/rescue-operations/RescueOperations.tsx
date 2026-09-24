@@ -4,7 +4,7 @@ import { Plus, ShieldCheck, Users, Target, Navigation, UserPlus } from 'lucide-r
 import { TeamCard } from '../../../components/ui/coordination/rescue/TeamCard';
 import { TeamDetailSlideOver } from '../../../components/ui/coordination/rescue/TeamDetailSlideOver';
 import { RegisterTeamSlideOver } from '../../../components/ui/coordination/rescue/RegisterTeamSlideOver';
-import { useRescueTeams, useMissions, useIncidents, useCreateMission } from '../../../hooks';
+import { useRescueTeams, useMissions, useIncidents, useCreateMission, useDeleteRescueTeam } from '../../../hooks';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
 import { useToast } from '../../../context/ToastContext';
 
@@ -18,11 +18,23 @@ const RescueOperations: React.FC = () => {
   const { data: missions = [] } = useMissions();
   const { data: incidents = [] } = useIncidents();
   const createMissionMutation = useCreateMission();
+  const deleteTeamMutation = useDeleteRescueTeam();
   const { success: toastSuccess, error: toastError } = useToast();
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [selectedTeamForSlideOver, setSelectedTeamForSlideOver] = useState<RescueTeam | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [showRegisterSlideOver, setShowRegisterSlideOver] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<RescueTeam | null>(null);
+
+  const handleOpenRegister = () => {
+    setEditingTeam(null);
+    setShowRegisterSlideOver(true);
+  };
+
+  const handleOpenEdit = (team: RescueTeam) => {
+    setEditingTeam(team);
+    setShowRegisterSlideOver(true);
+  };
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,6 +115,29 @@ const RescueOperations: React.FC = () => {
     setShowWizard(false);
   };
 
+  const [teamToDelete, setTeamToDelete] = useState<RescueTeam | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const handleDeleteTeam = (team: RescueTeam) => {
+    setTeamToDelete(team);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!teamToDelete) return;
+    deleteTeamMutation.mutate(teamToDelete.id, {
+      onSuccess: () => {
+        toastSuccess('Rescue Unit Decommissioned', `Team "${teamToDelete.name}" has been removed from active registry.`);
+        if (expandedTeamId === teamToDelete.id) setExpandedTeamId(null);
+        setShowDeleteModal(false);
+        setTeamToDelete(null);
+      },
+      onError: (err: any) => {
+        toastError('Decommission Failed', err.message || 'Could not remove rescue team.');
+      },
+    });
+  };
+
   return (
     <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
       {/* Page Header */}
@@ -116,7 +151,7 @@ const RescueOperations: React.FC = () => {
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           <button
-            onClick={() => setShowRegisterSlideOver(true)}
+            onClick={handleOpenRegister}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition-colors shadow-2xs cursor-pointer"
           >
             <UserPlus size={14} className="text-blue-600" />
@@ -198,6 +233,8 @@ const RescueOperations: React.FC = () => {
                       setExpandedTeamId(expandedTeamId === team.id ? null : team.id)
                     }
                     onViewOperations={(t) => setSelectedTeamForSlideOver(t)}
+                    onEdit={handleOpenEdit}
+                    onDelete={handleDeleteTeam}
                   />
                 </motion.div>
               ))
@@ -218,11 +255,64 @@ const RescueOperations: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Register Team Slide-Over Drawer */}
+      {/* Register / Edit Team Slide-Over Drawer */}
       <RegisterTeamSlideOver
         isOpen={showRegisterSlideOver}
-        onClose={() => setShowRegisterSlideOver(false)}
+        teamToEdit={editingTeam}
+        onClose={() => {
+          setShowRegisterSlideOver(false);
+          setEditingTeam(null);
+        }}
       />
+
+      {/* Decommission Team Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && teamToDelete && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setShowDeleteModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 overflow-hidden"
+            >
+              <div className="p-6 space-y-4">
+                <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Decommission Rescue Unit</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Are you sure you want to decommission and remove{' '}
+                    <strong className="text-slate-900">{teamToDelete.name}</strong> ({teamToDelete.agency})? This will archive the unit and remove it from active field dispatch.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteModal(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    disabled={deleteTeamMutation.isPending}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 cursor-pointer"
+                  >
+                    {deleteTeamMutation.isPending ? 'Decommissioning...' : 'Confirm Decommission'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Mission Wizard Overlay */}
       <AnimatePresence>

@@ -79,6 +79,8 @@ const poiHex: Record<string, string> = {
   School: '#9333ea',
   Utility: '#f59e0b',
   'Road Closure': '#dc2626',
+  Warehouse: '#4f46e5',
+  Depot: '#4f46e5',
 };
 
 const poiRgb: Record<string, [number, number, number]> = {
@@ -88,6 +90,8 @@ const poiRgb: Record<string, [number, number, number]> = {
   School: [147, 51, 234],
   Utility: [245, 158, 11],
   'Road Closure': [220, 38, 38],
+  Warehouse: [79, 70, 229],
+  Depot: [79, 70, 229],
 };
 
 const poiToLayerKey: Record<string, keyof GISLayerState> = {
@@ -97,6 +101,8 @@ const poiToLayerKey: Record<string, keyof GISLayerState> = {
   School: 'evacuationSchools',
   Utility: 'utilityElectricity',
   'Road Closure': 'roadAccessibility',
+  Warehouse: 'emergencyShelters',
+  Depot: 'emergencyShelters',
 };
 
 export const MapCanvas3D: React.FC<MapCanvasProps> = ({

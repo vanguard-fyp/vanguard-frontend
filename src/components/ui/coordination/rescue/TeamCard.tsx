@@ -13,6 +13,8 @@ interface TeamCardProps {
   isExpanded: boolean;
   onToggle: () => void;
   onViewOperations?: (team: RescueTeam) => void;
+  onEdit?: (team: RescueTeam) => void;
+  onDelete?: (team: RescueTeam) => void;
 }
 
 const agencyColors: Record<string, string> = {
@@ -31,7 +33,7 @@ const statusConfig: Record<string, { dot: string; badge: string }> = {
 };
 
 export const TeamCard: React.FC<TeamCardProps> = ({
-  team, missions, incidents, isExpanded, onToggle, onViewOperations
+  team, missions, incidents, isExpanded, onToggle, onViewOperations, onEdit, onDelete
 }) => {
   const teamMissions = missions.filter((m) => m.assignedTeamId === team.id);
   const assignedIncident = incidents.find((i) => i.id === team.assignedIncidentId);
@@ -132,18 +134,44 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                 </div>
               </div>
 
-              {/* Vehicles */}
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Truck size={13} className="text-slate-400" />
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Assets & Vehicles</p>
+              {/* Vehicles & Assigned Equipment Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Vehicles */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Truck size={13} className="text-slate-400" />
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Assets &amp; Vehicles</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {team.vehicles && team.vehicles.length > 0 ? (
+                      team.vehicles.map((v) => (
+                        <span key={v} className="text-[11px] font-semibold px-2.5 py-0.5 bg-white text-slate-700 rounded-md border border-slate-200">
+                          {v}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic">No vehicles assigned</span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {team.vehicles.map((v) => (
-                    <span key={v} className="text-[11px] font-semibold px-2.5 py-0.5 bg-white text-slate-700 rounded-md border border-slate-200">
-                      {v}
-                    </span>
-                  ))}
+
+                {/* Assigned Equipment */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <ShieldCheck size={13} className="text-slate-500" />
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Assigned Equipment &amp; Gear</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {team.equipment && team.equipment.length > 0 ? (
+                      team.equipment.map((eq) => (
+                        <span key={eq} className="text-[11px] font-semibold px-2.5 py-0.5 bg-white text-slate-700 rounded-md border border-slate-200">
+                          {eq}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic">Standard tactical gear</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -161,15 +189,35 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                 </div>
               )}
 
-              {/* Quick Summary Info */}
-              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+              {/* Quick Summary Info & Team Actions */}
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between flex-wrap gap-2">
                 <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
                   <Sparkles size={13} className="text-violet-600" />
                   {teamMissions.length} active/queued mission(s) for this squad
                 </span>
-                <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                  {team.displayId || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                    {team.displayId || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
+                  </span>
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(team)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
+                      title="Edit rescue team details"
+                    >
+                      Edit Team
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      onClick={() => onDelete(team)}
+                      className="px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                      title="Decommission / Remove rescue team"
+                    >
+                      Remove Team
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>

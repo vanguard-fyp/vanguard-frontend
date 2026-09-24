@@ -1,14 +1,14 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Map, Search, Layers, X, MapPin, AlertTriangle, Navigation, Box, Square } from 'lucide-react';
-import type { Incident, GISLayerState, FlyToTarget, DisasterIntelligenceProps } from '../../../types';
+import type { Incident, MapPOI, GISLayerState, FlyToTarget, DisasterIntelligenceProps } from '../../../types';
 import { IntelligenceOverview } from './IntelligenceOverview';
 import { LayerPanel } from '../../../components/ui/situational/LayerPanel';
 import { AIInsightDetailView } from './AIInsightDetailView';
 import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
 import { Gis3DLayerExplorer } from '../../../components/ui/situational/Gis3DLayerExplorer';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
-import { useIncidents, useMapPOIs, useCities } from '../../../hooks';
+import { useIncidents, useMapPOIs, useCities, useWarehouses } from '../../../hooks';
 import { containerAnim, defaultLayers, itemAnim, tabs } from '../../../constants';
 
 const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncident, onFocusHandled }) => {
@@ -31,6 +31,25 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
   const { data: mapPOIs = [] } = useMapPOIs();
   const { data: backendCities = [] } = useCities();
+  const { data: warehouses = [] } = useWarehouses();
+
+  const combinedPOIs = useMemo(() => {
+    const list: MapPOI[] = [...mapPOIs];
+    warehouses.forEach((w) => {
+      const lat = typeof w.lat === 'number' && !isNaN(w.lat) ? w.lat : 4.5;
+      const lng = typeof w.lng === 'number' && !isNaN(w.lng) ? w.lng : 102.0;
+      list.push({
+        id: `wh-${w.id}`,
+        name: `${w.name} (Logistics Depot)`,
+        category: 'Warehouse',
+        coordinates: [lat, lng],
+        status: (w.capacityStatus as any) || 'Operational',
+        details: `${w.fullAddress || w.name} · ${w.district}, ${w.state}`,
+        contact: w.contactNumber,
+      });
+    });
+    return list;
+  }, [mapPOIs, warehouses]);
 
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -80,7 +99,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       });
     });
 
-    mapPOIs.forEach(poi => {
+    combinedPOIs.forEach(poi => {
       list.push({
         id: `poi-${poi.id}`,
         title: poi.name,
@@ -103,7 +122,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     });
 
     return list;
-  }, [incidents, mapPOIs, backendCities]);
+  }, [activeIncidents, combinedPOIs, backendCities]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -344,7 +363,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                 <Gis3DLayerExplorer
                   layers={layers}
                   incidents={activeIncidents}
-                  pois={mapPOIs}
+                  pois={combinedPOIs}
                   onSelectIncident={handleSelectIncident}
                   onToggleLayer={toggleLayer}
                 />
@@ -356,7 +375,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                   onSelectIncident={handleSelectIncident}
                   onToggleLayer={toggleLayer}
                   incidents={activeIncidents}
-                  pois={mapPOIs}
+                  pois={combinedPOIs}
                 />
               )}
             </div>

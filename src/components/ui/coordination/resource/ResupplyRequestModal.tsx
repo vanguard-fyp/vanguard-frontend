@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { X, Send, Sparkles, ThumbsUp, Package } from 'lucide-react';
 
 import type { ResourceItem, ResourceRequest, AIStockAdvisory } from '../../../../types';
-import { getWarehouseContext } from '../../../../constants/components/resource';
 
 interface ResupplyRequestModalProps {
   item: ResourceItem | null;
@@ -116,7 +115,7 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-white">Create Resupply Request</h3>
               <p className="text-[11px] text-slate-300">
-                {item.name} · {item.warehouseLocation} ({getWarehouseContext(item.warehouseLocation).nearDisaster})
+                {item.name} · {item.warehouseLocation}
               </p>
             </div>
           </div>

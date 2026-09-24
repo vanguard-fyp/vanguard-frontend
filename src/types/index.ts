@@ -93,6 +93,7 @@ export interface Incident {
   location: string;
   state: string;
   district: string;
+  postcode: string;
   coordinates: [number, number];
   severity: SeverityLevel;
   disasterLevel: DisasterLevel;
@@ -101,7 +102,7 @@ export interface Incident {
   sourceType?: 'Metrological / Sensor' | 'Citizen Reported' | 'Agency Patrol' | 'Emergency 999';
   reportedByUserId?: string;
   reporterName?: string;
-  status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected';
+  status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected' | 'Archived';
   affectedPopulation: number;
   casualtiesCount: number;
   infrastructureDamage: 'Severe' | 'Moderate' | 'Minor' | 'None';
@@ -174,7 +175,7 @@ export interface GISLayerState {
 export interface MapPOI {
   id: string;
   name: string;
-  category: 'Shelter' | 'Hospital' | 'School' | 'Utility' | 'Rescue Team' | 'Road Closure';
+  category: 'Shelter' | 'Hospital' | 'School' | 'Utility' | 'Rescue Team' | 'Road Closure' | 'Warehouse' | 'Depot';
   coordinates: [number, number];
   status: 'Operational' | 'Near Capacity' | 'Full' | 'Damaged' | 'Active';
   capacity?: { current: number; max: number };
@@ -189,12 +190,14 @@ export interface RescueTeam {
   agency: 'SMART' | 'BOMBA' | 'APM' | 'PDRM' | 'ATM';
   personnelCount: number;
   vehicles: string[];
+  equipment?: string[];
   currentLocation: string;
   coordinates: [number, number];
-  status: 'Available' | 'Deployed' | 'En Route' | 'Off Duty';
+  status: 'Available' | 'Deployed' | 'En Route' | 'Off Duty' | 'Deleted';
   assignedIncidentId?: string;
   contactNumber: string;
   commander: string;
+  specialization?: string;
 }
 
 export interface Mission {
@@ -213,26 +216,44 @@ export interface Mission {
   objective: string;
 }
 
+export interface Warehouse {
+  id: string;
+  name: string;
+  state: string;
+  district: string;
+  fullAddress: string;
+  lat: number;
+  lng: number;
+  contactNumber: string;
+  capacityStatus: 'Operational' | 'Near Capacity' | 'Full';
+}
+
+export type ResourceCategory = 'Food' | 'Medical supplies' | 'Rescue equipment' | 'Vehicles' | 'Emergency supplies';
+export type StockStatus = 'Sufficient' | 'Low Stock' | 'Critical';
+
 export interface ResourceItem {
   id: string;
   displayId?: string;
   name: string;
-  category: 'Food' | 'Medical supplies' | 'Rescue equipment' | 'Vehicles' | 'Emergency supplies';
+  category: ResourceCategory;
   unit: string;
   stockLevel: number;
   minThreshold: number;
+  warehouseId?: string;
   warehouseLocation: string;
-  status: 'Sufficient' | 'Low Stock' | 'Critical';
+  status: StockStatus;
 }
 
 export interface ResourceRequest {
   id: string;
   displayId?: string;
   requestId: string;
-  requestorName: string;
+  requestUserId?: string;
+  requestorName?: string;
   agency: string;
   district: string;
   resourceCategory: string;
+  resourceItemId?: string;
   itemRequested: string;
   quantityRequested: number;
   unit: string;
@@ -241,6 +262,8 @@ export interface ResourceRequest {
   timestamp: string;
   justification: string;
   approvedBy?: string;
+  approvedByUserId?: string;
+  rejectionReason?: string;
 }
 
 export interface PublicAnnouncement {

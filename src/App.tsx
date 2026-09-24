@@ -26,6 +26,7 @@ import EocCopilotChatbot from './components/copilot/EocCopilotChatbot';
 // Providers
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 
 const MainAppLayout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -78,15 +79,17 @@ const MainAppLayout: React.FC = () => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/*" element={<MainAppLayout />} />
-          </Routes>
-        </Router>
-      </ToastProvider>
+      <LanguageProvider>
+        <ToastProvider>
+          <Router>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/*" element={<MainAppLayout />} />
+            </Routes>
+          </Router>
+        </ToastProvider>
+      </LanguageProvider>
     </AuthProvider>
   );
 };

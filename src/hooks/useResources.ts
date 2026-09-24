@@ -67,8 +67,8 @@ export function useCreateResourceRequest() {
 export function useApproveResourceRequest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, approver }: { id: string; approver?: string }) =>
-      resourceService.approveRequest(id, approver),
+    mutationFn: ({ id, approver, approverUserId }: { id: string; approver?: string; approverUserId?: string }) =>
+      resourceService.approveRequest(id, { approver, approverUserId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: RESOURCE_KEYS.requests });
     },
@@ -78,8 +78,17 @@ export function useApproveResourceRequest() {
 export function useRejectResourceRequest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, approver }: { id: string; approver?: string }) =>
-      resourceService.rejectRequest(id, approver),
+    mutationFn: ({
+      id,
+      approver,
+      approverUserId,
+      rejectionReason,
+    }: {
+      id: string;
+      approver?: string;
+      approverUserId?: string;
+      rejectionReason?: string;
+    }) => resourceService.rejectRequest(id, { approver, approverUserId, rejectionReason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: RESOURCE_KEYS.requests });
     },

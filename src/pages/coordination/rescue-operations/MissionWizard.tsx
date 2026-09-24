@@ -249,7 +249,7 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Define Mission Parameters</p>
                 <div>
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1.5 flex items-center gap-1">
-                    <FileText size={11} /> Mission Objective *
+                    <FileText size={11} /> Mission Objective <span className='text-red-500'>*</span>
                   </label>
                   <textarea
                     value={objective}

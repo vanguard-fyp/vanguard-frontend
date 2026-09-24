@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, ClipboardCheck, Send, GitFork, PackagePlus } from 'lucide-react';
+import { Warehouse, ClipboardCheck, Send, GitFork, PackagePlus, Plus } from 'lucide-react';
 import {
   useInventory,
   useResourceRequests,
@@ -8,6 +8,7 @@ import {
   useRejectResourceRequest,
   useCreateResourceRequest,
 } from '../../../hooks';
+import { useAuth } from '../../../context/AuthContext';
 import { InventoryStage } from '../../../components/ui/coordination/resource/InventoryStage';
 import { RequestApprovalStage } from '../../../components/ui/coordination/resource/RequestApprovalStage';
 import { AllocationTrackerStage } from '../../../components/ui/coordination/resource/AllocationTrackerStage';
@@ -15,6 +16,7 @@ import { PipelineFlowDiagram } from '../../../components/ui/coordination/resourc
 import { SkeletonTable } from '../../../components/ui/shared/SkeletonLoader';
 import { RequestDetailModal } from '../../../components/ui/coordination/resource/RequestDetailModal';
 import { CreateResourceRequestModal } from '../../../components/ui/coordination/resource/CreateResourceRequestModal';
+import { AddInventoryItemModal } from '../../../components/ui/coordination/resource/AddInventoryItemModal';
 import { useToast } from '../../../context/ToastContext';
 import type { ResourceRequest, ViewMode } from '../../../types';
 import { containerAnim, itemAnim } from '../../../constants';
@@ -25,30 +27,40 @@ const ResourceManagement: React.FC = () => {
   const approveMutation = useApproveResourceRequest();
   const rejectMutation = useRejectResourceRequest();
   const createMutation = useCreateResourceRequest();
+  const { user } = useAuth();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
 
   // Modal states
   const [selectedRequestForModal, setSelectedRequestForModal] = useState<ResourceRequest | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
 
-  // TODO: Make the approver link to user id
+  // Dynamic approver linked to current logged-in user
+  const currentApprover = user?.name ? `${user.name} (${user.role} - ${user.agency || 'NADMA'})` : 'NADMA Incident Commander';
+  const currentUserId = user?.id;
+
   const handleApprove = (id: string) => {
     approveMutation.mutate(
-      { id, approver: 'Resource Manager Ismail (NADMA)' },
+      { id, approver: currentApprover, approverUserId: currentUserId },
       {
         onSuccess: () =>
-          toastSuccess('Request Approved', 'Resource request has been approved and enqueued for dispatch.'),
+          toastSuccess('Request Approved', `Resource request has been approved by ${user?.name || 'Officer'} and enqueued for dispatch.`),
         onError: () => toastError('Approval Failed', 'Could not approve request. Please try again.'),
       }
     );
   };
 
-  const handleReject = (id: string) => {
+  const handleReject = (id: string, reason?: string) => {
     rejectMutation.mutate(
-      { id, approver: 'Resource Manager Ismail (NADMA)' },
       {
-        onSuccess: () => toastWarning('Request Rejected', 'Resource request has been declined and logged.'),
+        id,
+        approver: currentApprover,
+        approverUserId: currentUserId,
+        rejectionReason: reason || 'Requisition denied by EOC logistics review.',
+      },
+      {
+        onSuccess: () => toastWarning('Request Rejected', `Resource request has been declined by ${user?.name || 'Officer'} and logged.`),
         onError: () => toastError('Rejection Failed', 'Could not reject request. Please try again.'),
       }
     );
@@ -122,6 +134,14 @@ const ResourceManagement: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setShowAddInventoryModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-200 transition-all shadow-2xs cursor-pointer"
+          >
+            <Plus size={14} className="text-blue-600" />
+            <span>Add Catalog Item</span>
+          </button>
+
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer"
@@ -304,6 +324,12 @@ const ResourceManagement: React.FC = () => {
       <CreateResourceRequestModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
+      />
+
+      {/* Add Catalog Item Modal */}
+      <AddInventoryItemModal
+        isOpen={showAddInventoryModal}
+        onClose={() => setShowAddInventoryModal(false)}
       />
     </motion.div>
   );

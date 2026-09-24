@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, Sliders, RefreshCw, Sparkles, Droplets, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, Sliders, RefreshCw, Sparkles, Droplets, Activity, ChevronDown, ChevronUp, Globe, Clock, Calendar } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 
 export const SystemSettingsPanel: React.FC = () => {
@@ -13,10 +13,29 @@ export const SystemSettingsPanel: React.FC = () => {
   const [showAdvancedGateway, setShowAdvancedGateway] = useState(false);
   const [saveNotice, setSaveNotice] = useState(false);
 
+  // Language & Locale Settings
+  const [interfaceLanguage, setInterfaceLanguage] = useState<'en' | 'ms'>(
+    () => (localStorage.getItem('vanguard_lang') as 'en' | 'ms') || 'en'
+  );
+  const [dateFormat, setDateFormat] = useState(
+    () => localStorage.getItem('vanguard_date_format') || 'DD/MM/YYYY'
+  );
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>(
+    () => (localStorage.getItem('vanguard_time_format') as '12h' | '24h') || '24h'
+  );
+  const [timezone, setTimezone] = useState(
+    () => localStorage.getItem('vanguard_timezone') || 'Asia/Kuala_Lumpur'
+  );
+
   const handleSaveParameters = (e: React.FormEvent) => {
     e.preventDefault();
+    // Persist locale settings
+    localStorage.setItem('vanguard_lang', interfaceLanguage);
+    localStorage.setItem('vanguard_date_format', dateFormat);
+    localStorage.setItem('vanguard_time_format', timeFormat);
+    localStorage.setItem('vanguard_timezone', timezone);
     setSaveNotice(true);
-    toast.success('Disaster Intelligence & AI Operational Thresholds updated!');
+    toast.success('System settings & AI Operational Thresholds updated successfully!');
     setTimeout(() => setSaveNotice(false), 3000);
   };
 
@@ -200,13 +219,134 @@ export const SystemSettingsPanel: React.FC = () => {
           )}
         </div>
 
+        {/* Section 4: Language & Locale */}
+        <div className="border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center gap-2">
+            <Globe size={14} className="text-blue-600" />
+            <span className="text-xs font-bold text-slate-700">Language & Locale Configuration</span>
+            <span className="ml-auto text-[10px] text-slate-400 font-medium">Applied on save</span>
+          </div>
+
+          <div className="p-4 bg-white">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Interface Language */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                  <Globe size={12} className="text-blue-600" /> Interface Language
+                </label>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setInterfaceLanguage('en')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      interfaceLanguage === 'en'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    🇬🇧 English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInterfaceLanguage('ms')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      interfaceLanguage === 'ms'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    🇲🇾 Bahasa M.
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {interfaceLanguage === 'en' ? 'System labels in English' : 'Label sistem dalam Bahasa Malaysia'}
+                </p>
+              </div>
+
+              {/* Date Format */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                  <Calendar size={12} className="text-blue-600" /> Date Format
+                </label>
+                <select
+                  value={dateFormat}
+                  onChange={(e) => setDateFormat(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600"
+                >
+                  <option value="DD/MM/YYYY">DD/MM/YYYY (Malaysian Standard)</option>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY (US Format)</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD (ISO 8601)</option>
+                  <option value="D MMM YYYY">D MMM YYYY (e.g. 24 Sep 2026)</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                  Preview: {dateFormat === 'DD/MM/YYYY' ? '24/09/2026' : dateFormat === 'MM/DD/YYYY' ? '09/24/2026' : dateFormat === 'YYYY-MM-DD' ? '2026-09-24' : '24 Sep 2026'}
+                </p>
+              </div>
+
+              {/* Time Format */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                  <Clock size={12} className="text-blue-600" /> Time Format
+                </label>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTimeFormat('24h')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      timeFormat === '24h'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    24h
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimeFormat('12h')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      timeFormat === '12h'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    12h AM/PM
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                  Preview: {timeFormat === '24h' ? '14:30:00' : '2:30:00 PM'}
+                </p>
+              </div>
+
+              {/* Timezone */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+                  <Globe size={12} className="text-blue-600" /> Timezone (UTC Offset)
+                </label>
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600"
+                >
+                  <option value="Asia/Kuala_Lumpur">🇲🇾 Asia/Kuala Lumpur (UTC+8)</option>
+                  <option value="Asia/Singapore">🇸🇬 Asia/Singapore (UTC+8)</option>
+                  <option value="Asia/Brunei">🇧🇳 Asia/Brunei (UTC+8)</option>
+                  <option value="UTC">🌐 UTC (Universal Time)</option>
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  EOC ops timestamps use this offset
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Footer */}
         <div className="flex justify-end pt-2">
           <button
             type="submit"
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 cursor-pointer"
           >
-            Save Intelligence Parameters
+            Save System Settings
           </button>
         </div>
       </form>

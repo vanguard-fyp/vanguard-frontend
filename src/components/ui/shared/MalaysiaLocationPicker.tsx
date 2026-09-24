@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Search, Navigation, AlertCircle } from 'lucide-react';
+import { MapPin, Search, Navigation, AlertCircle, Loader2 } from 'lucide-react';
 import { findPostcode } from 'malaysia-postcodes';
 
 export const MALAYSIA_STATES = [
@@ -24,41 +24,26 @@ export const MALAYSIA_STATES = [
   'Regional / Transboundary',
 ] as const;
 
-export const STATE_COORDINATES: Record<string, [number, number]> = {
-  'Johor': [1.4927, 103.7414],
-  'Kedah': [6.1184, 100.3685],
-  'Kelantan': [6.1254, 102.2381],
-  'Melaka': [2.1896, 102.2501],
-  'Negeri Sembilan': [2.7258, 101.9424],
-  'Pahang': [3.8126, 103.3256],
-  'Perak': [4.5921, 101.0901],
-  'Perlis': [6.4449, 100.2048],
-  'Pulau Pinang': [5.4141, 100.3288],
-  'Sabah': [5.9804, 116.0735],
-  'Sarawak': [1.5533, 110.3592],
-  'Selangor': [3.0738, 101.5183],
-  'Terengganu': [5.3117, 103.1324],
-  'WP Kuala Lumpur': [3.1390, 101.6869],
-  'WP Putrajaya': [2.9264, 101.6964],
-  'WP Labuan': [5.2831, 115.2308],
-  'Regional / Transboundary': [4.2105, 101.9758],
-};
-
-// // The `malaysia-postcodes` package returns states in title-case (e.g. "Wp Kuala Lumpur").
-// // Map those to the app's canonical state names so the State dropdown + coordinate lookup stay in sync.
+// The `malaysia-postcodes` package returns states in title-case (e.g. "Wp Kuala Lumpur").
+// Map those to the app's canonical state names so the State dropdown + coordinate lookup stay in sync.
 const PACKAGE_STATE_TO_APP_STATE: Record<string, string> = {
   'wp kuala lumpur': 'WP Kuala Lumpur',
+  'kuala lumpur': 'WP Kuala Lumpur',
   'wp putrajaya': 'WP Putrajaya',
+  'putrajaya': 'WP Putrajaya',
   'wp labuan': 'WP Labuan',
+  'labuan': 'WP Labuan',
   johor: 'Johor',
   kedah: 'Kedah',
   kelantan: 'Kelantan',
   melaka: 'Melaka',
+  malacca: 'Melaka',
   'negeri sembilan': 'Negeri Sembilan',
   pahang: 'Pahang',
   perak: 'Perak',
   perlis: 'Perlis',
   'pulau pinang': 'Pulau Pinang',
+  'penang': 'Pulau Pinang',
   sabah: 'Sabah',
   sarawak: 'Sarawak',
   selangor: 'Selangor',
@@ -81,6 +66,8 @@ interface MalaysiaLocationPickerProps {
   onLatChange: (lat: string) => void;
   lng: string;
   onLngChange: (lng: string) => void;
+  postcode?: string;
+  onPostcodeChange?: (postcode: string) => void;
 }
 
 export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
@@ -94,17 +81,71 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
   onLatChange,
   lng,
   onLngChange,
+  postcode: propPostcode,
+  onPostcodeChange,
 }) => {
-  const [postcode, setPostcode] = useState('');
+  const [internalPostcode, setInternalPostcode] = useState(propPostcode || '');
   const [isSearchingGeocode, setIsSearchingGeocode] = useState(false);
   const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
+  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const locationDebounceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const parsedLat = parseFloat(lat) || 4.2105;
   const parsedLng = parseFloat(lng) || 101.9758;
+
+  // Sync prop postcode when passed
+  useEffect(() => {
+    if (propPostcode !== undefined && propPostcode !== internalPostcode) {
+      setInternalPostcode(propPostcode);
+    }
+  }, [propPostcode]);
+
+  // Dynamic Reverse Geocoding when pin moves / map is clicked
+  const reverseGeocodeCoordinates = useCallback(async (targetLat: number, targetLng: number) => {
+    setIsSearchingGeocode(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&zoom=18&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await res.json();
+      if (data && data.address) {
+        const addr = data.address;
+        const road = addr.road || addr.street || addr.neighbourhood || addr.suburb || addr.quarter || addr.amenity || '';
+        const city = addr.city || addr.town || addr.municipality || addr.district || addr.county || '';
+        const rawState = addr.state || '';
+        const stateName = normalizePackageState(rawState) || (MALAYSIA_STATES.includes(rawState as any) ? rawState : null);
+        const postCodeFound = (addr.postcode || '').replace(/\D/g, '').slice(0, 5);
+
+        if (road || city) {
+          const conciseLoc = [road, city].filter(Boolean).join(', ');
+          onLocationChange(conciseLoc || data.display_name.split(',').slice(0, 3).join(',').trim());
+        }
+        if (city) {
+          onDistrictChange(city);
+        }
+        if (stateName && MALAYSIA_STATES.includes(stateName as any)) {
+          onStateChange(stateName);
+        }
+        if (postCodeFound && postCodeFound.length === 5) {
+          setInternalPostcode(postCodeFound);
+          onPostcodeChange?.(postCodeFound);
+        }
+        const summary = [road, city, stateName].filter(Boolean).join(', ');
+        setLookupFeedback(`Pin location updated: ${summary || 'Selected point'}`);
+      }
+    } catch {
+      // Graceful fallback
+    } finally {
+      setIsSearchingGeocode(false);
+    }
+  }, [onLocationChange, onDistrictChange, onStateChange, onPostcodeChange]);
 
   // Initialize Leaflet Map
   useEffect(() => {
@@ -158,15 +199,29 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
     // Handle marker drag
     marker.on('dragend', (event) => {
       const position = event.target.getLatLng();
-      onLatChange(position.lat.toFixed(6));
-      onLngChange(position.lng.toFixed(6));
+      const newLatStr = position.lat.toFixed(6);
+      const newLngStr = position.lng.toFixed(6);
+      onLatChange(newLatStr);
+      onLngChange(newLngStr);
+
+      clearTimeout(reverseGeocodeTimer.current);
+      reverseGeocodeTimer.current = setTimeout(() => {
+        reverseGeocodeCoordinates(position.lat, position.lng);
+      }, 300);
     });
 
     // Handle map click
     map.on('click', (e) => {
       marker.setLatLng(e.latlng);
-      onLatChange(e.latlng.lat.toFixed(6));
-      onLngChange(e.latlng.lng.toFixed(6));
+      const newLatStr = e.latlng.lat.toFixed(6);
+      const newLngStr = e.latlng.lng.toFixed(6);
+      onLatChange(newLatStr);
+      onLngChange(newLngStr);
+
+      clearTimeout(reverseGeocodeTimer.current);
+      reverseGeocodeTimer.current = setTimeout(() => {
+        reverseGeocodeCoordinates(e.latlng.lat, e.latlng.lng);
+      }, 300);
     });
 
     return () => {
@@ -188,10 +243,11 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
     }
   }, [parsedLat, parsedLng]);
 
-  // Handle Postcode Lookup — backed by the `malaysia-postcodes` dataset for accurate district resolution.
-  const handlePostcodeLookup = (inputCode: string) => {
+  // Handle Postcode Lookup — backed by the `malaysia-postcodes` dataset and dynamic geocoding
+  const handlePostcodeLookup = async (inputCode: string) => {
     const clean = inputCode.replace(/\D/g, '').slice(0, 5);
-    setPostcode(clean);
+    setInternalPostcode(clean);
+    onPostcodeChange?.(clean);
     setLookupFeedback(null);
 
     if (clean.length < 5) return;
@@ -201,54 +257,130 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       const appState = normalizePackageState(result.state) ?? state;
       onStateChange(appState);
       onDistrictChange(result.city);
-      // Center the map on the resolved state so the user only needs to refine the exact spot.
-      const coords = STATE_COORDINATES[appState];
-      if (coords) {
-        onLatChange(coords[0].toFixed(6));
-        onLngChange(coords[1].toFixed(6));
+      setLookupFeedback(`Postcode resolved: ${result.city}, ${appState}. Pinning coordinates...`);
+
+      // Dynamically geocode exact postcode + district for high accuracy
+      try {
+        const query = `${clean} ${result.city} ${appState} Malaysia`;
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=my&limit=1`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const foundLat = parseFloat(data[0].lat);
+          const foundLng = parseFloat(data[0].lon);
+          onLatChange(foundLat.toFixed(6));
+          onLngChange(foundLng.toFixed(6));
+          setLookupFeedback(`Found & Pinned: ${result.city}, ${appState} (${clean})`);
+          return;
+        }
+      } catch {
+        // Fallback
       }
-      setLookupFeedback(`Found: ${result.city}, ${appState}. Enter the specific location below.`);
+      setLookupFeedback(`Found: ${result.city}, ${appState}. You can adjust the pin on the map.`);
     } else {
-      setLookupFeedback('Postcode not recognised. Select the state manually or pin on the map.');
+      setLookupFeedback('Postcode not recognised. Select the state manually or click on the map.');
     }
   };
 
   // Handle State Change
-  const handleStateSelect = (selectedState: string) => {
+  const handleStateSelect = async (selectedState: string) => {
     onStateChange(selectedState);
-    const coords = STATE_COORDINATES[selectedState];
-    if (coords) {
-      onLatChange(coords[0].toFixed(6));
-      onLngChange(coords[1].toFixed(6));
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(selectedState + ', Malaysia')}&countrycodes=my&limit=1`,
+        { headers: { 'Accept-Language': 'en' } }
+      );
+      const data = await res.json();
+      if (data && data.length > 0) {
+        onLatChange(parseFloat(data[0].lat).toFixed(6));
+        onLngChange(parseFloat(data[0].lon).toFixed(6));
+        return;
+      }
+    } catch {
+      // Fallback
     }
   };
 
-  // Geocode specific location via OpenStreetMap Nominatim
-  const handleSearchOnlineLocation = async () => {
-    if (!location.trim() && !district.trim()) return;
+  // Search online places based on query scoped to Malaysia, Postcode, District & State
+  const fetchLocationSuggestions = async (searchQuery: string) => {
+    if (!searchQuery || searchQuery.trim().length < 2) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
     setIsSearchingGeocode(true);
-    setLookupFeedback(null);
     try {
-      const query = `${location} ${district} ${state} Malaysia`.trim();
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+      const clean = searchQuery.trim();
+      const scopeParts = [clean];
+      if (district && !clean.toLowerCase().includes(district.toLowerCase())) {
+        scopeParts.push(district);
+      }
+      if (state && state !== 'Regional / Transboundary' && !clean.toLowerCase().includes(state.toLowerCase())) {
+        scopeParts.push(state);
+      }
+      scopeParts.push('Malaysia');
+      const query = scopeParts.join(', ');
+
+      let response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=my&limit=5`,
         { headers: { 'Accept-Language': 'en' } }
       );
-      const data = await response.json();
-      if (data && data.length > 0) {
-        const foundLat = parseFloat(data[0].lat);
-        const foundLng = parseFloat(data[0].lon);
-        onLatChange(foundLat.toFixed(6));
-        onLngChange(foundLng.toFixed(6));
-        setLookupFeedback(`Located on map: ${data[0].display_name.split(',').slice(0, 2).join(',')}`);
+      let data = await response.json();
+
+      // Fallback to simpler query if scoped search returned 0 items
+      if (!Array.isArray(data) || data.length === 0) {
+        response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(clean + ', Malaysia')}&countrycodes=my&limit=5`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        data = await response.json();
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        setLocationSuggestions(data);
+        setShowSuggestions(true);
       } else {
-        setLookupFeedback('Could not pin exact street. You can click on the map directly.');
+        setLocationSuggestions([]);
       }
     } catch {
-      setLookupFeedback('Geocoding service unavailable. You can click/drag marker on map.');
+      setLocationSuggestions([]);
     } finally {
       setIsSearchingGeocode(false);
     }
+  };
+
+  const handleLocationInputChange = (val: string) => {
+    onLocationChange(val);
+    clearTimeout(locationDebounceTimer.current);
+    if (val.trim().length >= 2) {
+      locationDebounceTimer.current = setTimeout(() => {
+        fetchLocationSuggestions(val);
+      }, 350);
+    } else {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (item: { display_name: string; lat: string; lon: string }) => {
+    const parts = item.display_name.split(',');
+    const conciseName = parts.slice(0, 3).join(',').trim();
+    onLocationChange(conciseName || item.display_name);
+    const newLat = parseFloat(item.lat);
+    const newLng = parseFloat(item.lon);
+    onLatChange(newLat.toFixed(6));
+    onLngChange(newLng.toFixed(6));
+    setShowSuggestions(false);
+    setLocationSuggestions([]);
+    setLookupFeedback(`Pinned location: ${conciseName}`);
+  };
+
+  // Manual pin geocoding search
+  const handleSearchOnlineLocation = async () => {
+    if (!location.trim() && !district.trim()) return;
+    await fetchLocationSuggestions(location || district);
   };
 
   return (
@@ -258,7 +390,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
         {/* Postcode Search */}
         <div>
           <label className="block text-xs font-bold text-slate-800 mb-1">
-            Postcode <span className="text-[10px] text-slate-500 font-normal">(Auto-fills district)</span>
+            Postcode <span className="text-red-500">*</span> <span className="text-[10px] text-slate-500 font-normal">(Auto-fills district)</span>
           </label>
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -266,7 +398,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
               type="text"
               inputMode="numeric"
               maxLength={5}
-              value={postcode}
+              value={internalPostcode}
               onChange={(e) => handlePostcodeLookup(e.target.value)}
               placeholder="e.g. 50480 / 15000"
               className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-mono"
@@ -276,7 +408,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
 
         {/* State Dropdown */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1">State / Territory *</label>
+          <label className="block text-xs font-bold text-slate-800 mb-1">State / Territory <span className="text-red-500">*</span></label>
           <select
             value={state}
             onChange={(e) => handleStateSelect(e.target.value)}
@@ -292,7 +424,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
 
         {/* District */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1">District / Zone *</label>
+          <label className="block text-xs font-bold text-slate-800 mb-1">District / Zone <span className="text-red-500">*</span></label>
           <input
             type="text"
             value={district}
@@ -305,30 +437,61 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       </div>
 
       {/* ── Specific Location / Landmark ── */}
-      <div>
+      <div className="relative">
         <label className="block text-xs font-bold text-slate-800 mb-1">
-          Specific Location / Address *
+          Specific Location / Address <span className="text-red-500">*</span>
         </label>
         <div className="flex gap-2">
           <input
             type="text"
             value={location}
-            onChange={(e) => onLocationChange(e.target.value)}
+            onChange={(e) => handleLocationInputChange(e.target.value)}
+            onFocus={() => {
+              if (locationSuggestions.length > 0) setShowSuggestions(true);
+            }}
             required
             placeholder="e.g. Kampung Sireh, Seksyen 4 / Jambatan Sultan Yahya Petra"
-            className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
+            className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
           />
           <button
             type="button"
             onClick={handleSearchOnlineLocation}
             disabled={isSearchingGeocode || (!location && !district)}
             className="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Pin location on map"
+            title="Search and pin location on map"
           >
-            <Search size={13} className={isSearchingGeocode ? 'animate-spin' : ''} />
-            <span className="hidden sm:inline">Pin</span>
+            {isSearchingGeocode ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+            <span className="hidden sm:inline">Find</span>
           </button>
         </div>
+
+        {/* Suggestions Dropdown */}
+        {showSuggestions && locationSuggestions.length > 0 && (
+          <div className="absolute top-full left-0 right-0 z-[500] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+            <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Matching Places in Malaysia</span>
+              <button
+                type="button"
+                onClick={() => setShowSuggestions(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+            {locationSuggestions.map((place, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelectSuggestion(place)}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-slate-100 last:border-0 flex items-start gap-2 text-slate-800 transition-colors cursor-pointer"
+              >
+                <MapPin size={13} className="text-blue-600 shrink-0 mt-0.5" />
+                <span className="line-clamp-2 leading-relaxed">{place.display_name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {lookupFeedback && (
           <p className="text-[11px] text-blue-600 font-medium mt-1 flex items-center gap-1">
             <AlertCircle size={12} /> {lookupFeedback}
@@ -343,7 +506,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
             <MapPin size={13} className="text-blue-600" />
             <span>Interactive Map & Pinpoint</span>
           </label>
-          <span className="text-[10px] text-slate-500 font-medium">Click or drag pin to adjust coordinates</span>
+          <span className="text-[10px] text-slate-500 font-medium">Click or drag pin to auto-fill address</span>
         </div>
 
         <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-xs h-44">

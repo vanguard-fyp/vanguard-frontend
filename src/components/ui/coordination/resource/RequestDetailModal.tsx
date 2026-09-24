@@ -100,6 +100,18 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
               </div>
             </div>
 
+            {/* Rejection Justification / Reason (if rejected) */}
+            {request.status === 'Rejected' && (
+              <div className="p-3.5 bg-red-50 rounded-xl border border-red-200 space-y-1">
+                <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider flex items-center gap-1">
+                  <FileText size={12} /> Rejection Justification & Review Notes
+                </span>
+                <p className="text-xs text-red-800 leading-relaxed font-medium">
+                  {request.rejectionReason || 'Requisition denied by EOC logistics review.'}
+                </p>
+              </div>
+            )}
+
             {/* Official Justification */}
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
@@ -124,7 +136,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   </p>
                 </div>
 
-                {/* Step 2: Approval */}
+                {/* Step 2: Approval or Rejection */}
                 {isApproved && (
                   <div className="relative">
                     <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-emerald-600 ring-4 ring-white" />
@@ -133,6 +145,18 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                     </p>
                     <p className="text-[11px] text-slate-500">
                       Depot allocation confirmed · Automated buffer check verified
+                    </p>
+                  </div>
+                )}
+
+                {request.status === 'Rejected' && (
+                  <div className="relative">
+                    <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-red-600 ring-4 ring-white" />
+                    <p className="text-xs font-bold text-red-800">
+                      Rejected by {request.approvedBy || 'EOC Duty Officer'}
+                    </p>
+                    <p className="text-[11px] text-red-600">
+                      Reason: {request.rejectionReason || 'Requisition denied by logistics review'}
                     </p>
                   </div>
                 )}

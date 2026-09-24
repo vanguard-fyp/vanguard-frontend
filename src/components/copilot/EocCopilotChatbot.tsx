@@ -40,6 +40,30 @@ export const EocCopilotChatbot: React.FC = () => {
 
   // Draggable floating window — lets the user move the copilot off content it overlaps.
   const dragControls = useDragControls();
+  const [dragBounds, setDragBounds] = useState({ top: -150, left: -400, right: 0, bottom: 0 });
+
+  useEffect(() => {
+    const updateBounds = () => {
+      const panelHeight = isOpen && !isMinimized ? 580 : 60;
+      const panelWidth = isOpen && !isMinimized ? 420 : 60;
+      const navbarHeight = 75; // safe top margin to ensure header is never behind navbar
+      const sidebarWidth = 270; // safe left margin to avoid sidebar overlap
+
+      const maxTop = -Math.max(0, window.innerHeight - panelHeight - navbarHeight - 20);
+      const maxLeft = -Math.max(0, window.innerWidth - panelWidth - sidebarWidth - 20);
+
+      setDragBounds({
+        top: maxTop,
+        left: maxLeft,
+        right: 0,
+        bottom: 0,
+      });
+    };
+
+    updateBounds();
+    window.addEventListener('resize', updateBounds);
+    return () => window.removeEventListener('resize', updateBounds);
+  }, [isOpen, isMinimized]);
 
   // Initial Welcome Briefing popup on login session
   useEffect(() => {
@@ -143,8 +167,8 @@ export const EocCopilotChatbot: React.FC = () => {
         dragControls={dragControls}
         dragMomentum={false}
         dragElastic={0}
-        dragConstraints={{ top: -window.innerHeight + 120, left: -window.innerWidth + 120, right: 20, bottom: 20 }}
-        className="fixed bottom-5 right-5 z-40 touch-none"
+        dragConstraints={dragBounds}
+        className="fixed bottom-5 right-5 z-50 touch-none"
       >
         {(!isOpen || isMinimized) && (
           <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative">

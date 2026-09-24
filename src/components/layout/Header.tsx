@@ -162,7 +162,7 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
                     <button
                       key={inc.id}
                       onMouseDown={() => navigate(`/situational/incidents`)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-start gap-3"
+                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-start gap-3 cursor-pointer"
                     >
                       {q.length < 2 && (
                         <span className="text-[10px] font-mono font-bold text-slate-300 mt-0.5 w-4 shrink-0">{idx + 1}</span>

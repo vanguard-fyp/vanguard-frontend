@@ -26,7 +26,7 @@ export const DailyBriefingModal: React.FC<DailyBriefingModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs"
       onClick={onClose}
     >
       <motion.div

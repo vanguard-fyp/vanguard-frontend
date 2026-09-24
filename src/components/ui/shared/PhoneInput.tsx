@@ -1,43 +1,76 @@
 import React from 'react';
 import { Phone } from 'lucide-react';
 
-const MY_PHONE_REGEX = /^\+?6?0[-\s]?1\d[-\s]?\d{3,4}[-\s]?\d{4}$|^\+?6?0[-\s]?[3-9]\d{1}[-\s]?\d{4}[-\s]?\d{4}$/;
+export const MY_PHONE_REGEX = /^(?:\+?60|0)[-\s]?(?:11[-\s]?[0-9]{4}[-\s]?[0-9]{4}|1[02-9][-\s]?[0-9]{3}[-\s]?[0-9]{4}|3[-\s]?[0-9]{4}[-\s]?[0-9]{4}|[4-9][-\s]?[0-9]{3}[-\s]?[0-9]{4})$/;
 
 export function formatMalaysianPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
-  // Normalize leading country code
-  const local = digits.startsWith('60') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
-  if (local.startsWith('1') && local.length >= 9) {
-    // Mobile: +60-1X-XXXX XXXX
+  // Normalize leading country code or zero
+  let local = digits;
+  if (local.startsWith('60')) {
+    local = local.slice(2);
+  } else if (local.startsWith('0')) {
+    local = local.slice(1);
+  }
+
+  if (local.startsWith('11')) {
+    // 011 prefix (11 digits total: 011-XXXX XXXX -> 8 digits after 011)
+    const prefix = '11';
+    const rest = local.slice(2, 10);
+    const mid = rest.slice(0, 4);
+    const end = rest.slice(4, 8);
+    return end ? `+60-${prefix}-${mid} ${end}` : mid ? `+60-${prefix}-${mid}` : `+60-${prefix}`;
+  } else if (local.startsWith('1')) {
+    // 010, 012, 013, 014, 015, 016, 017, 018, 019 (10 digits total: 01X-XXX XXXX -> 7 digits after 01X)
     const prefix = local.slice(0, 2);
-    const mid = local.slice(2, 6);
-    const end = local.slice(6, 10);
-    return `+60-${prefix}-${mid} ${end}`;
-  } else if (local.length >= 8) {
-    // Landline: +60-X-XXXX XXXX
-    const prefix = local.slice(0, 1);
-    const mid = local.slice(1, 5);
-    const end = local.slice(5, 9);
-    return `+60-${prefix}-${mid} ${end}`;
+    const rest = local.slice(2, 9);
+    const mid = rest.slice(0, 3);
+    const end = rest.slice(3, 7);
+    return end ? `+60-${prefix}-${mid} ${end}` : mid ? `+60-${prefix}-${mid}` : `+60-${prefix}`;
+  } else if (local.startsWith('3')) {
+    // 03 landline (10 digits total: 03-XXXX XXXX -> 8 digits after 03)
+    const prefix = '3';
+    const rest = local.slice(1, 9);
+    const mid = rest.slice(0, 4);
+    const end = rest.slice(4, 8);
+    return end ? `+60-${prefix}-${mid} ${end}` : mid ? `+60-${prefix}-${mid}` : `+60-${prefix}`;
+  } else if (local.length > 0 && ['4', '5', '6', '7', '8', '9'].includes(local[0])) {
+    // 04-09 landlines (9 digits total: 0X-XXX XXXX -> 7 digits after 0X)
+    const prefix = local[0];
+    const rest = local.slice(1, 8);
+    const mid = rest.slice(0, 3);
+    const end = rest.slice(3, 7);
+    return end ? `+60-${prefix}-${mid} ${end}` : mid ? `+60-${prefix}-${mid}` : `+60-${prefix}`;
   }
   return raw;
 }
 
 export function isValidMalaysianPhone(value: string): boolean {
-  return MY_PHONE_REGEX.test(value.trim());
+  if (!value) return false;
+  const digits = value.replace(/\D/g, '');
+  let local = digits;
+  if (local.startsWith('60')) local = local.slice(2);
+  else if (local.startsWith('0')) local = local.slice(1);
+
+  if (local.startsWith('11')) {
+    return local.length === 10; // 11 + 8 digits = 10 digits
+  }
+  if (local.startsWith('1')) {
+    return local.length === 9; // 1X + 7 digits = 9 digits
+  }
+  if (local.startsWith('3')) {
+    return local.length === 9; // 3 + 8 digits = 9 digits
+  }
+  if (['4', '5', '6', '7', '8', '9'].includes(local[0])) {
+    return local.length === 8; // X + 7 digits = 8 digits
+  }
+  return false;
 }
 
-/**
- * Sanitize raw keyboard input for a phone field: strip alphabets and any
- * character that isn't a digit, '+', '-' or space. Once enough digits are
- * present, re-apply the canonical +60-XX-XXXX XXXX spacing automatically.
- */
 export function sanitizePhoneInput(raw: string): string {
   const cleaned = raw.replace(/[^\d+\-\s]/g, '');
   const digits = cleaned.replace(/\D/g, '');
-  // Auto-format only once we have a plausible number of digits, otherwise let
-  // the user keep typing without the caret jumping around.
-  if (digits.length >= 9) {
+  if (digits.length >= 8) {
     return formatMalaysianPhone(cleaned);
   }
   return cleaned;

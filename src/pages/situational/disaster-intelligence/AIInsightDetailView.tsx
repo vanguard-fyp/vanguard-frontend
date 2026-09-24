@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Users, Building2 } from 'lucide-react';
+import { ArrowLeft, Users, Building2, ShieldCheck, Activity, Cpu } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
-import { AIImpactPanel, getTopDrivers } from '../../../components/ui/situational/AIImpactPanel';
+import { AIImpactPanel, getTopDrivers, getConfidenceScore } from '../../../components/ui/situational/AIImpactPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
 import type { AIInsightDetailViewProps } from '../../../types';
 
@@ -11,6 +11,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
   const ranked = [...tracked].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore);
   const rank = ranked.findIndex((i) => i.id === incident.id) + 1;
   const drivers = getTopDrivers(incident, 2);
+  const confidence = getConfidenceScore(incident);
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="max-w-6xl mx-auto space-y-6">
@@ -25,7 +26,9 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
         <div className="absolute -right-12 -top-16 w-56 h-56 rounded-full bg-blue-500/20" />
         <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-5">
           <div>
-            <p className="text-[11px] font-bold tracking-widest uppercase text-blue-300">AI-processed disaster intelligence</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-bold tracking-widest uppercase text-blue-300">AI-processed disaster intelligence</p>
+            </div>
             <h1 className="text-2xl font-extrabold mt-2">{incident.title}</h1>
             <p className="text-sm text-slate-300 mt-2">{incident.location}, {incident.district}, {incident.state}</p>
           </div>
@@ -34,15 +37,19 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
             <DisasterBadge type="level" value={incident.disasterLevel} />
           </div>
         </div>
-        <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-3 mt-7">
+        <div className="relative grid grid-cols-2 sm:grid-cols-5 gap-3 mt-7">
           {[
-            { label: 'Priority rank', value: rank ? `#${rank} of ${ranked.length}` : '—' },
-            { label: 'AI priority score', value: `${incident.aiPriorityScore}/100` },
-            { label: 'Population impact', value: incident.affectedPopulation.toLocaleString() },
-            { label: 'Access constraint', value: `${100 - incident.accessibilityScore}/100` },
+            { label: 'Priority rank', value: rank ? `#${rank} of ${ranked.length}` : '—', icon: Cpu },
+            { label: 'AI priority score', value: `${incident.aiPriorityScore}/100`, icon: Activity },
+            { label: 'ML Confidence', value: `${confidence}%`, icon: ShieldCheck },
+            { label: 'Population impact', value: incident.affectedPopulation.toLocaleString(), icon: Users },
+            { label: 'Access constraint', value: `${100 - incident.accessibilityScore}/100`, icon: Building2 },
           ].map((metric) => (
             <div key={metric.label} className="bg-white/10 border border-white/10 rounded-xl p-3">
-              <p className="text-[10px] uppercase tracking-wide text-slate-300 font-bold">{metric.label}</p>
+              <p className="text-[10px] uppercase tracking-wide text-slate-300 font-bold flex items-center gap-1">
+                <metric.icon size={11} className="text-blue-300" />
+                <span>{metric.label}</span>
+              </p>
               <p className="text-lg font-extrabold mt-1">{metric.value}</p>
             </div>
           ))}

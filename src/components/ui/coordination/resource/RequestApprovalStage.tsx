@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { ClipboardCheck, Clock, CheckCircle, XCircle, Sparkles, Eye } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ClipboardCheck, Clock, CheckCircle, XCircle, Sparkles, Eye, X, AlertTriangle } from 'lucide-react';
 import { DisasterBadge } from '../../dashboard/DisasterBadge';
 import type { ResourceRequest, AIRequestRecommendation } from '../../../../types';
 
 interface RequestApprovalStageProps {
   requests: ResourceRequest[];
   onApprove: (id: string) => void;
-  onReject: (id: string) => void;
+  onReject: (id: string, reason?: string) => void;
   onSelectRequest?: (req: ResourceRequest) => void;
 }
 
@@ -34,20 +35,37 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
   onSelectRequest,
 }) => {
   const [_hilDecisions, setHilDecisions] = useState<Record<string, 'approved' | 'overridden'>>({});
+  const [approvingRequest, setApprovingRequest] = useState<ResourceRequest | null>(null);
+  const [rejectingRequest, setRejectingRequest] = useState<ResourceRequest | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const pendingRequests = requests.filter((r) => r.status === 'Pending Approval');
   const historicalRequests = requests.filter((r) => r.status !== 'Pending Approval');
 
-  const handleApproveWithHIL = (e: React.MouseEvent, id: string) => {
+  const handleOpenApproveModal = (e: React.MouseEvent, req: ResourceRequest) => {
     e.stopPropagation();
-    setHilDecisions((prev) => ({ ...prev, [id]: 'approved' }));
-    onApprove(id);
+    setApprovingRequest(req);
   };
 
-  const handleRejectWithHIL = (e: React.MouseEvent, id: string) => {
+  const handleConfirmApprove = () => {
+    if (!approvingRequest) return;
+    setHilDecisions((prev) => ({ ...prev, [approvingRequest.id]: 'approved' }));
+    onApprove(approvingRequest.id);
+    setApprovingRequest(null);
+  };
+
+  const handleOpenRejectModal = (e: React.MouseEvent, req: ResourceRequest) => {
     e.stopPropagation();
-    setHilDecisions((prev) => ({ ...prev, [id]: 'overridden' }));
-    onReject(id);
+    setRejectingRequest(req);
+    setRejectionReason('');
+  };
+
+  const handleConfirmReject = () => {
+    if (!rejectingRequest) return;
+    setHilDecisions((prev) => ({ ...prev, [rejectingRequest.id]: 'overridden' }));
+    onReject(rejectingRequest.id, rejectionReason);
+    setRejectingRequest(null);
+    setRejectionReason('');
   };
 
   return (
@@ -86,8 +104,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
             return (
               <div
                 key={req.id}
-                onClick={() => onSelectRequest?.(req)}
-                className="p-5 transition-colors hover:bg-slate-50/60 cursor-pointer"
+                className="p-5 transition-colors hover:bg-slate-50/60"
               >
                 <div className="flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
                   <div className="flex-1 min-w-0 space-y-2">
@@ -146,7 +163,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                   {/* Actions Column */}
                   <div className="flex flex-col gap-2 shrink-0 self-start">
                     <button
-                      onClick={(e) => handleApproveWithHIL(e, req.id)}
+                      onClick={(e) => handleOpenApproveModal(e, req)}
                       className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
                     >
                       <CheckCircle size={14} />
@@ -154,7 +171,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                     </button>
 
                     <button
-                      onClick={(e) => handleRejectWithHIL(e, req.id)}
+                      onClick={(e) => handleOpenRejectModal(e, req)}
                       className="flex items-center justify-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       <XCircle size={14} />
@@ -229,6 +246,157 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Approve Confirmation Modal */}
+      <AnimatePresence>
+        {approvingRequest && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setApprovingRequest(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-emerald-200 overflow-hidden"
+            >
+              <div className="px-6 py-4 bg-emerald-600 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle size={18} />
+                  <h3 className="text-sm font-bold">Authorize Resource Dispatch</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setApprovingRequest(null)}
+                  className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-700 transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-slate-500">{approvingRequest.requestId}</span>
+                    <span className="font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                      {approvingRequest.urgency} Urgency
+                    </span>
+                  </div>
+                  <p className="font-bold text-slate-900 text-sm">{approvingRequest.itemRequested}</p>
+                  <p className="text-slate-700 font-medium">
+                    Quantity to Allocate: <strong className="text-emerald-800">{approvingRequest.quantityRequested} {approvingRequest.unit}</strong>
+                  </p>
+                  <p className="text-slate-500 text-[11px]">
+                    Destination: <strong className="text-slate-800">{approvingRequest.district} Sector</strong> · Requested by: <strong className="text-slate-800">{approvingRequest.requestorName}</strong> ({approvingRequest.agency})
+                  </p>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Confirming this request will mark the item as <strong className="text-slate-900">Approved</strong>, stamp your authorization credentials for audit tracking, and transfer the requisition to the active allocation & dispatch pipeline.
+                </p>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setApprovingRequest(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmApprove}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
+                  >
+                    Confirm Authorization
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Reject Resource Request Modal */}
+      <AnimatePresence>
+        {rejectingRequest && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setRejectingRequest(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 overflow-hidden"
+            >
+              <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={18} />
+                  <h3 className="text-sm font-bold">Reject Resource Request</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRejectingRequest(null)}
+                  className="p-1 rounded-lg text-rose-200 hover:text-white hover:bg-rose-700 transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-slate-500">{rejectingRequest.requestId}</span>
+                    <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
+                      {rejectingRequest.urgency} Urgency
+                    </span>
+                  </div>
+                  <p className="font-bold text-slate-900 text-sm">{rejectingRequest.itemRequested}</p>
+                  <p className="text-slate-600">
+                    Quantity: <strong>{rejectingRequest.quantityRequested} {rejectingRequest.unit}</strong>
+                  </p>
+                  <p className="text-slate-500 text-[11px]">
+                    Requested by: <strong>{rejectingRequest.requestorName}</strong> ({rejectingRequest.agency}) for <strong>{rejectingRequest.district}</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Rejection Reason / Operational Notes (Optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="e.g. Insufficient regional depot stock, dispatch prioritized for critical flash flood sector..."
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-rose-600 focus:bg-white"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setRejectingRequest(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmReject}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 cursor-pointer"
+                  >
+                    Confirm Rejection
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

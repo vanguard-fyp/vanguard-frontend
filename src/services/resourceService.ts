@@ -47,22 +47,28 @@ export const resourceService = {
   /**
    * Approve a pending resource request
    */
-  approveRequest: async (requestId: string, approverName?: string): Promise<ResourceRequest> => {
+  approveRequest: async (
+    requestId: string,
+    payload?: { approver?: string; approverUserId?: string }
+  ): Promise<ResourceRequest> => {
     return apiClient.post<ResourceRequest>(
       `/resources/requests/${requestId}/approve`,
-      undefined,
-      approverName ? { 'X-Approver-Name': approverName } : undefined
+      payload,
+      payload?.approver ? { 'X-Approver-Name': payload.approver } : undefined
     );
   },
 
   /**
    * Reject a pending resource request
    */
-  rejectRequest: async (requestId: string, approverName?: string): Promise<ResourceRequest> => {
+  rejectRequest: async (
+    requestId: string,
+    payload?: { approver?: string; approverUserId?: string; rejectionReason?: string }
+  ): Promise<ResourceRequest> => {
     return apiClient.post<ResourceRequest>(
       `/resources/requests/${requestId}/reject`,
-      undefined,
-      approverName ? { 'X-Approver-Name': approverName } : undefined
+      payload,
+      payload?.approver ? { 'X-Approver-Name': payload.approver } : undefined
     );
   },
 

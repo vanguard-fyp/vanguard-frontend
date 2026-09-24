@@ -15,15 +15,18 @@ import {
   Globe,
   RefreshCw,
   ExternalLink,
+  Edit3,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
-import { useIncidents, useCreateIncident, useGlobalIncidents } from '../../../hooks';
+import { useIncidents, useCreateIncident, useUpdateIncident, useDeleteIncident, useGlobalIncidents } from '../../../hooks';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { MalaysiaLocationPicker } from '../../../components/ui/shared/MalaysiaLocationPicker';
 import { PhoneInput } from '../../../components/ui/shared/PhoneInput';
-import type { DisasterType, SeverityLevel, DisasterLevel, GdacsEvent, IncidentManagementProps } from '../../../types';
+import type { DisasterType, SeverityLevel, DisasterLevel, GdacsEvent, IncidentManagementProps, Incident } from '../../../types';
 import { GDACS_HAZARD_DEFS, SEVERITY_ORDER, statusIcons, typeIcons } from '../../../constants/situational';
 import { containerAnim, itemAnim } from '../../../constants';
 
@@ -51,6 +54,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     isFetching: isGlobalFetching,
   } = useGlobalIncidents();
   const createIncidentMutation = useCreateIncident();
+  const updateIncidentMutation = useUpdateIncident();
+  const deleteIncidentMutation = useDeleteIncident();
 
   // Scope Switcher: National EOC DB vs Global Live GDACS
   const [viewScope, setViewScope] = useState<'national' | 'global'>('national');
@@ -74,6 +79,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [newLocation, setNewLocation] = useState('');
   const [newState, setNewState] = useState('Kelantan');
   const [newDistrict, setNewDistrict] = useState('Kota Bharu');
+  const [newPostcode, setNewPostcode] = useState('');
   const [newSeverity, setNewSeverity] = useState<SeverityLevel>('High');
   const [newDisasterLevel, setNewDisasterLevel] = useState<DisasterLevel>('Level 2: State');
   const [newSourceType, setNewSourceType] = useState<
@@ -81,18 +87,46 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   >('Citizen Reported');
   const [newDescription, setNewDescription] = useState('');
   const [newReporterContact, setNewReporterContact] = useState('');
+  const [newWeatherCondition, setNewWeatherCondition] = useState('');
   const [newLat, setNewLat] = useState('6.1254');
   const [newLng, setNewLng] = useState('102.2381');
 
-  // Count active incidents (excluding resolved and rejected)
+  // Form Validation Errors (inline red span)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Duplicate Detection Workflow State
+  const [duplicateMatch, setDuplicateMatch] = useState<Incident | null>(null);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<any>(null);
+
+  // Edit Incident State (includes Disaster Management Authority Impact Assessment updates)
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSeverity, setEditSeverity] = useState<SeverityLevel>('High');
+  const [editDisasterLevel, setEditDisasterLevel] = useState<DisasterLevel>('Level 2: State');
+  const [editStatus, setEditStatus] = useState<string>('Unverified');
+  const [editDescription, setEditDescription] = useState('');
+  const [editAffectedPopulation, setEditAffectedPopulation] = useState<number>(0);
+  const [editCasualtiesCount, setEditCasualtiesCount] = useState<number>(0);
+  const [editInfrastructureDamage, setEditInfrastructureDamage] = useState<'Severe' | 'Moderate' | 'Minor' | 'None'>('None');
+  const [editAccessibilityScore, setEditAccessibilityScore] = useState<number>(50);
+  const [editWeatherCondition, setEditWeatherCondition] = useState<string>('');
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+
+  // Delete / Archive Incident State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [incidentToDelete, setIncidentToDelete] = useState<Incident | null>(null);
+
+  // Count active incidents (excluding resolved, rejected, and archived)
   const activeIncidentsCount = useMemo(() => {
-    return incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected').length;
+    return incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected' && i.status !== 'Archived').length;
   }, [incidents]);
 
   const dynamicDisasterTypes = useMemo(() => {
     const eligible =
       filterStatus === 'All'
-        ? incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected')
+        ? incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected' && i.status !== 'Archived')
         : incidents.filter((i) => i.status === filterStatus);
     const typesInDb = Array.from(new Set(eligible.map((i) => i.type))).filter(Boolean);
     return ['All', ...typesInDb];
@@ -106,6 +140,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
   const filteredIncidents = useMemo(() => {
     const base = incidents.filter((inc) => {
+      if (inc.status === 'Archived') return false;
       const matchCategory = selectedCategory === 'All' || inc.type === selectedCategory;
       const matchSearch =
         inc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -146,8 +181,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
   const displayedGlobalDisasters = filteredGlobalDisasters.slice(0, globalVisibleCount);
 
-  // Only surface hazard filters that actually have data in the live feed (consistent with the
-  // National EOC category behavior). "All" is always available; the rest appear on demand.
   const availableGdacsHazards = useMemo(() => {
     const events = globalDisasters as GdacsEvent[];
     return GDACS_HAZARD_DEFS.filter((def) => events.some((g) => def.matches(g.hazardType)));
@@ -195,53 +228,202 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     setReportModalOpen(true);
   };
 
-  const handleCreateIncidentSubmit = async (e: React.FormEvent) => {
+  const handleOpenEdit = (incident: Incident, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingIncident(incident);
+    setEditTitle(incident.title);
+    setEditSeverity(incident.severity);
+    setEditDisasterLevel(incident.disasterLevel);
+    setEditStatus(incident.status);
+    setEditDescription(incident.description);
+    setEditAffectedPopulation(incident.affectedPopulation || 0);
+    setEditCasualtiesCount(incident.casualtiesCount || 0);
+    setEditInfrastructureDamage(incident.infrastructureDamage || 'None');
+    setEditAccessibilityScore(incident.accessibilityScore ?? 50);
+    setEditWeatherCondition(incident.weatherCondition || '');
+    setEditErrors({});
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newLocation.trim()) {
-      toast.error('Please provide a valid title and location');
+    if (!editingIncident) return;
+    const errors: Record<string, string> = {};
+    if (!editTitle.trim()) errors.title = 'Incident title is required';
+    if (Object.keys(errors).length > 0) {
+      setEditErrors(errors);
       return;
     }
 
     try {
-      const latNum = parseFloat(newLat) || 6.1254;
-      const lngNum = parseFloat(newLng) || 102.2381;
-
-      await createIncidentMutation.mutateAsync({
-        title: newTitle,
-        type: newType,
-        location: newLocation,
-        state: newState,
-        district: newDistrict,
-        coordinates: [latNum, lngNum],
-        severity: newSeverity,
-        disasterLevel: newDisasterLevel,
-        occurredAt: new Date().toISOString(),
-        source:
-          newSourceType === 'Citizen Reported'
-            ? 'Citizen Report'
-            : newSourceType === 'Metrological / Sensor'
-              ? 'JPS Water Sensor'
-              : 'APM Patrol',
-        sourceType: newSourceType,
-        reportedByUserId: user?.id,
-        reporterName: user?.name || 'Citizen Reporter',
-        reporterContact: newReporterContact || '012-3456789',
-        status: 'Unverified',
-        weatherCondition: 'Heavy Monsoon Rain',
-        description: newDescription || `Incident reported via ${newSourceType} at ${newLocation}.`,
-        affectedPopulation: newSeverity === 'Critical' ? 1200 : 350,
-        infrastructureDamage: newSeverity === 'Critical' ? 'Severe' : 'Moderate',
-        accessibilityScore: 50,
-        aiPriorityScore: newSeverity === 'Critical' ? 92.0 : 75.0,
+      await updateIncidentMutation.mutateAsync({
+        id: editingIncident.id,
+        updates: {
+          title: editTitle,
+          severity: editSeverity,
+          disasterLevel: editDisasterLevel,
+          status: editStatus as any,
+          description: editDescription,
+          affectedPopulation: Number(editAffectedPopulation) || 0,
+          casualtiesCount: Number(editCasualtiesCount) || 0,
+          infrastructureDamage: editInfrastructureDamage as any,
+          accessibilityScore: Number(editAccessibilityScore) || 50,
+          weatherCondition: editWeatherCondition.trim() || undefined,
+        },
       });
+      toast.success('Incident and impact metrics updated successfully!');
+      setEditModalOpen(false);
+      setEditingIncident(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update incident');
+    }
+  };
 
+  const handleOpenDelete = (incident: Incident, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIncidentToDelete(incident);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!incidentToDelete) return;
+    try {
+      await deleteIncidentMutation.mutateAsync(incidentToDelete.id);
+      toast.success('Incident archived / removed successfully!');
+      setDeleteModalOpen(false);
+      setIncidentToDelete(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete incident');
+    }
+  };
+
+  // Main Incident Creation Handler with Duplicate Detection
+  const handleCreateIncidentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    if (!newTitle.trim()) errors.title = 'Incident title is required';
+    if (!newLocation.trim()) errors.location = 'Specific location / address is required';
+    if (!newDistrict.trim()) errors.district = 'District is required';
+    if (!newPostcode.trim()) errors.postcode = 'Postcode is required for exact location dispatch';
+    if (!newDescription.trim()) errors.description = 'Incident description is required';
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({});
+
+    const latNum = parseFloat(newLat) || 6.1254;
+    const lngNum = parseFloat(newLng) || 102.2381;
+
+    const payload = {
+      title: newTitle,
+      type: newType,
+      location: newLocation,
+      state: newState,
+      district: newDistrict,
+      postcode: newPostcode.trim(),
+      coordinates: [latNum, lngNum] as [number, number],
+      severity: newSeverity,
+      disasterLevel: newDisasterLevel,
+      occurredAt: new Date().toISOString(),
+      source:
+        newSourceType === 'Citizen Reported'
+          ? 'Citizen Report'
+          : newSourceType === 'Metrological / Sensor'
+            ? 'JPS Water Sensor'
+            : 'APM Patrol',
+      sourceType: newSourceType,
+      reportedByUserId: user?.id,
+      reporterName: user?.name || 'Disaster Management Authority',
+      reporterContact: newReporterContact || undefined,
+      status: 'Verified' as const,
+      weatherCondition: newWeatherCondition.trim() || 'Normal / Clear',
+      description: newDescription,
+      affectedPopulation: 0,
+      casualtiesCount: 0,
+      infrastructureDamage: 'None' as const,
+      accessibilityScore: 100,
+      aiPriorityScore: undefined,
+    };
+
+    // Step 1: Detect potential duplicate against active incidents
+    const cleanNewLoc = newLocation.toLowerCase();
+    const cleanNewDist = newDistrict.toLowerCase();
+    const cleanNewState = newState.toLowerCase();
+
+    const existingMatch = incidents.find((inc) => {
+      if (inc.status === 'Resolved' || inc.status === 'Rejected') return false;
+      const sameType = inc.type === newType;
+      const sameState = inc.state.toLowerCase() === cleanNewState;
+      const sameDistrict = inc.district.toLowerCase() === cleanNewDist;
+      const locMatch =
+        inc.location.toLowerCase().includes(cleanNewLoc) ||
+        cleanNewLoc.includes(inc.location.toLowerCase());
+
+      return sameType && sameState && (sameDistrict || locMatch);
+    });
+
+    if (existingMatch) {
+      // Step 1.1: System detects potential duplicate and triggers review modal
+      setDuplicateMatch(existingMatch);
+      setPendingPayload(payload);
+      setShowDuplicateModal(true);
+      return;
+    }
+
+    // Direct creation if no duplicate
+    await executeCreation(payload);
+  };
+
+  const executeCreation = async (payload: any) => {
+    try {
+      await createIncidentMutation.mutateAsync(payload);
       toast.success('Disaster report created successfully!');
       setReportModalOpen(false);
+      setShowDuplicateModal(false);
+      setDuplicateMatch(null);
+      setPendingPayload(null);
       setNewTitle('');
       setNewLocation('');
       setNewDescription('');
     } catch (err: any) {
       toast.error(err.message || 'Failed to create incident report');
+    }
+  };
+
+  // Step 3.1: Confirm as Duplicate (Option A: Update existing incident)
+  const handleDuplicateUpdateExisting = () => {
+    if (!duplicateMatch) return;
+    setShowDuplicateModal(false);
+    setReportModalOpen(false);
+    // Open edit modal on existing record
+    setEditingIncident(duplicateMatch);
+    setEditTitle(duplicateMatch.title);
+    setEditSeverity(duplicateMatch.severity);
+    setEditDisasterLevel(duplicateMatch.disasterLevel);
+    setEditStatus(duplicateMatch.status);
+    setEditDescription(
+      `${duplicateMatch.description}\n[Update]: Additional citizen report noted matching this event.`
+    );
+    setEditErrors({});
+    setEditModalOpen(true);
+    toast.info(`Updating existing incident ${duplicateMatch.displayId || duplicateMatch.id}`);
+  };
+
+  // Step 3.1: Confirm as Duplicate (Option B: Dismiss and return to incident management)
+  const handleDuplicateConfirmAndReturn = () => {
+    setShowDuplicateModal(false);
+    setDuplicateMatch(null);
+    setPendingPayload(null);
+    setReportModalOpen(false);
+    toast.info('Duplicate creation prevented. Returned to Incident Management.');
+  };
+
+  // Step 3.2: Determined different -> proceed with creating new incident
+  const handleDuplicateProceedAsNew = async () => {
+    if (pendingPayload) {
+      await executeCreation(pendingPayload);
     }
   };
 
@@ -464,12 +646,32 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                       </div>
 
                       <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
-                        <span>
-                          Disaster Level: <strong>{incident.disasterLevel}</strong>
-                        </span>
-                        <span className="text-blue-600 font-bold flex items-center gap-0.5 group-hover:translate-x-1 transition-transform">
-                          View Details <ChevronRight size={13} />
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span>
+                            Level: <strong className="text-slate-700">{incident.disasterLevel.replace('Level ', 'L')}</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenEdit(incident, e)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Incident"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenDelete(incident, e)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Archive / Delete Incident"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                          <span className="text-blue-600 font-bold flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform ml-1">
+                            View <ChevronRight size={13} />
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -740,22 +942,28 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 </button>
               </div>
 
-              <form onSubmit={handleCreateIncidentSubmit} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+              <form onSubmit={handleCreateIncidentSubmit} noValidate className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Incident Title *</label>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">Incident Title <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    required
+                    onChange={(e) => {
+                      setNewTitle(e.target.value);
+                      if (formErrors.title) setFormErrors((p) => ({ ...p, title: '' }));
+                    }}
                     placeholder="e.g. Flash Flooding at Jalan Merbau Residential Sector"
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
+                    className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white ${formErrors.title ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                      }`}
                   />
+                  {formErrors.title && (
+                    <span className="text-red-500 text-xs mt-1 block">{formErrors.title}</span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Type</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Type <span className="text-red-500">*</span></label>
                     <select
                       value={newType}
                       onChange={(e) => setNewType(e.target.value as DisasterType)}
@@ -770,7 +978,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Source Origin</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Source Origin<span className="text-red-500">*</span></label>
                     <select
                       value={newSourceType}
                       onChange={(e) => setNewSourceType(e.target.value as any)}
@@ -786,7 +994,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Severity</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Severity<span className="text-red-500">*</span></label>
                     <select
                       value={newSeverity}
                       onChange={(e) => setNewSeverity(e.target.value as SeverityLevel)}
@@ -799,7 +1007,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Level (Directive 20)</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Level <span className="text-red-500">*</span></label>
                     <select
                       value={newDisasterLevel}
                       onChange={(e) => setNewDisasterLevel(e.target.value as DisasterLevel)}
@@ -818,14 +1026,31 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                     state={newState}
                     onStateChange={setNewState}
                     district={newDistrict}
-                    onDistrictChange={setNewDistrict}
+                    onDistrictChange={(d) => {
+                      setNewDistrict(d);
+                      if (formErrors.district) setFormErrors((p) => ({ ...p, district: '' }));
+                    }}
+                    postcode={newPostcode}
+                    onPostcodeChange={setNewPostcode}
                     location={newLocation}
-                    onLocationChange={setNewLocation}
+                    onLocationChange={(l) => {
+                      setNewLocation(l);
+                      if (formErrors.location) setFormErrors((p) => ({ ...p, location: '' }));
+                    }}
                     lat={newLat}
                     onLatChange={setNewLat}
                     lng={newLng}
                     onLngChange={setNewLng}
                   />
+                  {formErrors.location && (
+                    <span className="text-red-500 text-xs mt-1 block">{formErrors.location}</span>
+                  )}
+                  {formErrors.district && (
+                    <span className="text-red-500 text-xs mt-1 block">{formErrors.district}</span>
+                  )}
+                  {formErrors.postcode && (
+                    <span className="text-red-500 text-xs mt-1 block">{formErrors.postcode}</span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -836,24 +1061,35 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                     placeholder="+60-12-3456 7890"
                   />
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Weather Condition</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Weather Condition (Optional)</label>
                     <input
                       type="text"
-                      defaultValue="Heavy Monsoon Rain"
+                      value={newWeatherCondition}
+                      onChange={(e) => setNewWeatherCondition(e.target.value)}
+                      placeholder='e.g. Heavy Rain / Thunderstorm / Clear'
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Description / Observations</label>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Description / Observations <span className="text-red-500">*</span>
+                  </label>
                   <textarea
                     rows={3}
                     value={newDescription}
-                    onChange={(e) => setNewDescription(e.target.value)}
+                    onChange={(e) => {
+                      setNewDescription(e.target.value);
+                      if (formErrors.description) setFormErrors((p) => ({ ...p, description: '' }));
+                    }}
                     placeholder="Describe water levels, trapped civilians, road access conditions, evacuation center needs..."
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
+                    className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white ${formErrors.description ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                      }`}
                   />
+                  {formErrors.description && (
+                    <span className="text-red-500 text-xs mt-1 block">{formErrors.description}</span>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
@@ -873,6 +1109,410 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL 2: DUPLICATE INCIDENT DETECTED REVIEW MODAL (Specification Flows 1.1 -> 3.2) ── */}
+      <AnimatePresence>
+        {showDuplicateModal && duplicateMatch && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setShowDuplicateModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-amber-300 overflow-hidden"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 bg-amber-500 text-slate-950 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-900 text-white flex items-center justify-center font-bold shadow-xs">
+                    <AlertTriangle size={18} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black tracking-tight">Potential Duplicate Incident Detected</h3>
+                    <p className="text-[11px] font-medium text-slate-950/80">
+                      An active {duplicateMatch.type} record already exists in {duplicateMatch.district}, {duplicateMatch.state}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDuplicateModal(false)}
+                  className="p-1 rounded-lg text-slate-950/60 hover:text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 leading-relaxed">
+                  <p className="font-semibold mb-1">Disaster Management Authority Duplicate Review Protocol:</p>
+                  <p>
+                    The system detected an existing active incident record that closely matches your submission location and disaster type.
+                    Please review both records below and choose whether to consolidate updates into the existing incident, cancel this submission, or proceed as a distinct new disaster event.
+                  </p>
+                </div>
+
+                {/* Side-by-Side Comparison */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Left: Existing Active Incident */}
+                  <div className="bg-slate-50 border-2 border-amber-300/80 rounded-xl p-4 space-y-2.5 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                        Existing Active Record
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-700">
+                        {duplicateMatch.displayId || duplicateMatch.id}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">{duplicateMatch.title}</h4>
+                      <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+                        <MapPin size={12} className="text-slate-400 shrink-0" />
+                        <span>{duplicateMatch.location}, {duplicateMatch.district}, {duplicateMatch.state}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-200/80 text-xs">
+                      <DisasterBadge type="severity" value={duplicateMatch.severity} />
+                      <span className="text-[11px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {duplicateMatch.status}
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-mono ml-auto">
+                        Level: {duplicateMatch.disasterLevel.replace('Level ', 'L')}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-600 line-clamp-3 bg-white p-2 rounded-lg border border-slate-200/80 text-[11px]">
+                      {duplicateMatch.description}
+                    </p>
+
+                    <div className="text-[10px] text-slate-400 font-medium">
+                      Reported by: <strong>{duplicateMatch.reporterName || 'Field Team'}</strong> ({duplicateMatch.sourceType || duplicateMatch.source})
+                    </div>
+                  </div>
+
+                  {/* Right: New Submission */}
+                  <div className="bg-blue-50/40 border border-blue-200 rounded-xl p-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                        New Submission (Proposed)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-blue-600">INC-PENDING</span>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">{newTitle}</h4>
+                      <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+                        <MapPin size={12} className="text-blue-500 shrink-0" />
+                        <span>{newLocation}, {newDistrict}, {newState}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-blue-100 text-xs">
+                      <DisasterBadge type="severity" value={newSeverity} />
+                      <span className="text-[11px] font-semibold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
+                        Unverified
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-mono ml-auto">
+                        Level: {newDisasterLevel.replace('Level ', 'L')}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-600 line-clamp-3 bg-white p-2 rounded-lg border border-blue-100 text-[11px]">
+                      {newDescription || 'No description entered.'}
+                    </p>
+
+                    <div className="text-[10px] text-slate-400 font-medium">
+                      Reporter: <strong>{user?.name || 'Current Officer'}</strong> ({newSourceType})
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions Grid (Specification Flow 2.1, 3.1, 3.2) */}
+                <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDuplicateConfirmAndReturn}
+                    className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Confirm Duplicate (Cancel &amp; Return)
+                  </button>
+
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={handleDuplicateUpdateExisting}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-colors shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Edit3 size={13} />
+                      <span>Update Existing Incident</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDuplicateProceedAsNew}
+                      className="flex-1 sm:flex-initial px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-colors shadow-md shadow-blue-600/20 cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Plus size={13} />
+                      <span>Proceed as New Incident</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL 3: QUICK EDIT INCIDENT MODAL ── */}
+      <AnimatePresence>
+        {editModalOpen && editingIncident && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setEditModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            >
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Edit3 size={16} className="text-blue-400" />
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Update Incident Record</h3>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      {editingIncident.displayId || editingIncident.id} · {editingIncident.type}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit} noValidate className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">Incident Title <span className="!text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => {
+                      setEditTitle(e.target.value);
+                      if (editErrors.title) setEditErrors({});
+                    }}
+                    className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white ${editErrors.title ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                      }`}
+                  />
+                  {editErrors.title && (
+                    <span className="text-red-500 text-xs mt-1 block">{editErrors.title}</span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Severity</label>
+                    <select
+                      value={editSeverity}
+                      onChange={(e) => setEditSeverity(e.target.value as SeverityLevel)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="Critical">Critical</option>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Status</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="Unverified">Unverified</option>
+                      <option value="Verified">Verified</option>
+                      <option value="Responding">Responding</option>
+                      <option value="Resolved">Resolved</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Level (Directive 20)</label>
+                    <select
+                      value={editDisasterLevel}
+                      onChange={(e) => setEditDisasterLevel(e.target.value as DisasterLevel)}
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+                    >
+                      <option value="Level 1: District">Level 1: District</option>
+                      <option value="Level 2: State">Level 2: State</option>
+                      <option value="Level 3: Federal">Level 3: Federal</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Weather Condition</label>
+                    <input
+                      type="text"
+                      value={editWeatherCondition}
+                      onChange={(e) => setEditWeatherCondition(e.target.value)}
+                      placeholder="e.g. Heavy Rain / Clear"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Impact Assessment Section (Updated by Disaster Management Authority) */}
+                <div className="pt-3 border-t border-slate-200">
+                  <p className="text-[11px] font-bold text-blue-900 uppercase tracking-wider mb-2">
+                    Official Impact Assessment Metrics
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">Impacted Population</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editAffectedPopulation}
+                        onChange={(e) => setEditAffectedPopulation(parseInt(e.target.value, 10) || 0)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">Confirmed Casualties</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editCasualtiesCount}
+                        onChange={(e) => setEditCasualtiesCount(parseInt(e.target.value, 10) || 0)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">Infrastructure Risk</label>
+                      <select
+                        value={editInfrastructureDamage}
+                        onChange={(e) => setEditInfrastructureDamage(e.target.value as any)}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+                      >
+                        <option value="None">None</option>
+                        <option value="Minor">Minor</option>
+                        <option value="Moderate">Moderate</option>
+                        <option value="Severe">Severe</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800 mb-1">Access Score (0 - 100)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={editAccessibilityScore}
+                        onChange={(e) => setEditAccessibilityScore(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">Operational Notes / Description</label>
+                  <textarea
+                    rows={3}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateIncidentMutation.isPending}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 cursor-pointer"
+                  >
+                    {updateIncidentMutation.isPending ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL 4: DELETE / ARCHIVE CONFIRMATION MODAL ── */}
+      <AnimatePresence>
+        {deleteModalOpen && incidentToDelete && (
+          <div
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+            onClick={() => setDeleteModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-red-200 overflow-hidden"
+            >
+              <div className="p-6 space-y-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold">
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Archive / Remove Incident</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Are you sure you want to remove <strong>{incidentToDelete.title}</strong> (
+                    <span className="font-mono">{incidentToDelete.displayId || incidentToDelete.id}</span>
+                    )? This will remove it from active national EOC operational dashboards.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalOpen(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDelete}
+                    disabled={deleteIncidentMutation.isPending}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-md shadow-red-600/20 cursor-pointer"
+                  >
+                    {deleteIncidentMutation.isPending ? 'Archiving...' : 'Confirm Archive'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
