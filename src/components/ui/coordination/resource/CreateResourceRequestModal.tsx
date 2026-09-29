@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Package, Send, MapPin, Search, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { X, Package, Send, MapPin, Search, AlertCircle, CheckCircle2, Sparkles, ThumbsUp } from 'lucide-react';
 import { useCreateResourceRequest, useInventory } from '../../../../hooks';
 import { useToast } from '../../../../context/ToastContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -9,6 +9,7 @@ import type { SeverityLevel, AgencyFilter, ResourceItem } from '../../../../type
 interface CreateResourceRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialItem?: ResourceItem | null;
 }
 
 interface NominatimPlace {
@@ -20,6 +21,7 @@ interface NominatimPlace {
 export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProps> = ({
   isOpen,
   onClose,
+  initialItem = null,
 }) => {
   const createMutation = useCreateResourceRequest();
   const { data: inventory = [] } = useInventory();
@@ -37,7 +39,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
   const [isSearchingDistrict, setIsSearchingDistrict] = useState(false);
   const [agency, setAgency] = useState<AgencyFilter>((user?.agency as AgencyFilter) || 'APM');
   const [justification, setJustification] = useState('');
-  
+
   // Validation errors
   const [itemError, setItemError] = useState('');
   const [districtError, setDistrictError] = useState('');
@@ -48,7 +50,26 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
 
   const selectedCatalogItem: ResourceItem | undefined = inventory.find((i) => i.id === selectedItemId);
 
-  // When catalog item changes, update unit
+  useEffect(() => {
+    if (!isOpen || !initialItem) return;
+    setSelectedItemId(initialItem.id);
+    setCustomItemName(initialItem.name);
+    setUnit(initialItem.unit || 'Units');
+    setQuantity(Math.max(initialItem.min_threshold, 1));
+    setUrgency(initialItem.status === 'Critical' ? 'Critical' : initialItem.status === 'Low Stock' ? 'High' : 'Medium');
+  }, [initialItem, isOpen]);
+
+  const aiRecommendation = selectedCatalogItem && {
+    quantity: Math.max(selectedCatalogItem.min_threshold, 1),
+    urgency: selectedCatalogItem.status === 'Critical' ? 'Critical' as const : selectedCatalogItem.status === 'Low Stock' ? 'High' as const : 'Medium' as const,
+    confidence: selectedCatalogItem.status === 'Critical' ? 96 : selectedCatalogItem.status === 'Low Stock' ? 88 : 76,
+    rationale: selectedCatalogItem.status === 'Critical'
+      ? 'Mock HIL advisory: stock is depleted; prioritise an immediate replenishment request.'
+      : selectedCatalogItem.status === 'Low Stock'
+        ? 'Mock HIL advisory: stock is below its safety threshold; replenish before the next operational surge.'
+        : 'Mock HIL advisory: maintain the configured safety buffer through routine replenishment.',
+  };
+
   const handleItemSelect = (itemId: string) => {
     setSelectedItemId(itemId);
     if (itemId === 'OTHER') {
@@ -98,7 +119,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
     if (attemptedSubmit) setDistrictError('');
   };
 
-  const isStockExceeded = selectedCatalogItem && quantity > selectedCatalogItem.stockLevel;
+  const isStockExceeded = selectedCatalogItem && quantity > selectedCatalogItem.stock_level;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,7 +133,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
       hasError = true;
     } else if (isStockExceeded) {
       setItemError(
-        `Requested quantity (${quantity}) exceeds current available warehouse stock (${selectedCatalogItem.stockLevel} ${selectedCatalogItem.unit}). Reduce quantity or select another depot item.`
+        `Requested quantity (${quantity}) exceeds current available warehouse stock (${selectedCatalogItem.stock_level} ${selectedCatalogItem.unit}). Reduce quantity or select another depot item.`
       );
       hasError = true;
     } else {
@@ -137,23 +158,20 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
 
     try {
       await createMutation.mutateAsync({
-        resourceItemId: selectedCatalogItem ? selectedCatalogItem.id : undefined,
-        itemRequested: finalItemName,
-        resourceCategory: selectedCatalogItem ? selectedCatalogItem.category : 'General',
-        quantityRequested: Number(quantity) || 1,
+        resource_type_id: selectedCatalogItem?.resource_type_id,
+        warehouse_id: selectedCatalogItem?.warehouse_id,
+        quantity_requested: Number(quantity) || 1,
         unit: selectedCatalogItem ? selectedCatalogItem.unit : unit,
         urgency,
         district: district.trim(),
-        requestUserId: user?.id,
+        requested_by_user_id: user?.id,
         agency,
         justification: justification.trim(),
         status: 'Pending Approval',
-        timestamp: new Date().toISOString(),
       } as any);
 
       toast.success('Resource requisition submitted successfully!');
       onClose();
-      // Reset
       setSelectedItemId('');
       setCustomItemName('');
       setDistrict('');
@@ -216,7 +234,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
                 <option value="">-- Choose item from central warehouse catalog --</option>
                 {inventory.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name} ({item.category}) — Avail: {item.stockLevel} {item.unit} ({item.warehouseLocation})
+                    {item.name} ({item.category}) — Avail: {item.stock_level} {item.unit}
                   </option>
                 ))}
                 <option value="OTHER">Custom / Non-catalog item</option>
@@ -241,23 +259,42 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
               </div>
             )}
 
+            {aiRecommendation && (
+              <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-1.5 font-bold text-violet-900"><Sparkles size={13} /> Mock HIL recommendation</span>
+                  <span className="font-mono font-bold text-violet-700">{aiRecommendation.confidence}% confidence</span>
+                </div>
+                <p className="mt-1.5 text-slate-700">{aiRecommendation.rationale}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuantity(aiRecommendation.quantity);
+                    setUrgency(aiRecommendation.urgency);
+                  }}
+                  className="mt-2 inline-flex items-center gap-1 rounded-md bg-violet-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-violet-700"
+                >
+                  <ThumbsUp size={12} /> Apply {aiRecommendation.quantity} {selectedCatalogItem.unit} · {aiRecommendation.urgency}
+                </button>
+              </div>
+            )}
+
             {/* Availability Badge */}
             {selectedCatalogItem && (
               <div className={`p-3 rounded-lg border text-xs flex items-center justify-between ${
-                selectedCatalogItem.stockLevel > 0 
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                selectedCatalogItem.stock_level > 0
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                   : 'bg-rose-50 border-rose-200 text-rose-800'
               }`}>
                 <div className="flex items-center gap-2">
-                  {selectedCatalogItem.stockLevel > 0 ? (
+                  {selectedCatalogItem.stock_level > 0 ? (
                     <CheckCircle2 size={15} className="text-emerald-600" />
                   ) : (
                     <AlertCircle size={15} className="text-rose-600" />
                   )}
                   <div>
                     <span className="font-bold">Depot Stock: </span>
-                    <span>{selectedCatalogItem.stockLevel} {selectedCatalogItem.unit}</span>
-                    <span className="text-[10px] opacity-75 ml-1">({selectedCatalogItem.warehouseLocation})</span>
+                    <span>{selectedCatalogItem.stock_level} {selectedCatalogItem.unit}</span>
                   </div>
                 </div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-emerald-200">
@@ -283,7 +320,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
                 />
                 {isStockExceeded && (
                   <span className="block mt-1 text-[11px] text-amber-600 font-medium">
-                    ⚠️ Note: Quantity ({quantity}) exceeds current warehouse stock ({selectedCatalogItem?.stockLevel} {selectedCatalogItem?.unit}).
+                    ⚠️ Note: Quantity ({quantity}) exceeds current warehouse stock ({selectedCatalogItem?.stock_level} {selectedCatalogItem?.unit}).
                   </span>
                 )}
               </div>
@@ -335,7 +372,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
               </div>
             </div>
 
-            {/* Target Sector / Depot Location — with OSM search */}
+            {/* Target Sector — with OSM search */}
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">
                 Target Sector / Delivery Destination <span className="text-rose-500">*</span>

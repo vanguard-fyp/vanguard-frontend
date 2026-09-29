@@ -29,7 +29,7 @@ export interface LayerGroup {
   items: LayerDef[];
 }
 
-export type SitrepTab = 'dashboard' | 'executive' | 'tactical' | 'operations';
+export type SitrepTab = 'dashboard' | 'operations';
 
 export interface AIInsightDetailViewProps {
   incident: Incident;

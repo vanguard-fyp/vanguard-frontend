@@ -71,6 +71,7 @@ export function useApproveResourceRequest() {
       resourceService.approveRequest(id, { approver, approverUserId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: RESOURCE_KEYS.requests });
+      qc.invalidateQueries({ queryKey: RESOURCE_KEYS.inventory });
     },
   });
 }

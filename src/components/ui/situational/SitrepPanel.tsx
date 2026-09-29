@@ -8,16 +8,15 @@ import {
   CloudRain,
   ShieldAlert,
   AlertTriangle,
-  Printer,
   Activity,
   TrendingUp,
   Navigation,
-  Download,
   ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Circle } from 'react-leaflet';
 import { DisasterBadge } from '../dashboard/DisasterBadge';
-import { useRescueTeams, useMissions, useActivityFeed } from '../../../hooks';
+import { useRescueTeams, useMissions, useIncidentLogs } from '../../../hooks';
 import type { Incident, SitrepTab } from '../../../types';
 import { severityHex, statusConfig, activityTypeStyle, TABS } from '../../../constants';
 import { formatDateTime } from '../../../utils/dateFormatter';
@@ -30,94 +29,139 @@ interface SitrepPanelProps {
   onViewFullAnalysis: (incident: Incident) => void;
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-tabs (Light Theme)
+// Tactical SITREP Tab (Unified Dashboard + Spatial Map)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   const { data: rescueTeams = [] } = useRescueTeams();
   const { data: missions = [] } = useMissions();
-  const assignedTeams = rescueTeams.filter(t => t.assignedIncidentId === incident.id);
-  const assignedMissions = missions.filter(m => m.incidentId === incident.id);
-  const scoreColor =
-    incident.aiPriorityScore >= 85
-      ? '#ef4444'
-      : incident.aiPriorityScore >= 65
-        ? '#f97316'
-        : '#eab308';
+  const [lat, lng] = incident.coordinates || [4.2105, 101.9758];
 
+  const assignedTeams = rescueTeams.filter(t => t.status === 'Deployed' || t.status === 'En Route');
+  const assignedMissions = missions.filter(m => m.incident_id === incident.id);
   const stat = statusConfig[incident.status] ?? statusConfig.Unverified;
 
   return (
     <div className="space-y-4">
       {/* Priority Progress & Status Banner */}
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
         <div className="flex items-center justify-between">
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border ${stat.bg} ${stat.color}`}>
             {stat.icon}
             {incident.status.toUpperCase()}
           </span>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-bold text-slate-500">AI Score:</span>
-            <span className="text-sm font-extrabold" style={{ color: scoreColor }}>
-              {incident.aiPriorityScore}/100
+            <span className="text-xs font-bold text-slate-500">AI Priority:</span>
+            <span className="text-sm font-extrabold text-blue-700">
+              {incident.ai_priority_score}/100
             </span>
           </div>
         </div>
-        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${incident.aiPriorityScore}%`, background: scoreColor }}
+            className="h-full rounded-full transition-all duration-700 bg-blue-600"
+            style={{ width: `${incident.ai_priority_score}%` }}
           />
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* Structured Operational KPIs (Consistent Slate/Navy Theme) */}
       <div className="grid grid-cols-2 gap-2.5">
-        <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1 text-blue-700">
-            <Users size={14} />
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-1 text-slate-600">
+            <Users size={14} className="text-blue-600" />
             <p className="text-[10px] font-bold uppercase tracking-wide">Affected Population</p>
           </div>
-          <p className="text-lg font-extrabold text-slate-900">{incident.affectedPopulation.toLocaleString()}</p>
+          <p className="text-base font-extrabold text-slate-900">{incident.affected_population.toLocaleString()}</p>
         </div>
 
-        <div className="bg-red-50/60 border border-red-100 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1 text-red-700">
-            <AlertTriangle size={14} />
-            <p className="text-[10px] font-bold uppercase tracking-wide">Casualties Count</p>
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-1 text-slate-600">
+            <AlertTriangle size={14} className="text-slate-800" />
+            <p className="text-[10px] font-bold uppercase tracking-wide">Casualties Recorded</p>
           </div>
-          <p className="text-lg font-extrabold text-slate-900">{incident.casualtiesCount}</p>
+          <p className="text-base font-extrabold text-slate-900">{incident.casualties_count}</p>
         </div>
 
-        <div className="bg-amber-50/60 border border-amber-100 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1 text-amber-700">
-            <Navigation size={14} />
-            <p className="text-[10px] font-bold uppercase tracking-wide">Accessibility Index</p>
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-1 text-slate-600">
+            <Navigation size={14} className="text-blue-600" />
+            <p className="text-[10px] font-bold uppercase tracking-wide">Accessibility Score</p>
           </div>
-          <p className="text-lg font-extrabold text-slate-900">{incident.accessibilityScore}/100</p>
+          <p className="text-base font-extrabold text-slate-900">{incident.accessibility_score}/100</p>
         </div>
 
-        <div className="bg-slate-100/70 border border-slate-200 rounded-xl p-3">
-          <div className="flex items-center gap-1.5 mb-1 text-slate-700">
-            <Building2 size={14} />
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-1 text-slate-600">
+            <Building2 size={14} className="text-slate-800" />
             <p className="text-[10px] font-bold uppercase tracking-wide">Infrastructure Damage</p>
           </div>
-          <p className="text-sm font-extrabold text-slate-900 mt-1">{incident.infrastructureDamage}</p>
+          <p className="text-xs font-bold text-slate-900 mt-1">{incident.infrastructure_damage}</p>
         </div>
       </div>
 
-      {/* Weather & Meteorological Context */}
+      {/* Interactive Tactical Mini-Map Section */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+        <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <MapPin size={13} className="text-blue-600" />
+            <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider">Tactical Geo-Sector</span>
+          </div>
+          <span className="font-mono text-[10px] text-slate-500 font-semibold">
+            {lat.toFixed(4)}° N, {lng.toFixed(4)}° E
+          </span>
+        </div>
+
+        <div style={{ height: 180 }}>
+          <MapContainer
+            key={incident.id}
+            center={[lat, lng]}
+            zoom={10}
+            style={{ width: '100%', height: '100%' }}
+            zoomControl={false}
+            scrollWheelZoom={false}
+          >
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; OpenStreetMap'
+            />
+            <Circle
+              center={[lat, lng]}
+              radius={8000}
+              fillColor="#2563eb"
+              fillOpacity={0.15}
+              stroke={true}
+              color="#1d4ed8"
+              weight={1.5}
+            />
+            <CircleMarker
+              center={[lat, lng]}
+              radius={7}
+              fillColor="#1e40af"
+              fillOpacity={1}
+              stroke={true}
+              color="#ffffff"
+              weight={2}
+            >
+              <Tooltip permanent={false} direction="top">
+                <span className="font-bold text-xs">{incident.title}</span>
+              </Tooltip>
+            </CircleMarker>
+          </MapContainer>
+        </div>
+      </div>
+
+      {/* Meteorological & Situation Narrative */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
         <div className="flex items-center gap-2 text-slate-800">
-          <CloudRain size={16} className="text-blue-600" />
-          <span className="text-xs font-bold">{incident.weatherCondition}</span>
+          <CloudRain size={15} className="text-blue-600" />
+          <span className="text-xs font-bold">{incident.weather_condition || 'Normal conditions recorded'}</span>
         </div>
         <p className="text-xs text-slate-600 leading-relaxed">{incident.description}</p>
       </div>
 
-      {/* Assigned Response Squads */}
+      {/* Deployed Response Units */}
       <div>
         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
           <ShieldAlert size={14} className="text-blue-600" />
@@ -136,11 +180,11 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
               >
                 <div>
                   <p className="text-xs font-bold text-slate-900">{t.name}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{t.agency} · {t.currentLocation}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{t.agency} · {t.current_location}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs font-bold text-blue-600">{t.personnelCount} pax</span>
-                  <p className="text-[10px] font-semibold text-emerald-600">{t.status}</p>
+                  <span className="text-xs font-bold text-blue-700">{t.personnel_count} pax</span>
+                  <p className="text-[10px] font-semibold text-slate-600">{t.status}</p>
                 </div>
               </div>
             ))}
@@ -148,11 +192,11 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
         )}
       </div>
 
-      {/* Active Missions */}
+      {/* Active Operations & Missions */}
       <div>
         <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-          <TrendingUp size={14} className="text-amber-600" />
-          Active Operations & Missions ({assignedMissions.length})
+          <TrendingUp size={14} className="text-slate-700" />
+          Active Operations &amp; Missions ({assignedMissions.length})
         </h4>
         {assignedMissions.length === 0 ? (
           <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200">
@@ -169,7 +213,7 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
                   <p className="text-xs font-bold text-slate-900">{m.title}</p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{m.objective}</p>
                 </div>
-                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md shrink-0">
+                <span className="text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md shrink-0">
                   {m.status}
                 </span>
               </div>
@@ -181,377 +225,73 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   );
 };
 
-/** EXECUTIVE TAB: Official SITREP PDF & AI Poster — downloads from backend */
-const ExecutiveTab: React.FC<{ incident: Incident }> = ({ incident }) => {
-  const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-  const handleDownloadSitrep = () => window.open(`${BASE_URL}/incidents/${incident.id}/sitrep-pdf`, '_blank');
-  const handleDownloadPoster = () => window.open(`${BASE_URL}/incidents/${incident.id}/sitrep-poster`, '_blank');
+// ─────────────────────────────────────────────────────────────────────────────
+// Live Ops Feed Tab
+// ─────────────────────────────────────────────────────────────────────────────
 
-  return (
-    <div className="space-y-4">
-      {/* Export action bar */}
-      <div className="flex gap-2">
-        <button
-          onClick={handleDownloadSitrep}
-          className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
-        >
-          <Printer size={14} /> Official NADMA SITREP PDF
-        </button>
-        <button
-          onClick={handleDownloadPoster}
-          className="flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg border border-amber-400 transition-colors cursor-pointer"
-        >
-          <Download size={14} /> AI Poster
-        </button>
-      </div>
-
-      {/* Official Government Template View */}
-      <div
-        id="malaysia-gov-sitrep-print"
-        className="bg-white border border-slate-300 rounded-xl p-5 shadow-sm space-y-4 text-slate-900 font-sans"
-      >
-        {/* Government Header */}
-        <div className="border-b-2 border-slate-800 pb-3 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="size-5 text-blue-900" />
-              <div>
-                <p className="text-[10px] font-extrabold tracking-wider uppercase text-blue-950">
-                  AGENSI PENGURUSAN BENCANA NEGARA (NADMA)
-                </p>
-                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">
-                  JABATAN PERDANA MENTERI · MALAYSIA
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="inline-block px-2 py-0.5 bg-red-100 text-red-800 text-[9px] font-extrabold uppercase rounded">
-              TERHAD / RESTRICTED
-            </span>
-            <p className="text-[9px] font-mono text-slate-500 mt-1">REF: {incident.displayId}</p>
-          </div>
-        </div>
-
-        {/* Report Subject */}
-        <div>
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">LAPORAN SITUASI BENCANA (SITREP)</p>
-          <h2 className="text-base font-extrabold text-slate-900 mt-0.5">{incident.title}</h2>
-          <p className="text-xs font-medium text-slate-600 mt-0.5">
-            LOKASI: {incident.location.toUpperCase()}, {incident.district.toUpperCase()}, {incident.state.toUpperCase()}
-          </p>
-        </div>
-
-        {/* Structured Metrics Table */}
-        <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
-          <div>
-            <p className="text-[9px] font-bold text-slate-500 uppercase">Tarikh / Masa</p>
-            <p className="text-xs font-extrabold text-slate-900 mt-0.5">{formatDateTime(incident.occurredAt)}</p>
-          </div>
-          <div>
-            <p className="text-[9px] font-bold text-slate-500 uppercase">Tahap Bencana</p>
-            <p className="text-xs font-extrabold text-blue-800 mt-0.5">{incident.disasterLevel}</p>
-          </div>
-          <div>
-            <p className="text-[9px] font-bold text-slate-500 uppercase">Tahap Keparahan</p>
-            <p className="text-xs font-extrabold text-red-600 mt-0.5">{incident.severity}</p>
-          </div>
-        </div>
-
-        {/* Impact Analysis Table */}
-        <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">
-            1. Ringkasan Impak & Mangsa
-          </p>
-          <table className="w-full text-xs border border-slate-200">
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[9px]">
-              <tr>
-                <th className="p-1.5 border border-slate-200">Parameter</th>
-                <th className="p-1.5 border border-slate-200">Nilai / Status</th>
-                <th className="p-1.5 border border-slate-200">Catatan Ringkas</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-slate-800">
-              <tr>
-                <td className="p-1.5 border font-semibold">Anggaran Mangsa Terjejas</td>
-                <td className="p-1.5 border font-extrabold text-blue-700">{incident.affectedPopulation.toLocaleString()} orang</td>
-                <td className="p-1.5 border text-slate-500">Kawasan Zon Merah</td>
-              </tr>
-              <tr>
-                <td className="p-1.5 border font-semibold">Jumlah Kematian / Kecederaan</td>
-                <td className="p-1.5 border font-extrabold text-red-600">{incident.casualtiesCount} kes</td>
-                <td className="p-1.5 border text-slate-500">Dikemas kini oleh BOMBA / KKM</td>
-              </tr>
-              <tr>
-                <td className="p-1.5 border font-semibold">Kerosakan Infrastruktur</td>
-                <td className="p-1.5 border font-bold">{incident.infrastructureDamage}</td>
-                <td className="p-1.5 border text-slate-500">Jalan raya & pencawang elektrik</td>
-              </tr>
-              <tr>
-                <td className="p-1.5 border font-semibold">Indeks Kebolehcapaian</td>
-                <td className="p-1.5 border font-bold text-amber-700">{incident.accessibilityScore}/100</td>
-                <td className="p-1.5 border text-slate-500">Laluan terputus dipantau JKR</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Narrative */}
-        <div>
-          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700 mb-1">
-            2. Perihalan Kejadian & Cuaca
-          </p>
-          <p className="text-xs text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded border border-slate-200">
-            {incident.description} Laporan meterologi terkini menunjukkan status cuaca: <strong>{incident.weatherCondition}</strong>. Sumber data diperoleh daripada {incident.source}.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+// Maps incident_logs action values to a display style consistent with activityTypeStyle
+const actionToType = (action: string): 'critical' | 'alert' | 'info' | 'success' => {
+  if (action === 'Incident Created') return 'info';
+  if (action === 'Incident Verified') return 'success';
+  if (action === 'Severity Changed') return 'alert';
+  if (action === 'Incident Resolved' || action === 'Incident Closed') return 'success';
+  if (action === 'Team Assigned' || action === 'Team Status Updated') return 'info';
+  if (action === 'Mission Created' || action === 'Mission Status Updated') return 'info';
+  if (action === 'Resource Requested') return 'alert';
+  if (action === 'Resource Allocated' || action === 'Resource Dispatched') return 'success';
+  return 'info';
 };
 
-/** TACTICAL TAB: Clean Leaflet mini-map & spatial telemetry */
-const TacticalTab: React.FC<{ incident: Incident }> = ({ incident }) => {
-  const [lat, lng] = incident.coordinates;
-  const { data: rescueTeams = [] } = useRescueTeams();
-  const nearbyTeams = rescueTeams.filter(t => t.assignedIncidentId === incident.id);
+const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
+  const { data: logs = [], isLoading } = useIncidentLogs(incident.id);
 
   return (
     <div className="space-y-3">
-      {/* Map box */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-        <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <MapPin size={14} className="text-blue-600" />
-            <span className="text-xs font-bold text-slate-800">Tactical Sector Map</span>
-          </div>
-          <span className="font-mono text-[10px] text-slate-500 font-semibold">
-            {lat.toFixed(4)}° N, {lng.toFixed(4)}° E
-          </span>
-        </div>
-
-        <div style={{ height: 260 }}>
-          <MapContainer
-            key={incident.id}
-            center={[lat, lng]}
-            zoom={10}
-            style={{ width: '100%', height: '100%' }}
-            zoomControl={false}
-            scrollWheelZoom={false}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            />
-
-            <Circle
-              center={[lat, lng]}
-              radius={10000}
-              fillColor={severityHex[incident.severity]}
-              color={severityHex[incident.severity]}
-              weight={2}
-              fillOpacity={0.15}
-            />
-            <CircleMarker
-              center={[lat, lng]}
-              radius={11}
-              fillColor={severityHex[incident.severity]}
-              color="white"
-              weight={2.5}
-              fillOpacity={0.95}
-            >
-              <Tooltip permanent direction="top" offset={[0, -12]}>
-                <span className="text-[10px] font-bold text-slate-900">{incident.title}</span>
-              </Tooltip>
-            </CircleMarker>
-
-            {nearbyTeams.map(t => (
-              <CircleMarker
-                key={t.id}
-                center={[t.coordinates[0], t.coordinates[1]]}
-                radius={7}
-                fillColor="#2563eb"
-                color="white"
-                weight={1.5}
-                fillOpacity={0.9}
-              >
-                <Tooltip direction="top" offset={[0, -8]}>
-                  <span className="text-[10px] font-bold text-blue-900">{t.name}</span>
-                </Tooltip>
-              </CircleMarker>
-            ))}
-          </MapContainer>
-        </div>
-      </div>
-
-      {/* Spatial Telemetry Grid */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-          <p className="text-[9px] font-bold text-slate-400 uppercase">Daerah & Negeri</p>
-          <p className="text-xs font-bold text-slate-900 mt-0.5">{incident.district}, {incident.state}</p>
-        </div>
-        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-          <p className="text-[9px] font-bold text-slate-400 uppercase">Sumber Intelegen</p>
-          <p className="text-xs font-bold text-slate-900 mt-0.5">{incident.source}</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/** OPERATIONS TAB: Filtered activity feed & operational logs for selected incident */
-const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
-  const { data: activityFeed = [] } = useActivityFeed();
-  const [streamScope, setStreamScope] = useState<'incident' | 'global'>('incident');
-
-  // Filter global feed strictly for entries related to this incident
-  const incidentDisplayId = incident.displayId || incident.id;
-  const incidentFeed = activityFeed.filter((evt) => {
-    const text = `${evt.event} ${evt.actor || ''}`.toLowerCase();
-    return (
-      text.includes(incident.id.toLowerCase()) ||
-      text.includes(incidentDisplayId.toLowerCase()) ||
-      (incident.district && text.includes(incident.district.toLowerCase())) ||
-      (incident.location && text.includes(incident.location.toLowerCase()))
-    );
-  });
-
-  const actionLogs = incident.actionLog || [];
-  const hasIncidentLogs = actionLogs.length > 0 || incidentFeed.length > 0;
-
-  return (
-    <div className="space-y-4">
-      {/* Stream Scope Selector */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
-          <button
-            onClick={() => setStreamScope('incident')}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-              streamScope === 'incident'
-                ? 'bg-white text-blue-700 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Incident Feed ({actionLogs.length + incidentFeed.length})
-          </button>
-          <button
-            onClick={() => setStreamScope('global')}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-              streamScope === 'global'
-                ? 'bg-white text-blue-700 shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Global EOC Stream
-          </button>
-        </div>
-        <span className="text-[10px] font-mono text-slate-400 truncate max-w-[120px]">
-          {incident.district}, {incident.state}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+          Operational Audit Log ({logs.length})
+        </span>
+        <span className="text-[10px] font-mono text-slate-500">
+          {isLoading ? 'Loading...' : logs.length > 0 ? `Latest: ${formatDateTime(logs[0].logged_at)}` : 'No entries'}
         </span>
       </div>
 
-      {streamScope === 'incident' ? (
-        <div className="space-y-3">
-          {/* Incident Action Audit Log */}
-          {actionLogs.length > 0 && (
-            <div className="space-y-2">
-              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Incident Action & Audit Trail
-              </h5>
-              <div className="space-y-2">
-                {actionLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl flex items-start gap-2.5 shadow-2xs"
-                  >
-                    <span className="size-2 rounded-full bg-blue-600 mt-1.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[10px] font-extrabold uppercase text-blue-900">
-                          {log.action} · {log.actor}
-                        </span>
-                        <span className="text-[9px] font-mono text-slate-400 font-bold">
-                          {formatDateTime(log.loggedAt)}
-                        </span>
-                      </div>
-                      {log.detail && (
-                        <p className="text-xs text-slate-700 font-medium leading-snug">{log.detail}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Incident-specific Event Stream */}
-          {incidentFeed.length > 0 && (
-            <div className="space-y-2">
-              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Correlated Live Telemetry
-              </h5>
-              <div className="space-y-2">
-                {incidentFeed.map((evt) => {
-                  const style = activityTypeStyle[evt.type] ?? activityTypeStyle.info;
-                  return (
-                    <div
-                      key={evt.id}
-                      className={`p-3 rounded-xl border flex items-start gap-3 transition-all ${style.bg} border-slate-200 shadow-2xs`}
-                    >
-                      <span className={`size-2.5 rounded-full ${style.dot} mt-1 shrink-0`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
-                            {style.label} · {evt.actor}
-                          </span>
-                          <span className="text-[10px] font-mono font-bold text-slate-400">{formatDateTime(evt.time)}</span>
-                        </div>
-                        <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {!hasIncidentLogs && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center space-y-3">
-              <Activity size={20} className="text-slate-400 mx-auto" />
-              <p className="text-xs font-bold text-slate-700">
-                No specific live dispatch logs recorded for {incident.title} yet.
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Logs will appear automatically when teams are deployed, status updates occur, or resources are requisitioned.
-              </p>
-              <button
-                onClick={() => setStreamScope('global')}
-                className="px-3 py-1.5 bg-white border border-slate-300 hover:border-slate-800 text-slate-700 text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
-              >
-                View Global EOC Feed
-              </button>
-            </div>
-          )}
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-12 bg-slate-100 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-200">
+          <Clock size={24} className="mx-auto text-slate-400 mb-2" />
+          <p className="text-xs text-slate-500 font-medium">No operational events logged for this incident yet.</p>
         </div>
       ) : (
-        /* Global Feed */
         <div className="space-y-2.5">
-          {activityFeed.map((evt) => {
-            const style = activityTypeStyle[evt.type] ?? activityTypeStyle.info;
+          {logs.map((log, idx) => {
+            const evtType = actionToType(log.action);
+            const style = activityTypeStyle[evtType] ?? activityTypeStyle.info;
+            const actor = [log.actor, log.actor_role, log.actor_agency]
+              .filter(Boolean).join(' · ');
             return (
               <div
-                key={evt.id}
-                className={`p-3 rounded-xl border flex items-start gap-3 transition-all ${style.bg} border-slate-200 shadow-2xs`}
+                key={log.id ?? idx}
+                className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-200 bg-white shadow-2xs"
               >
-                <span className={`size-2.5 rounded-full ${style.dot} mt-1 shrink-0`} />
+                <span className={`mt-1 size-2 rounded-full shrink-0 ${style.dot}`} />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`text-[9px] font-extrabold uppercase tracking-wider ${style.text}`}>
-                      {style.label} · {evt.actor}
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                      {log.action} · {actor || 'EOC System'}
                     </span>
-                    <span className="text-[10px] font-mono font-bold text-slate-400">{formatDateTime(evt.time)}</span>
+                    <span className="text-[10px] font-mono font-semibold text-slate-400 shrink-0">
+                      {formatDateTime(log.logged_at)}
+                    </span>
                   </div>
-                  <p className="text-xs font-semibold text-slate-800 leading-snug">{evt.event}</p>
+                  {log.detail && (
+                    <p className="text-xs font-medium text-slate-800 leading-snug">{log.detail}</p>
+                  )}
                 </div>
               </div>
             );
@@ -562,10 +302,10 @@ const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Main SitrepPanel Component (Navy/Slate/Charcoal Theme)
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main SitrepPanel Component (Light Theme, Backdrop Click-to-Close)
-// ─────────────────────────────────────────────────────────────────────────────
 export const SitrepPanel: React.FC<SitrepPanelProps> = ({
   incident,
   onClose,
@@ -578,7 +318,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
     <AnimatePresence>
       {incident && (
         <>
-          {/* Backdrop (CLICKABLE to close drawer on blur) */}
+          {/* Backdrop */}
           <motion.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -588,7 +328,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
             className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs cursor-pointer"
           />
 
-          {/* Drawer Panel (Light Mode UI) */}
+          {/* Drawer Panel */}
           <motion.div
             key="panel"
             initial={{ x: '100%', opacity: 0 }}
@@ -602,9 +342,9 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
               <div className="flex items-start justify-between gap-3 mb-2.5">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
-                      {incident.displayId || incident.id}
-                    </span>
+                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">
+                    {incident.display_id || incident.id}
+                  </span>
                     <span
                       className="size-2 rounded-full shrink-0"
                       style={{ background: severityHex[incident.severity] }}
@@ -628,7 +368,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
               {/* Disaster Badges */}
               <div className="flex items-center gap-2">
                 <DisasterBadge type="severity" value={incident.severity} />
-                <DisasterBadge type="level" value={incident.disasterLevel} />
+                <DisasterBadge type="level" value={incident.disaster_level} />
               </div>
             </div>
 
@@ -638,13 +378,14 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === tab.id
-                      ? 'bg-white text-blue-600 shadow-2xs border border-slate-200/80'
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'bg-white text-blue-700 shadow-2xs border border-slate-200'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-                    }`}
+                  }`}
                 >
                   {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </div>
@@ -660,8 +401,6 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
                   transition={{ duration: 0.15 }}
                 >
                   {activeTab === 'dashboard' && <DashboardTab incident={incident} />}
-                  {activeTab === 'executive' && <ExecutiveTab incident={incident} />}
-                  {activeTab === 'tactical' && <TacticalTab incident={incident} />}
                   {activeTab === 'operations' && <OperationsTab incident={incident} />}
                 </motion.div>
               </AnimatePresence>
@@ -676,9 +415,9 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({
                 }}
                 className="w-full flex items-center justify-center gap-2 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
               >
-                <ShieldCheck size={14} className="text-emerald-400" /> Open Incident Command Center & Actions →
+                <ShieldCheck size={14} className="text-blue-400" /> Open Incident Command Center &amp; Actions &rarr;
               </button>
-              {incident.status !== 'Unverified' && incident.impactTimeline?.length ? (
+              {incident.status !== 'Unverified' && incident.impact_timeline?.length ? (
                 <button
                   onClick={() => onViewFullAnalysis(incident)}
                   className="w-full flex items-center justify-center gap-2 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-all cursor-pointer"

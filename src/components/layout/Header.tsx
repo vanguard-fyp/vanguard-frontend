@@ -3,11 +3,10 @@ import { Bell, Clock, Search, Menu, X, CheckCheck, AlertTriangle, Info, CheckCir
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
-import type { HeaderProps } from '../../types';
+import type { HeaderProps, SystemNotification } from '../../types';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '../../hooks/useNotifications';
 import { useIncidents } from '../../hooks';
 import { formatDateTime } from '../../utils/dateFormatter';
-import type { SystemNotification } from '../../services/notificationService';
 
 interface ExtendedHeaderProps extends HeaderProps {
   onMobileMenuToggle?: () => void;
@@ -66,7 +65,7 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
 
   // ── Notification data ─────────────────────────────────────────────────────
   const { data: allNotifs = [] } = useNotifications(false);
-  const unreadNotifs = allNotifs.filter((n) => !n.isRead);
+  const unreadNotifs = allNotifs.filter((n) => !n.is_read);
   const displayedNotifs = notifTab === 'unread' ? unreadNotifs : allNotifs;
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
@@ -77,7 +76,7 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
 
   // Top trending = highest AI priority active incidents
   const trendingIncidents = [...activeIncidents]
-    .sort((a, b) => b.aiPriorityScore - a.aiPriorityScore)
+    .sort((a, b) => b.ai_priority_score - a.ai_priority_score)
     .slice(0, 5);
 
   // Search filter
@@ -88,14 +87,14 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
           i.title.toLowerCase().includes(q) ||
           (i.district || '').toLowerCase().includes(q) ||
           (i.state || '').toLowerCase().includes(q) ||
-          (i.displayId || '').toLowerCase().includes(q)
+          (i.display_id || '').toLowerCase().includes(q)
       ).slice(0, 6)
     : [];
 
   const showDropdown = searchFocused && (searchQuery.length >= 2 ? searchResults.length > 0 : trendingIncidents.length > 0);
 
   const handleNotifClick = useCallback((n: SystemNotification) => {
-    if (!n.isRead) markRead.mutate(n.id);
+    if (!n.is_read) markRead.mutate(n.id);
     if (n.link) navigate(n.link);
     setNotifOpen(false);
   }, [markRead, navigate]);
@@ -169,7 +168,7 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-mono font-bold text-blue-600">{inc.displayId || inc.id.slice(0, 8).toUpperCase()}</span>
+                          <span className="text-[10px] font-mono font-bold text-blue-600">{inc.display_id || inc.id.slice(0, 8).toUpperCase()}</span>
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${inc.severity === 'Critical' ? 'bg-red-100 text-red-700' : inc.severity === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
                             {inc.severity}
                           </span>
@@ -277,16 +276,16 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
                         <div
                           key={n.id}
                           onClick={() => handleNotifClick(n)}
-                          className={`px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50 flex items-start gap-3 ${!n.isRead ? 'bg-blue-50/40' : ''}`}
+                          className={`px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50 flex items-start gap-3 ${!n.is_read ? 'bg-blue-50/40' : ''}`}
                         >
                           <div className="shrink-0 mt-0.5">{style.icon}</div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                               <p className="text-xs font-bold text-slate-900 truncate">{n.title}</p>
-                              {!n.isRead && <span className={`w-1.5 h-1.5 rounded-full ${style.dot} shrink-0`} />}
+                              {!n.is_read && <span className={`w-1.5 h-1.5 rounded-full ${style.dot} shrink-0`} />}
                             </div>
                             <p className="text-[11px] text-slate-600 leading-snug">{n.message}</p>
-                            <p className="text-[10px] text-slate-400 font-mono mt-1">{formatDateTime(n.createdAt)}</p>
+                            <p className="text-[10px] text-slate-400 font-mono mt-1">{formatDateTime(n.created_at)}</p>
                           </div>
                         </div>
                       );

@@ -74,7 +74,7 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                 >
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono font-bold text-slate-400">{req.requestId}</span>
+                      <span className="text-xs font-mono font-bold text-slate-400">{req.display_id}</span>
                       <span
                         className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
                           req.status === 'Dispatched'
@@ -84,15 +84,15 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                       >
                         {req.status}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-medium ml-auto sm:ml-0">{formatDateTime(req.timestamp)}</span>
+                      <span className="text-[11px] text-slate-400 font-medium ml-auto sm:ml-0">{formatDateTime(req.requested_at ?? '')}</span>
                     </div>
 
-                    <h4 className="text-sm font-bold text-slate-900">{req.itemRequested}</h4>
+                    <h4 className="text-sm font-bold text-slate-900">{req.item_requested ?? 'Requested supplies'}</h4>
 
                     <div className="flex items-center gap-3 text-xs font-semibold text-slate-700 flex-wrap">
                       <div className="flex items-center gap-1.5 text-slate-700">
                         <Package size={14} className="text-slate-400" />
-                        <span>{req.quantityRequested.toLocaleString()} {req.unit}</span>
+                        <span>{req.quantity_requested.toLocaleString()} {req.unit}</span>
                       </div>
                       <ArrowRight size={13} className="text-slate-400" />
                       <div className="flex items-center gap-1.5 text-blue-800 font-bold">
@@ -229,7 +229,7 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                         </div>
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 uppercase">Fulfillment Officer</p>
-                          <p className="font-bold text-slate-800 mt-0.5">{req.approvedBy || 'Resource Manager Ismail'}</p>
+                          <p className="font-bold text-slate-800 mt-0.5">{req.approved_by_name ?? 'Awaiting assignment'}</p>
                         </div>
                       </div>
                     </motion.div>

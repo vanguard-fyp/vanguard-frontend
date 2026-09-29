@@ -17,14 +17,14 @@ function getAIRequestRecommendation(req: ResourceRequest): AIRequestRecommendati
       decision: 'Approve',
       confidence: 94,
       rationale: `High urgency request aligned with verified flood incident in ${req.district}. Recommended depot dispatch route available with negligible safety buffer degradation.`,
-      depotImpact: 'Stock remains above 65% minimum safety threshold post-fulfillment.',
+      depot_impact: 'Stock remains above 65% minimum safety threshold post-fulfillment.',
     };
   }
   return {
     decision: 'Flag for Review',
     confidence: 78,
     rationale: `Medium/Low urgency item requested. Stock availability is adequate, but logistics dispatch capacity is currently prioritized for Kota Bharu emergency response.`,
-    depotImpact: 'Deferred dispatch recommended to prioritize Critical sector operations.',
+    depot_impact: 'Deferred dispatch recommended to prioritize Critical sector operations.',
   };
 }
 
@@ -109,22 +109,22 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                 <div className="flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono font-bold text-slate-400">{req.requestId}</span>
+                      <span className="text-xs font-mono font-bold text-slate-400">{req.display_id}</span>
                       <DisasterBadge type="severity" value={req.urgency} />
                       <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
                         {req.status}
                       </span>
                     </div>
 
-                    <h4 className="text-sm font-bold text-slate-900">{req.itemRequested}</h4>
+                    <h4 className="text-sm font-bold text-slate-900">{req.display_id}</h4>
 
                     <div className="flex items-center gap-3 text-xs font-medium text-slate-600 flex-wrap">
                       <span className="font-bold text-blue-700">
-                        {req.quantityRequested.toLocaleString()} {req.unit}
+                        {req.quantity_requested.toLocaleString()} {req.unit}
                       </span>
                       <span>·</span>
                       <span>
-                        Requested by <strong className="text-slate-800">{req.requestorName}</strong> ({req.agency})
+                        Agency: <strong className="text-slate-800">{req.agency}</strong>
                       </span>
                       <span>·</span>
                       <span>
@@ -156,7 +156,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                       </div>
 
                       <p className="text-xs text-slate-700 leading-relaxed font-normal">{aiRec.rationale}</p>
-                      <p className="text-[11px] font-medium text-violet-800 italic">Depot Impact: {aiRec.depotImpact}</p>
+                      <p className="text-[11px] font-medium text-violet-800 italic">Depot Impact: {aiRec.depot_impact}</p>
                     </div>
                   </div>
 
@@ -200,7 +200,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
         )}
       </div>
 
-      {/* Historical Approvals / Rejections (Collapsible & Viewable) */}
+      {/* Historical Approvals / Rejections */}
       {historicalRequests.length > 0 && (
         <div className="border-t border-slate-200 bg-slate-50/30">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -217,19 +217,16 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                 className="px-5 py-3 flex items-center justify-between text-xs hover:bg-blue-50/50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-slate-400">{req.requestId}</span>
+                  <span className="font-mono font-bold text-slate-400">{req.display_id}</span>
                   <span className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                    {req.itemRequested}
+                    {req.district} — {req.agency}
                   </span>
                   <span className="text-slate-500">
-                    ({req.quantityRequested} {req.unit})
+                    ({req.quantity_requested} {req.unit})
                   </span>
                   <span className="text-slate-400">· {req.district}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {req.approvedBy && (
-                    <span className="text-[11px] text-slate-500 font-medium">By: {req.approvedBy}</span>
-                  )}
                   <span
                     className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] border ${
                       req.status === 'Approved' || req.status === 'Dispatched'
@@ -278,17 +275,17 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
               <div className="p-6 space-y-4">
                 <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl space-y-1.5 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-500">{approvingRequest.requestId}</span>
+                    <span className="font-mono font-bold text-slate-500">{approvingRequest.display_id}</span>
                     <span className="font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
                       {approvingRequest.urgency} Urgency
                     </span>
                   </div>
-                  <p className="font-bold text-slate-900 text-sm">{approvingRequest.itemRequested}</p>
+                  <p className="font-bold text-slate-900 text-sm">{approvingRequest.display_id}</p>
                   <p className="text-slate-700 font-medium">
-                    Quantity to Allocate: <strong className="text-emerald-800">{approvingRequest.quantityRequested} {approvingRequest.unit}</strong>
+                    Quantity to Allocate: <strong className="text-emerald-800">{approvingRequest.quantity_requested} {approvingRequest.unit}</strong>
                   </p>
                   <p className="text-slate-500 text-[11px]">
-                    Destination: <strong className="text-slate-800">{approvingRequest.district} Sector</strong> · Requested by: <strong className="text-slate-800">{approvingRequest.requestorName}</strong> ({approvingRequest.agency})
+                    Destination: <strong className="text-slate-800">{approvingRequest.district} Sector</strong> · Agency: <strong className="text-slate-800">{approvingRequest.agency}</strong>
                   </p>
                 </div>
 
@@ -349,17 +346,17 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
               <div className="p-6 space-y-4">
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-500">{rejectingRequest.requestId}</span>
+                    <span className="font-mono font-bold text-slate-500">{rejectingRequest.display_id}</span>
                     <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
                       {rejectingRequest.urgency} Urgency
                     </span>
                   </div>
-                  <p className="font-bold text-slate-900 text-sm">{rejectingRequest.itemRequested}</p>
+                  <p className="font-bold text-slate-900 text-sm">{rejectingRequest.display_id}</p>
                   <p className="text-slate-600">
-                    Quantity: <strong>{rejectingRequest.quantityRequested} {rejectingRequest.unit}</strong>
+                    Quantity: <strong>{rejectingRequest.quantity_requested} {rejectingRequest.unit}</strong>
                   </p>
                   <p className="text-slate-500 text-[11px]">
-                    Requested by: <strong>{rejectingRequest.requestorName}</strong> ({rejectingRequest.agency}) for <strong>{rejectingRequest.district}</strong>
+                    Agency: <strong>{rejectingRequest.agency}</strong> for <strong>{rejectingRequest.district}</strong>
                   </p>
                 </div>
 

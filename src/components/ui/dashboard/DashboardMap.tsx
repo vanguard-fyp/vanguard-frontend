@@ -155,14 +155,14 @@ export const DashboardMap: React.FC<DashboardMapProps> = ({
                   {selectedIncident.severity}
                 </span>
                 <span className="text-xs font-mono text-slate-500 font-bold">
-                  {selectedIncident.displayId || (selectedIncident.id.length > 15 ? `INC-${selectedIncident.id.slice(0, 8).toUpperCase()}` : selectedIncident.id)}
+                  {selectedIncident.display_id || (selectedIncident.id.length > 15 ? `INC-${selectedIncident.id.slice(0, 8).toUpperCase()}` : selectedIncident.id)}
                 </span>
               </div>
               <p className="text-xs font-bold text-slate-900 mt-1 truncate">{selectedIncident.title}</p>
               <p className="text-[11px] text-slate-600 mt-0.5 truncate">{selectedIncident.description}</p>
             </div>
             <div className="text-right shrink-0 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-              <p className="text-base font-extrabold text-blue-700 font-mono">{selectedIncident.aiPriorityScore}</p>
+              <p className="text-base font-extrabold text-blue-700 font-mono">{selectedIncident.ai_priority_score}</p>
               <p className="text-[9px] font-bold text-slate-400 uppercase font-mono">AI Urgency</p>
             </div>
           </div>
@@ -176,7 +176,6 @@ export const DashboardMap: React.FC<DashboardMapProps> = ({
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500" /> High</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Medium</span>
         </div>
-        <span className="text-[10px] text-slate-400">Click marker to inspect telemetry</span>
       </div>
     </div>
   );

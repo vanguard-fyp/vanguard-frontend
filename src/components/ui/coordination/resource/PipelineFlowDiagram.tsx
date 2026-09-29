@@ -55,7 +55,7 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
 
   // Compute metrics for each pipeline stage
-  const totalStockUnits = inventory.reduce((sum, i) => sum + i.stockLevel, 0);
+  const totalStockUnits = inventory.reduce((sum, i) => sum + i.stock_level, 0);
   const criticalItems = inventory.filter((i) => i.status === 'Critical');
   const lowStockItems = inventory.filter((i) => i.status === 'Low Stock');
 
@@ -65,8 +65,8 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
   const deliveredRequests = requests.filter((r) => r.status === 'Delivered' || r.status === 'Fulfilled');
 
   // ── Live-computed pipeline metrics ──────────────────────────────────────────
-  const totalRequested = requests.reduce((sum, r) => sum + (r.quantityRequested || 0), 0);
-  const deliveredQty = deliveredRequests.reduce((sum, r) => sum + (r.quantityRequested || 0), 0);
+  const totalRequested = requests.reduce((sum, r) => sum + (r.quantity_requested || 0), 0);
+  const deliveredQty = deliveredRequests.reduce((sum, r) => sum + (r.quantity_requested || 0), 0);
   const reliefCapacityPct = totalRequested > 0 ? Math.round((deliveredQty / totalRequested) * 100) : (deliveredRequests.length > 0 ? 100 : 0);
 
   // Average ETA: estimate from dispatched request count (2h base + 0.3h per convoy)
@@ -107,7 +107,7 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
       ],
       items: inventory.map((i) => ({
         title: i.name,
-        meta: `${i.warehouseLocation} · ${i.stockLevel.toLocaleString()} ${i.unit}`,
+        meta: `${i.warehouse_location} · ${i.stock_level.toLocaleString()} ${i.unit}`,
         badge: i.status,
         badgeColor: i.status === 'Critical' ? 'bg-red-100 text-red-800' : i.status === 'Low Stock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800',
       })),
@@ -130,8 +130,8 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
         { label: 'Demand Districts', value: `${new Set(requests.map((r) => r.district)).size} zones` },
       ],
       items: requests.filter((r) => r.status === 'Pending Approval' || r.status === 'Approved').map((r) => ({
-        title: `${r.itemRequested} (${r.quantityRequested} ${r.unit})`,
-        meta: `Requested by ${r.agency} for ${r.district}`,
+        title: `${r.item_requested ?? 'Requested supplies'} (${r.quantity_requested} ${r.unit})`,
+        meta: `Requested by ${r.requested_by_name ?? r.agency} for ${r.district}`,
         badge: r.status,
         badgeColor: r.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
       })),
@@ -154,7 +154,7 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
         { label: 'Fleet Route Status', value: fleetRouteStatus, alert: hasWeatherAlert },
       ],
       items: inTransitRequests.map((r) => ({
-        title: `${r.itemRequested} — Dispatched`,
+        title: `${r.item_requested ?? 'Requested supplies'} — Dispatched`,
         meta: `En route to ${r.district} · Destination: ${r.agency}`,
         badge: 'Dispatched',
         badgeColor: 'bg-blue-100 text-blue-800 animate-pulse',
@@ -178,7 +178,7 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({
         { label: 'Field Status', value: uniqueHubs > 0 ? `${uniqueHubs} Relief Hubs Supplied` : 'Awaiting Deliveries' },
       ],
       items: deliveredRequests.map((r) => ({
-        title: `${r.itemRequested} (${r.quantityRequested} ${r.unit})`,
+        title: `${r.item_requested ?? 'Requested supplies'} (${r.quantity_requested} ${r.unit})`,
         meta: `Delivered to ${r.district} (${r.agency})`,
         badge: r.status,
         badgeColor: 'bg-emerald-100 text-emerald-800',

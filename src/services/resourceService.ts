@@ -51,9 +51,13 @@ export const resourceService = {
     requestId: string,
     payload?: { approver?: string; approverUserId?: string }
   ): Promise<ResourceRequest> => {
+    const body = payload && {
+      approver: payload.approver,
+      approver_user_id: payload.approverUserId,
+    };
     return apiClient.post<ResourceRequest>(
       `/resources/requests/${requestId}/approve`,
-      payload,
+      body,
       payload?.approver ? { 'X-Approver-Name': payload.approver } : undefined
     );
   },
@@ -65,9 +69,14 @@ export const resourceService = {
     requestId: string,
     payload?: { approver?: string; approverUserId?: string; rejectionReason?: string }
   ): Promise<ResourceRequest> => {
+    const body = payload && {
+      approver: payload.approver,
+      approver_user_id: payload.approverUserId,
+      rejection_reason: payload.rejectionReason,
+    };
     return apiClient.post<ResourceRequest>(
       `/resources/requests/${requestId}/reject`,
-      payload,
+      body,
       payload?.approver ? { 'X-Approver-Name': payload.approver } : undefined
     );
   },

@@ -3,17 +3,7 @@
  * Client-side service for fetching and managing system notifications from the backend.
  */
 import { apiClient } from './apiClient';
-
-export interface SystemNotification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'critical' | 'high' | 'warning' | 'info' | 'success';
-  category?: string;
-  link?: string;
-  isRead: boolean;
-  createdAt: string;
-}
+import type { SystemNotification } from '../types';
 
 export const notificationService = {
   /**
@@ -29,7 +19,7 @@ export const notificationService = {
    * Mark a single notification as read.
    */
   async markRead(id: string): Promise<void> {
-    await apiClient.patch(`/notifications/${id}/read`, { isRead: true });
+    await apiClient.patch(`/notifications/${id}/read`, { is_read: true });
   },
 
   /**

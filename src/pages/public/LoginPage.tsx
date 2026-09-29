@@ -12,7 +12,7 @@ const ADMIN_ROLES: AdminRoleOption[] = [
     role: 'NADMA Lead Officer',
     label: 'Lead Officer (Superadmin)',
     badge: 'Federal Level 3',
-    email: 'lead.officer@nadma.gov.my',
+    email: 'rosli@nadma.gov.my',
     name: "Dato' Ir. Ahmad Rosli",
     description: 'Federal command, incident deletion, policy overrides & system admin.',
   },
@@ -20,7 +20,7 @@ const ADMIN_ROLES: AdminRoleOption[] = [
     role: 'Disaster Management Officer',
     label: 'Operations Officer',
     badge: 'Command & Ops',
-    email: 'ops.commander@nadma.gov.my',
+    email: 'ahmad.razif@nadma.gov.my',
     name: 'Col. Ahmad Razif',
     description: 'Incident verification, tactical dispatch, resolution & sitrep reporting.',
   },
@@ -40,7 +40,7 @@ export const LoginPage: React.FC = () => {
   const prefersReducedMotion = useReducedMotion();
 
   const [selectedRole, setSelectedRole] = useState<UserRole>('NADMA Lead Officer');
-  const [email, setEmail] = useState<string>('lead.officer@nadma.gov.my');
+  const [email, setEmail] = useState<string>('rosli@nadma.gov.my');
   const [password, setPassword] = useState<string>('••••••••••••');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 

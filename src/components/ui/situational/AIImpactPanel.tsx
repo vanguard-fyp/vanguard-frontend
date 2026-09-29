@@ -12,11 +12,11 @@ import type { AIImpactPanelProps, Incident } from '../../../types';
 
 export const getAIAnalysis = (incident: Incident) => [
   { metric: 'Severity', value: incident.severity === 'Critical' ? 95 : incident.severity === 'High' ? 75 : incident.severity === 'Medium' ? 50 : 25, fullMark: 100 },
-  { metric: 'Population', value: Math.min(Math.round((incident.affectedPopulation / 40000) * 100), 100), fullMark: 100 },
-  { metric: 'Accessibility', value: 100 - incident.accessibilityScore, fullMark: 100 },
-  { metric: 'Infrastructure', value: incident.infrastructureDamage === 'Severe' ? 90 : incident.infrastructureDamage === 'Moderate' ? 60 : 30, fullMark: 100 },
-  { metric: 'Weather', value: incident.weatherCondition.includes('Heavy') ? 85 : incident.weatherCondition.includes('Continuous') ? 60 : 35, fullMark: 100 },
-  { metric: 'Casualties', value: incident.casualtiesCount > 0 ? Math.min(incident.casualtiesCount * 40, 100) : 5, fullMark: 100 },
+  { metric: 'Population', value: Math.min(Math.round((incident.affected_population / 40000) * 100), 100), fullMark: 100 },
+  { metric: 'Accessibility', value: 100 - incident.accessibility_score, fullMark: 100 },
+  { metric: 'Infrastructure', value: incident.infrastructure_damage === 'Severe' ? 90 : incident.infrastructure_damage === 'Moderate' ? 60 : 30, fullMark: 100 },
+  { metric: 'Weather', value: incident.weather_condition.includes('Heavy') ? 85 : incident.weather_condition.includes('Continuous') ? 60 : 35, fullMark: 100 },
+  { metric: 'Casualties', value: incident.casualties_count > 0 ? Math.min(incident.casualties_count * 40, 100) : 5, fullMark: 100 },
 ];
 
 export const getTopDrivers = (incident: Incident, count = 2) =>
@@ -26,7 +26,7 @@ export const getTopDrivers = (incident: Incident, count = 2) =>
     .map((d) => d.metric);
 
 export const getConfidenceScore = (incident: Incident) => {
-  const base = incident.sourceType === 'Metrological / Sensor' ? 96.4 : incident.sourceType === 'Agency Patrol' ? 93.8 : 88.5;
+  const base = incident.source === 'Metrological / Sensor' ? 96.4 : incident.source === 'Agency Patrol' ? 93.8 : 88.5;
   const sevBoost = incident.severity === 'Critical' ? 2.5 : incident.severity === 'High' ? 1.8 : 0.5;
   const verifiedBoost = incident.status === 'Verified' || incident.status === 'Responding' ? 1.5 : 0;
   return Math.min(99.4, Number((base + sevBoost + verifiedBoost).toFixed(1)));
@@ -105,19 +105,19 @@ export const AIImpactPanel: React.FC<AIImpactPanelProps> = ({
               <strong className="text-emerald-700 font-mono">{confidence}% model confidence</strong>.{' '}
             </>
           )}
-          {incident.affectedPopulation.toLocaleString()} people may be affected;{' '}
-          {incident.infrastructureDamage.toLowerCase()} infrastructure damage and{' '}
-          {incident.accessibilityScore}/100 accessibility are driving operational urgency.
+          {incident.affected_population.toLocaleString()} people may be affected;{' '}
+          {incident.infrastructure_damage.toLowerCase()} infrastructure damage and{' '}
+          {incident.accessibility_score}/100 accessibility are driving operational urgency.
         </p>
         {isFull && (
           <>
             <div className="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-900 leading-relaxed">
               <strong>Recommended focus:</strong> Validate ground conditions, protect vulnerable residents,
-              and coordinate response at {incident.disasterLevel.replace('Level ', 'level ')}.
+              and coordinate response at {incident.disaster_level.replace('Level ', 'level ')}.
             </div>
             <div className="mt-4 pt-3 border-t border-slate-100 text-xs space-y-1.5">
               <p><span className="text-slate-400">AI inputs:</span> Severity, population density, road accessibility, radar precipitation, and flood gauge sensors.</p>
-              <p><span className="text-slate-400">Source record:</span> {incident.sourceType || incident.source}</p>
+              <p><span className="text-slate-400">Source record:</span> {incident.source || incident.source}</p>
             </div>
           </>
         )}

@@ -2,40 +2,64 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, ChevronRight, ChevronLeft, CheckCircle2, AlertTriangle,
-  Sparkles, MapPin, Users, Target, Flag, Clock, FileText, Send
+  Sparkles, MapPin, Users, Target, Flag, Clock, FileText, Send, Shield, Check
 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
-import type { AITeamRecommendation, Incident, MissionWizardProps, RescueTeam, SeverityLevel } from '../../../types';
+import type { AITeamRecommendation, Incident, RescueTeam, SeverityLevel } from '../../../types';
 import { steps } from '../../../constants';
+
+export interface ExtendedMissionWizardProps {
+  incidents: Incident[];
+  teams: RescueTeam[];
+  onClose: () => void;
+  onDispatch: (data: {
+    incidentId: string;
+    teamId?: string;
+    teamIds?: string[];
+    objective: string;
+    priority: SeverityLevel;
+    durationHrs: number;
+  }) => void;
+  defaultIncidentId?: string | null;
+}
 
 function getAIRecommendation(incident: Incident | null, teams: RescueTeam[]): AITeamRecommendation | null {
   if (!incident) return null;
-  // TODO: Mock AI logic: pick available team or least-loaded deployed team
   const available = teams.find((t) => t.status === 'Available');
   const candidate = available || teams[0];
+  if (!candidate) return null;
   return {
     teamId: candidate.id,
-    confidence: available ? 89 : 64,
+    confidence: available ? 92 : 68,
     rationale: available
-      ? `${candidate.name} is at full readiness with ${candidate.personnelCount} personnel and matched vehicle assets. Proximity to incident zone reduces mobilisation time significantly.`
-      : `All teams are currently deployed. ${candidate.name} has the lowest current mission load and estimated earliest extraction window.`,
-    eta: available ? '~25 mins' : '~90 mins',
+      ? `${candidate.name} (${candidate.agency}) is fully ready with ${candidate.personnel_count} personnel. Located at ${candidate.current_location}, enabling rapid deployment.`
+      : `Squads are partially engaged. ${candidate.name} has the highest capacity to reinforce this incident.`,
+    eta: available ? '~20 mins' : '~45 mins',
   };
 }
 
-export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, onClose, onDispatch }) => {
+export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
+  incidents,
+  teams,
+  onClose,
+  onDispatch,
+  defaultIncidentId,
+}) => {
   const [step, setStep] = useState(0);
-  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [aiOverridden, setAiOverridden] = useState(false);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(defaultIncidentId || null);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [objective, setObjective] = useState('');
   const [priority, setPriority] = useState<SeverityLevel>('High');
   const [durationHrs, setDurationHrs] = useState(6);
-  const [notes, setNotes] = useState('');
 
   const selectedIncident = incidents.find((i) => i.id === selectedIncidentId) || null;
   const aiRec = getAIRecommendation(selectedIncident, teams);
-  const selectedTeam = teams.find((t) => t.id === (selectedTeamId || aiRec?.teamId)) || null;
+
+  const toggleTeamSelection = (teamId: string) => {
+    setSelectedTeamIds((prev) =>
+      prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]
+    );
+  };
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -45,39 +69,47 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Pre-fill objective when incident is selected if objective is empty
+  // Pre-fill objective when incident is selected
   React.useEffect(() => {
     if (selectedIncident && !objective) {
       setObjective(`Conduct immediate Search and Rescue and evacuation operations for ${selectedIncident.title} at ${selectedIncident.location}.`);
-      setPriority(selectedIncident.severity);
+      setPriority(selectedIncident.severity || 'High');
     }
   }, [selectedIncident, objective]);
 
   const canProceed = (): boolean => {
     if (step === 0) return !!selectedIncidentId;
-    if (step === 1) return !!(selectedTeamId || aiRec?.teamId);
+    if (step === 1) return selectedTeamIds.length > 0;
     if (step === 2) return objective.trim().length > 3;
     return true;
   };
 
   const handleNext = () => {
-    if (step === 0 && selectedIncidentId && aiRec && !selectedTeamId) {
-      setSelectedTeamId(aiRec.teamId);
-    }
-    if (step === 1 && !selectedTeamId && aiRec) {
-      setSelectedTeamId(aiRec.teamId);
+    if (step === 0 && selectedIncidentId && aiRec && selectedTeamIds.length === 0) {
+      setSelectedTeamIds([aiRec.teamId]);
     }
     if (step < steps.length - 1) setStep((s) => s + 1);
   };
 
-  const handleBack = () => { if (step > 0) setStep((s) => s - 1); };
+  const handleBack = () => {
+    if (step > 0) setStep((s) => s - 1);
+  };
 
   const handleDispatch = () => {
-    const finalTeamId = selectedTeamId || aiRec?.teamId;
-    if (!selectedIncidentId || !finalTeamId) return;
-    onDispatch({ incidentId: selectedIncidentId, teamId: finalTeamId, objective: objective || 'Emergency search and rescue operation', priority, durationHrs, notes });
+    if (!selectedIncidentId || selectedTeamIds.length === 0) return;
+    onDispatch({
+      incidentId: selectedIncidentId,
+      teamId: selectedTeamIds[0],
+      teamIds: selectedTeamIds,
+      objective: objective || 'Emergency search and rescue operation',
+      priority,
+      durationHrs,
+    });
     onClose();
   };
+
+  const selectedTeamsList = teams.filter((t) => selectedTeamIds.includes(t.id));
+  const totalPersonnel = selectedTeamsList.reduce((acc, t) => acc + (t.personnel_count || 0), 0);
 
   return (
     <div
@@ -92,29 +124,40 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Wizard Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 flex items-center justify-between shrink-0">
+        <div className="px-6 py-4 bg-slate-900 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-sm font-bold text-white">Assign Rescue Mission</h2>
-            <p className="text-[11px] text-blue-200 font-medium mt-0.5">Step {step + 1} of {steps.length} — {steps[step]}</p>
+            <h2 className="text-sm font-bold text-white">Dispatch Rescue Mission</h2>
+            <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+              Step {step + 1} of {steps.length} — {steps[step]}
+            </p>
           </div>
-          <button onClick={onClose} className="text-blue-200 hover:text-white transition-colors cursor-pointer">
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors cursor-pointer">
             <X size={18} />
           </button>
         </div>
 
         {/* Step Indicator */}
-        <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 shrink-0">
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-0">
             {steps.map((s, i) => (
               <React.Fragment key={s}>
                 <div className="flex flex-col items-center gap-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-all ${i < step ? 'bg-blue-600 border-blue-600 text-white' :
-                      i === step ? 'bg-white border-blue-600 text-blue-700' :
-                        'bg-white border-slate-300 text-slate-400'
-                    }`}>
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-all ${
+                      i < step
+                        ? 'bg-blue-600 border-blue-600 text-white'
+                        : i === step
+                        ? 'bg-white border-blue-600 text-blue-700'
+                        : 'bg-white border-slate-300 text-slate-400'
+                    }`}
+                  >
                     {i < step ? '✓' : i + 1}
                   </div>
-                  <span className={`text-[9px] font-bold text-center leading-tight w-16 ${i <= step ? 'text-blue-700' : 'text-slate-400'}`}>
+                  <span
+                    className={`text-[9px] font-bold text-center leading-tight w-16 ${
+                      i <= step ? 'text-blue-700' : 'text-slate-400'
+                    }`}
+                  >
                     {s}
                   </span>
                 </div>
@@ -131,16 +174,28 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
           <AnimatePresence mode="wait">
             {/* Step 0: Select Incident */}
             {step === 0 && (
-              <motion.div key="step0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Choose a Verified Incident Awaiting Mission Dispatch</p>
+              <motion.div
+                key="step0"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-3"
+              >
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+                  Choose a Verified Incident Awaiting Mission Dispatch
+                </p>
                 {(() => {
-                  const assignableIncidents = incidents.filter(i => i.status === 'Verified');
+                  const assignableIncidents = incidents.filter(
+                    (i) => i.status === 'Verified' || i.status === 'Responding'
+                  );
                   if (assignableIncidents.length === 0) {
                     return (
                       <div className="text-center py-8 px-4 bg-slate-50 rounded-xl border border-slate-200">
-                        <CheckCircle2 size={32} className="text-emerald-500 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-800">All Verified Incidents Are Responded To</p>
-                        <p className="text-xs text-slate-500 mt-1">There are no pending verified incidents without active team responses.</p>
+                        <CheckCircle2 size={32} className="text-blue-600 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-slate-800">No Verified Incidents Available</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          All incidents currently have missions or are unverified.
+                        </p>
                       </div>
                     );
                   }
@@ -148,19 +203,31 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
                     <button
                       key={inc.id}
                       onClick={() => setSelectedIncidentId(inc.id)}
-                      className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${selectedIncidentId === inc.id ? 'border-blue-400 bg-blue-50 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
+                      className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${
+                        selectedIncidentId === inc.id
+                          ? 'border-blue-500 bg-blue-50/60 shadow-xs'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
                     >
                       <div className="flex items-center justify-between gap-3 mb-1.5">
-                        <span className="text-[11px] font-mono font-bold text-slate-400">{inc.displayId || inc.id}</span>
+                        <span className="text-[11px] font-mono font-bold text-slate-500">
+                          {inc.display_id || inc.id}
+                        </span>
                         <DisasterBadge type="severity" value={inc.severity} />
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border ml-auto bg-emerald-50 text-emerald-700 border-emerald-200">
-                          {inc.status} · Ready for Squad
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border ml-auto bg-blue-50 text-blue-700 border-blue-200">
+                          {inc.status}
                         </span>
                       </div>
-                      <p className="text-sm font-bold text-slate-800">{inc.title}</p>
+                      <p className="text-sm font-bold text-slate-900">{inc.title}</p>
                       <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-medium">
-                        <span className="flex items-center gap-1"><MapPin size={10} />{inc.location}, {inc.state}</span>
-                        <span className="flex items-center gap-1"><Users size={10} />{inc.affectedPopulation.toLocaleString()} affected</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin size={10} />
+                          {inc.location}, {inc.state}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Users size={10} />
+                          {inc.affected_population.toLocaleString()} affected
+                        </span>
                       </div>
                     </button>
                   ));
@@ -168,88 +235,119 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
               </motion.div>
             )}
 
-            {/* Step 1: AI Recommendation */}
+            {/* Step 1: Assign Response Teams (Multi-Select & AI Rec) */}
             {step === 1 && (
-              <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">AI Team Recommendation</p>
+              <motion.div
+                key="step1"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-4"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                    Assign Response Squads (Select 1 or more)
+                  </p>
+                  <span className="text-xs font-bold text-blue-700">
+                    {selectedTeamIds.length} team(s) selected ({totalPersonnel} personnel)
+                  </span>
+                </div>
 
                 {/* AI Card */}
                 {aiRec && (
-                  <div className="border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center">
-                        <Sparkles size={14} className="text-white" />
+                  <div className="border border-blue-200 bg-blue-50/50 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                          <Sparkles size={14} className="text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">AI Priority Recommendation</p>
+                          <p className="text-[10px] text-blue-700 font-medium">
+                            {aiRec.confidence}% match · {aiRec.eta}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-violet-900">AI Recommendation</p>
-                        <p className="text-[10px] text-violet-600 font-medium">{aiRec.confidence}% confidence · Est. mobilisation: {aiRec.eta}</p>
-                      </div>
-                    </div>
-
-                    {/* Confidence bar */}
-                    <div className="w-full h-1.5 bg-violet-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-600 rounded-full" style={{ width: `${aiRec.confidence}%` }} />
-                    </div>
-
-                    <div className="bg-white/70 rounded-lg p-3">
-                      <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wide mb-1">Recommended Team</p>
-                      <p className="text-sm font-bold text-slate-800">{teams.find(t => t.id === aiRec.teamId)?.name}</p>
-                    </div>
-                    <div className="bg-white/60 rounded-lg p-3">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Rationale</p>
-                      <p className="text-xs text-slate-600 leading-relaxed">{aiRec.rationale}</p>
-                    </div>
-
-                    <div className="flex gap-2">
                       <button
-                        onClick={() => { setSelectedTeamId(aiRec.teamId); setAiOverridden(false); }}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors border ${selectedTeamId === aiRec.teamId && !aiOverridden ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-violet-700 border-violet-200 hover:bg-violet-50'}`}
+                        onClick={() => {
+                          if (!selectedTeamIds.includes(aiRec.teamId)) {
+                            setSelectedTeamIds((prev) => [...prev, aiRec.teamId]);
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
                       >
-                        <CheckCircle2 size={13} /> Accept AI Recommendation
-                      </button>
-                      <button
-                        onClick={() => setAiOverridden(true)}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition-colors border ${aiOverridden ? 'bg-slate-200 text-slate-700 border-slate-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                      >
-                        <AlertTriangle size={13} /> Override — Choose Manually
+                        + Add Recommended Team
                       </button>
                     </div>
+                    <p className="text-xs text-slate-700 bg-white/80 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
+                      {aiRec.rationale}
+                    </p>
                   </div>
                 )}
 
-                {/* Manual team picker (shown when overriding) */}
-                <AnimatePresence>
-                  {aiOverridden && (
-                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} className="space-y-2">
-                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Select a Team Manually</p>
-                      {teams.map((team) => (
-                        <button
-                          key={team.id}
-                          onClick={() => setSelectedTeamId(team.id)}
-                          className={`w-full text-left rounded-lg border px-4 py-3 transition-all ${selectedTeamId === team.id ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-800">{team.name}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${team.status === 'Available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                              {team.status}
-                            </span>
+                {/* Team Multi-Selection Grid */}
+                <div className="space-y-2">
+                  {teams.map((team) => {
+                    const isSelected = selectedTeamIds.includes(team.id);
+                    return (
+                      <div
+                        key={team.id}
+                        onClick={() => toggleTeamSelection(team.id)}
+                        className={`w-full text-left rounded-xl border px-4 py-3 transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50/60 shadow-2xs'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center ${
+                              isSelected
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {isSelected && <Check size={12} strokeWidth={3} />}
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">{team.agency} · {team.personnelCount} personnel · {team.currentLocation}</p>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900">{team.name}</span>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {team.agency} · {team.personnel_count} personnel · {team.current_location}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            team.status === 'Available'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          {team.status}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </motion.div>
             )}
 
             {/* Step 2: Mission Brief */}
             {step === 2 && (
-              <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Define Mission Parameters</p>
+              <motion.div
+                key="step2"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-4"
+              >
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+                  Define Mission Parameters
+                </p>
                 <div>
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1.5 flex items-center gap-1">
-                    <FileText size={11} /> Mission Objective <span className='text-red-500'>*</span>
+                    <FileText size={11} /> Mission Objective <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={objective}
@@ -271,7 +369,9 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500"
                     >
                       {(['Critical', 'High', 'Medium', 'Low'] as SeverityLevel[]).map((p) => (
-                        <option key={p} value={p}>{p}</option>
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -290,62 +390,85 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1.5">Special Notes / ROE</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    rows={2}
-                    placeholder="Rules of engagement, special equipment, coordination notes..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 resize-none transition-colors"
-                  />
-                </div>
+
               </motion.div>
             )}
 
             {/* Step 3: Confirm & Dispatch */}
             {step === 3 && (
-              <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Review & Confirm Mission Dispatch</p>
+              <motion.div
+                key="step3"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-4"
+              >
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+                  Review &amp; Confirm Mission Dispatch
+                </p>
 
                 {/* Summary Card */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                   <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <p className="text-xs font-bold text-slate-700">Mission Assignment Summary</p>
+                    <p className="text-xs font-bold text-slate-800">Operational Mission Summary</p>
                   </div>
-                  <div className="divide-y divide-slate-100">
-                    {[
-                      { icon: Target, label: 'Incident Target', value: selectedIncident ? `${selectedIncident.id} — ${selectedIncident.title}` : '—', sub: selectedIncident ? `${selectedIncident.location}, ${selectedIncident.state}` : '' },
-                      { icon: Users, label: 'Assigned Team', value: selectedTeam?.name || '—', sub: selectedTeam ? `${selectedTeam.agency} · ${selectedTeam.personnelCount} personnel` : '' },
-                      { icon: FileText, label: 'Objective', value: objective, sub: '' },
-                      { icon: Flag, label: 'Priority', value: priority, sub: '' },
-                      { icon: Clock, label: 'Est. Duration', value: `${durationHrs} hours`, sub: '' },
-                    ].map(({ icon: Icon, label, value, sub }) => (
-                      <div key={label} className="px-4 py-3 flex items-start gap-3">
-                        <Icon size={14} className="text-blue-500 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{label}</p>
-                          <p className="text-xs font-semibold text-slate-800 mt-0.5">{value}</p>
-                          {sub && <p className="text-[11px] text-slate-500">{sub}</p>}
+                  <div className="divide-y divide-slate-100 text-xs">
+                    <div className="px-4 py-3 flex items-start gap-3">
+                      <Target size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Incident Target</p>
+                        <p className="text-xs font-bold text-slate-900 mt-0.5">
+                          {selectedIncident?.display_id || selectedIncident?.id} — {selectedIncident?.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {selectedIncident?.location}, {selectedIncident?.state}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-3 flex items-start gap-3">
+                      <Shield size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                          Assigned Units ({selectedTeamsList.length})
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {selectedTeamsList.map((t) => (
+                            <span
+                              key={t.id}
+                              className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-800 rounded-md"
+                            >
+                              {t.name} ({t.agency}) · {t.personnel_count} pax
+                            </span>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                    {notes && (
-                      <div className="px-4 py-3 flex items-start gap-3">
-                        <FileText size={14} className="text-slate-400 mt-0.5 shrink-0" />
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Special Notes</p>
-                          <p className="text-xs text-slate-600 mt-0.5">{notes}</p>
-                        </div>
+                    </div>
+
+                    <div className="px-4 py-3 flex items-start gap-3">
+                      <FileText size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Objective</p>
+                        <p className="text-xs text-slate-800 mt-0.5">{objective}</p>
                       </div>
-                    )}
+                    </div>
+
+                    <div className="px-4 py-3 flex items-start gap-3">
+                      <Flag size={14} className="text-blue-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Priority &amp; Est. Duration</p>
+                        <p className="text-xs font-semibold text-slate-800 mt-0.5">
+                          {priority} Priority · {durationHrs} hours
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
-                  <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
-                  <p className="text-xs text-amber-800 font-medium leading-relaxed">
-                    This action will officially dispatch the selected rescue team to the incident zone. Confirm all details before proceeding.
+                <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-2">
+                  <AlertTriangle size={14} className="text-slate-600 mt-0.5 shrink-0" />
+                  <p className="text-xs text-slate-700 font-medium leading-relaxed">
+                    Dispatching this operation will mobilize {selectedTeamsList.length} squad(s) and update incident status to Responding.
                   </p>
                 </div>
               </motion.div>
@@ -363,7 +486,10 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
             <ChevronLeft size={14} /> Back
           </button>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+            >
               Cancel
             </button>
             {step < steps.length - 1 ? (
@@ -377,7 +503,7 @@ export const MissionWizard: React.FC<MissionWizardProps> = ({ incidents, teams, 
             ) : (
               <button
                 onClick={handleDispatch}
-                className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                className="flex items-center gap-1.5 px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
               >
                 <Send size={13} /> Dispatch Mission
               </button>

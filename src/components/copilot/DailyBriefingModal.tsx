@@ -106,9 +106,9 @@ export const DailyBriefingModal: React.FC<DailyBriefingModalProps> = ({
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                           {task.category}
                         </span>
-                        {task.displayId && (
+                        {task.display_id && (
                           <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                            {task.displayId}
+                            {task.display_id}
                           </span>
                         )}
                       </div>

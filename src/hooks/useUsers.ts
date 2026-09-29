@@ -47,3 +47,9 @@ export function useDeleteUser() {
     },
   });
 }
+
+export function useUploadAvatar() {
+  return useMutation({
+    mutationFn: (file: File) => userService.uploadAvatar(file),
+  });
+}

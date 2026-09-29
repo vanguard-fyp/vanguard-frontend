@@ -355,10 +355,19 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                 className="w-full flex items-center justify-center py-2 cursor-pointer hover:bg-white/5 transition-colors"
               >
                 <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-                  style={{ background: C.logoBg }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
+                  style={{
+                    backgroundColor: user.avatar_url ? "white" : C.logoBg,
+                    backgroundImage: user.avatar_url ? `url(${user.avatar_url})` : "none",
+                    backgroundSize: user.avatar_url ? "cover" : "none",
+                    backgroundPosition: user.avatar_url ? "center" : "none",
+                  }}
                 >
-                  {user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'}
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt={user.name || 'Profile'} className="w-full h-full object-cover" />
+                  ) : (
+                    user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'
+                  )}
                 </div>
               </button>
             ) : (
@@ -371,10 +380,19 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                     className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer group"
                   >
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 transition-transform group-hover:scale-105"
-                      style={{ background: C.logoBg }}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden transition-transform group-hover:scale-105"
+                      style={{
+                        backgroundColor: user.avatar_url ? "white" : C.logoBg,
+                        backgroundImage: user.avatar_url ? `url(${user.avatar_url})` : "none",
+                        backgroundSize: user.avatar_url ? "cover" : "none",
+                        backgroundPosition: user.avatar_url ? "center" : "none",
+                      }}
                     >
-                      {user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'}
+                      {user?.avatar_url ? (
+                        <img src={user.avatar_url} alt={user.name || 'Profile'} className="w-full h-full object-cover" />
+                      ) : (
+                        user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR'
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-semibold truncate group-hover:underline" style={{ color: C.profileName }}>

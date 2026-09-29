@@ -6,7 +6,6 @@ import {
   useResourceRequests,
   useApproveResourceRequest,
   useRejectResourceRequest,
-  useCreateResourceRequest,
 } from '../../../hooks';
 import { useAuth } from '../../../context/AuthContext';
 import { InventoryStage } from '../../../components/ui/coordination/resource/InventoryStage';
@@ -18,7 +17,7 @@ import { RequestDetailModal } from '../../../components/ui/coordination/resource
 import { CreateResourceRequestModal } from '../../../components/ui/coordination/resource/CreateResourceRequestModal';
 import { AddInventoryItemModal } from '../../../components/ui/coordination/resource/AddInventoryItemModal';
 import { useToast } from '../../../context/ToastContext';
-import type { ResourceRequest, ViewMode } from '../../../types';
+import type { ResourceItem, ResourceRequest, ViewMode } from '../../../types';
 import { containerAnim, itemAnim } from '../../../constants';
 
 const ResourceManagement: React.FC = () => {
@@ -26,7 +25,6 @@ const ResourceManagement: React.FC = () => {
   const { data: requests = [], isLoading: isRequestsLoading } = useResourceRequests();
   const approveMutation = useApproveResourceRequest();
   const rejectMutation = useRejectResourceRequest();
-  const createMutation = useCreateResourceRequest();
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
@@ -35,6 +33,7 @@ const ResourceManagement: React.FC = () => {
   const [selectedRequestForModal, setSelectedRequestForModal] = useState<ResourceRequest | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
+  const [requisitionItem, setRequisitionItem] = useState<ResourceItem | null>(null);
 
   // Dynamic approver linked to current logged-in user
   const currentApprover = user?.name ? `${user.name} (${user.role} - ${user.agency || 'NADMA'})` : 'NADMA Incident Commander';
@@ -64,13 +63,6 @@ const ResourceManagement: React.FC = () => {
         onError: () => toastError('Rejection Failed', 'Could not reject request. Please try again.'),
       }
     );
-  };
-
-  const handleCreateRequest = (newReqData: Partial<ResourceRequest>) => {
-    createMutation.mutate(newReqData, {
-      onSuccess: () => toastSuccess('Request Submitted', 'New resource request is pending approval.'),
-      onError: () => toastError('Submit Failed', 'Could not submit resource request.'),
-    });
   };
 
   const pendingRequestsCount = requests.filter((r) => r.status === 'Pending Approval').length;
@@ -136,19 +128,22 @@ const ResourceManagement: React.FC = () => {
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => setShowAddInventoryModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-200 transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold border border-slate-200 transition-all shadow-2xs cursor-pointer"
           >
-            <Plus size={14} className="text-blue-600" />
+            <Plus size={14} className="text-white" />
             <span>Add Catalog Item</span>
           </button>
 
-          <button
-            onClick={() => setShowCreateModal(true)}
+          {/* <button
+            onClick={() => {
+              setRequisitionItem(null);
+              setShowCreateModal(true);
+            }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer"
           >
             <PackagePlus size={14} />
             <span>Create Requisition</span>
-          </button>
+          </button> */}
 
           {/* View Mode Toggle */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold shadow-2xs">
@@ -265,7 +260,10 @@ const ResourceManagement: React.FC = () => {
             <InventoryStage
               inventory={inventory}
               requests={requests}
-              onRequestCreated={handleCreateRequest}
+              onCreateRequisition={(item) => {
+                setRequisitionItem(item);
+                setShowCreateModal(true);
+              }}
             />
           </motion.div>
         )}
@@ -323,7 +321,11 @@ const ResourceManagement: React.FC = () => {
       {/* Create Requisition Modal */}
       <CreateResourceRequestModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        initialItem={requisitionItem}
+        onClose={() => {
+          setShowCreateModal(false);
+          setRequisitionItem(null);
+        }}
       />
 
       {/* Add Catalog Item Modal */}

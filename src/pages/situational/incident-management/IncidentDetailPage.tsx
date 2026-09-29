@@ -11,10 +11,11 @@ const IncidentDetailPage: React.FC = () => {
   const { data: incident, isLoading, isError } = useIncident(id || null);
   const updateIncident = useUpdateIncident();
 
+  // TODO: change to update by real user ID
   const handleVerify = (incidentId: string) => {
     updateIncident.mutate({
       id: incidentId,
-      updates: { status: 'Verified', verifiedBy: 'Officer Rosli (NADMA)' },
+      updates: { status: 'Verified', verified_by: 'Officer Rosli (NADMA)' },
     });
   };
 

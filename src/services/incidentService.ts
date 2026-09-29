@@ -98,6 +98,27 @@ export const incidentService = {
   getCities: async (): Promise<{ id: string; title: string; subtitle: string; lat: number; lng: number }[]> => {
     return apiClient.get<{ id: string; title: string; subtitle: string; lat: number; lng: number }[]>('/incidents/cities');
   },
+
+  /**
+   * Retrieve citizen emergency assistance requests (Rescue / Medical)
+   */
+  getAssistanceRequests: async (params?: { status?: string; reporter_contact?: string }): Promise<any[]> => {
+    return apiClient.get<any[]>('/incidents/assistance-requests', params);
+  },
+
+  /**
+   * Update status of citizen assistance request (e.g. Dispatched, Resolved)
+   */
+  updateAssistanceStatus: async (requestId: string, status: string, notes?: string): Promise<any> => {
+    return apiClient.patch<any>(`/incidents/assistance-requests/${requestId}/status`, { status, notes });
+  },
+
+  /**
+   * Fetch the operational audit log entries for a specific incident
+   */
+  getIncidentLogs: async (incidentId: string): Promise<any[]> => {
+    return apiClient.get<any[]>(`/incidents/${incidentId}/logs`);
+  },
 };
 
 

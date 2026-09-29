@@ -32,14 +32,14 @@ export type DisasterLevel = 'Level 1: District' | 'Level 2: State' | 'Level 3: F
 
 export interface IncidentLog {
   id: string;
-  incidentId: string;
-  actorUserId?: string;
+  incident_id: string;
+  actor_user_id?: string;
   actor: string;
-  actorRole?: string;
-  actorAgency?: string;
+  actor_role?: string;
+  actor_agency?: string;
   action: string;
   detail?: string;
-  loggedAt: string;
+  logged_at: string;
 }
 
 export interface CityItem {
@@ -87,40 +87,41 @@ export interface AIRecommendation {
 
 export interface Incident {
   id: string;
-  displayId?: string;
+  display_id: string;
   title: string;
   type: DisasterType;
   location: string;
   state: string;
   district: string;
-  postcode: string;
+  postcode?: string;
   coordinates: [number, number];
   severity: SeverityLevel;
-  disasterLevel: DisasterLevel;
-  occurredAt: string;  // Disaster occurrence / start time (DB column: occurred_at)
+  disaster_level: DisasterLevel;
+  occurred_at: string;
   source: string;
-  sourceType?: 'Metrological / Sensor' | 'Citizen Reported' | 'Agency Patrol' | 'Emergency 999';
-  reportedByUserId?: string;
-  reporterName?: string;
+  reported_by_user_id?: string;
+  reporter_name?: string;
   status: 'Unverified' | 'Verified' | 'Responding' | 'Resolved' | 'Rejected' | 'Archived';
-  affectedPopulation: number;
-  casualtiesCount: number;
-  infrastructureDamage: 'Severe' | 'Moderate' | 'Minor' | 'None';
-  accessibilityScore: number; // 0 - 100
-  weatherCondition: string;
+  affected_population: number;
+  casualties_count: number;
+  infrastructure_damage: 'Severe' | 'Moderate' | 'Minor' | 'None';
+  accessibility_score: number;
+  weather_condition: string;
   description: string;
-  reporterContact?: string;
-  verifiedBy?: string;
-  verifiedByUserId?: string;
-  verifiedAt?: string;
-  resolvedAt?: string;
-  resolvedByUserId?: string;
-  endDate?: string;
-  rejectionReason?: string;
-  aiPriorityScore: number; // Computed score 0 - 100
-  triggerAlert?: TriggerAlert;
-  impactTimeline?: ImpactSnapshot[];
-  actionLog?: IncidentLog[];
+  reporter_contact?: string;
+  verified_by?: string;
+  verified_by_user_id?: string;
+  verified_by_role?: string;
+  verified_by_agency?: string;
+  verified_at?: string;
+  resolved_at?: string;
+  resolved_by_user_id?: string;
+  rejection_reason?: string;
+  ai_priority_score: number;
+  outcome_notes?: string;
+  trigger_alert?: TriggerAlert;
+  impact_timeline?: ImpactSnapshot[];
+  action_log?: IncidentLog[];
 }
 
 export interface CopilotTask {
@@ -131,7 +132,7 @@ export interface CopilotTask {
   description: string;
   actionLabel: string;
   link: string;
-  displayId?: string;
+  display_id?: string;
   badge?: string;
   icon?: string;
   dueTime?: string;
@@ -177,7 +178,6 @@ export interface MapPOI {
   name: string;
   category: 'Shelter' | 'Hospital' | 'School' | 'Utility' | 'Rescue Team' | 'Road Closure' | 'Warehouse' | 'Depot';
   coordinates: [number, number];
-  status: 'Operational' | 'Near Capacity' | 'Full' | 'Damaged' | 'Active';
   capacity?: { current: number; max: number };
   details: string;
   contact?: string;
@@ -185,35 +185,37 @@ export interface MapPOI {
 
 export interface RescueTeam {
   id: string;
-  displayId?: string;
+  display_id: string;
   name: string;
   agency: 'SMART' | 'BOMBA' | 'APM' | 'PDRM' | 'ATM';
-  personnelCount: number;
+  personnel_count: number;
   vehicles: string[];
   equipment?: string[];
-  currentLocation: string;
+  current_location: string;
   coordinates: [number, number];
   status: 'Available' | 'Deployed' | 'En Route' | 'Off Duty' | 'Deleted';
-  assignedIncidentId?: string;
-  contactNumber: string;
+  contact_number: string;
   commander: string;
   specialization?: string;
 }
 
 export interface Mission {
   id: string;
-  displayId?: string;
+  display_id: string;
   title: string;
-  incidentId: string;
-  incidentLocation: string;
-  assignedTeamId: string;
-  teamName: string;
-  agency: string;
+  incident_id: string;
+  incident_location: string;
+  assigned_team_id?: string;
+  team_ids?: string[];
+  team_name: string;
+  agency: 'SMART' | 'BOMBA' | 'APM' | 'PDRM' | 'ATM';
   priority: SeverityLevel;
   status: 'Pending' | 'In Progress' | 'Completed' | 'Aborted';
-  assignedTime: string;
-  estimatedCompletion: string;
+  estimated_completion: string;
+  actual_completion?: string;
   objective: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Warehouse {
@@ -221,11 +223,11 @@ export interface Warehouse {
   name: string;
   state: string;
   district: string;
-  fullAddress: string;
+  postcode?: string;
+  full_address: string;
   lat: number;
   lng: number;
-  contactNumber: string;
-  capacityStatus: 'Operational' | 'Near Capacity' | 'Full';
+  contact_number: string;
 }
 
 export type ResourceCategory = 'Food' | 'Medical supplies' | 'Rescue equipment' | 'Vehicles' | 'Emergency supplies';
@@ -233,51 +235,57 @@ export type StockStatus = 'Sufficient' | 'Low Stock' | 'Critical';
 
 export interface ResourceItem {
   id: string;
-  displayId?: string;
+  display_id: string;
   name: string;
   category: ResourceCategory;
   unit: string;
-  stockLevel: number;
-  minThreshold: number;
-  warehouseId?: string;
-  warehouseLocation: string;
+  stock_level: number;
+  min_threshold: number;
+  warehouse_id?: string;
+  resource_type_id?: string;
+  warehouse_location?: string;
   status: StockStatus;
 }
 
 export interface ResourceRequest {
   id: string;
-  displayId?: string;
-  requestId: string;
-  requestUserId?: string;
-  requestorName?: string;
+  display_id: string;
+  requested_by_user_id?: string;
   agency: string;
   district: string;
-  resourceCategory: string;
-  resourceItemId?: string;
-  itemRequested: string;
-  quantityRequested: number;
+  resource_type_id?: string;
+  warehouse_id?: string;
+  quantity_requested: number;
   unit: string;
   urgency: SeverityLevel;
   status: 'Pending Approval' | 'Approved' | 'Rejected' | 'Dispatched' | 'Delivered' | 'Fulfilled';
-  timestamp: string;
+  requested_at?: string;
+  updated_at?: string;
   justification: string;
-  approvedBy?: string;
-  approvedByUserId?: string;
-  rejectionReason?: string;
+  approved_by_user_id?: string;
+  requested_by_name?: string;
+  approved_by_name?: string;
+  item_requested?: string;
+  rejection_reason?: string;
 }
 
 export interface PublicAnnouncement {
   id: string;
-  displayId?: string;
+  display_id: string;
   title: string;
   category: 'Emergency Alert' | 'Evacuation Order' | 'Safety Announcement';
-  targetState: string;
-  targetDistricts: string[];
+  target_type?: 'State' | 'District' | 'Radius';
+  target_state?: string;
+  target_districts: string[];
+  lat?: number;
+  lng?: number;
+  radius_km?: number;
   severity: SeverityLevel;
   content: string;
-  channels: ('SMS Broadcast' | 'MyJPJ App' | 'NADMA Portal' | 'TV/Radio Alert')[];
-  issuedBy: string;
-  timestamp: string;
+  issued_by_user_id?: string;
+  issued_by?: string;
+  issued_at?: string;
+  expires_at?: string;
   active: boolean;
 }
 
@@ -285,10 +293,12 @@ export interface UserAccount {
   id: string;
   name: string;
   email: string;
+  phone_number?: string;
   agency: string;
   role: UserRole;
   status: 'Active' | 'Inactive';
-  lastActive: string;
+  last_active: string;
+  avatar_url?: string;
 }
 
 /* ─── Network Topology ─────────────────────────────────────── */
@@ -297,6 +307,7 @@ export type TopoEdgeType = 'command' | 'assignment' | 'mission' | 'response';
 
 export interface TopoNode {
   id: string;
+  display_id: string;
   label: string;
   sublabel?: string;
   type: TopoNodeType;
@@ -341,37 +352,38 @@ export interface MetrologyReading {
   unit: string;
   threshold: number;
   station: string;
-  recordedAt: string;
+  recorded_at: string;
 }
 
 export interface TriggerAlert {
   id: string;
   source: TriggerSource;
   readings: MetrologyReading[];
-  predictedProbability: number; // 0-100
-  predictedOnset: string;
-  triggeredAt: string;
+  predicted_probability: number;
+  predicted_onset: string;
+  triggered_at: string;
 }
 
 export interface ImpactSnapshot {
   timestamp: string;
-  affectedPopulation: number;
-  severity: 'Critical' | 'High' | 'Medium' | 'Low';
-  impactRadiusKm: number;
+  affected_population: number;
+  casualties_count?: number;
+  severity?: 'Critical' | 'High' | 'Medium' | 'Low';
+  impact_radius_km?: number;
   note?: string;
-  isPredicted?: boolean;
+  is_predicted?: boolean;
   stage?: string;
 }
 
 export interface AnalyticsSummary {
-  totalIncidents: number;
-  totalResolved: number;
-  resolutionRate: number;
-  totalEvacuated: number;
-  avgResponseTimeMin: number;
-  incidentTrendPct: number;
-  resolutionRateImprovementPct: number;
-  responseTimeDeltaMin: number;
+  total_incidents: number;
+  total_resolved: number;
+  resolution_rate: number;
+  total_evacuated: number;
+  avg_response_time_min: number;
+  incident_trend_pct: number;
+  resolution_rate_improvement_pct: number;
+  response_time_delta_min: number;
 }
 
 export interface AdminRoleOption {
@@ -381,4 +393,15 @@ export interface AdminRoleOption {
   email: string;
   name: string;
   description: string;
+}
+
+export interface SystemNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'critical' | 'high' | 'warning' | 'info' | 'success';
+  category?: string;
+  link?: string;
+  is_read: boolean;
+  created_at: string;
 }

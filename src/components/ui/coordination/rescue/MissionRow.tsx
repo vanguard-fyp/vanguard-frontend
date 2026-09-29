@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, Target, MapPin, Clock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Target, Clock, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { DisasterBadge } from '../../dashboard/DisasterBadge';
 import { formatDateTime } from '../../../../utils/dateFormatter';
 import type { Mission } from '../../../../types';
@@ -85,24 +85,17 @@ export const MissionRow: React.FC<MissionRowProps> = ({ mission, isExpanded, onT
               {/* Meta grid */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-start gap-2">
-                  <MapPin size={13} className="text-slate-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Location Sector</p>
-                    <p className="text-xs font-semibold text-slate-700">{mission.incidentLocation}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
                   <Clock size={13} className="text-slate-400 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Assigned Time</p>
-                    <p className="text-xs font-semibold text-slate-700">{formatDateTime(mission.assignedTime)}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Created</p>
+                    <p className="text-xs font-semibold text-slate-700">{formatDateTime(mission.created_at ?? '')}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <Clock size={13} className="text-blue-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Est. Completion</p>
-                    <p className="text-xs font-semibold text-slate-700">{formatDateTime(mission.estimatedCompletion)}</p>
+                    <p className="text-xs font-semibold text-slate-700">{formatDateTime(mission.estimated_completion)}</p>
                   </div>
                 </div>
               </div>

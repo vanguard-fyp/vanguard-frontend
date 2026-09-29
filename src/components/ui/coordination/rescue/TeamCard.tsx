@@ -35,8 +35,10 @@ const statusConfig: Record<string, { dot: string; badge: string }> = {
 export const TeamCard: React.FC<TeamCardProps> = ({
   team, missions, incidents, isExpanded, onToggle, onViewOperations, onEdit, onDelete
 }) => {
-  const teamMissions = missions.filter((m) => m.assignedTeamId === team.id);
-  const assignedIncident = incidents.find((i) => i.id === team.assignedIncidentId);
+  const teamMissions = missions.filter((m) => m.incident_id != null);
+  const assignedIncident = team.status === 'Deployed' || team.status === 'En Route'
+    ? incidents.find((i) => i.status === 'Responding')
+    : undefined;
   const sc = statusConfig[team.status] || statusConfig['Off Duty'];
   const ac = agencyColors[team.agency] || '';
 
@@ -57,11 +59,11 @@ export const TeamCard: React.FC<TeamCardProps> = ({
           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <Users size={11} className="text-slate-400" />
-              {team.personnelCount} personnel
+              {team.personnel_count} personnel
             </span>
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <MapPin size={11} className="text-slate-400" />
-              {team.currentLocation}
+              {team.current_location}
             </span>
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <Target size={11} className="text-slate-400" />
@@ -122,14 +124,14 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                   <Phone size={14} className="text-slate-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Contact</p>
-                    <p className="text-xs font-semibold text-slate-800 font-mono">{team.contactNumber}</p>
+                    <p className="text-xs font-semibold text-slate-800 font-mono">{team.contact_number}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <Navigation size={14} className="text-slate-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Current Location</p>
-                    <p className="text-xs font-semibold text-slate-800">{team.currentLocation}</p>
+                    <p className="text-xs font-semibold text-slate-800">{team.current_location}</p>
                   </div>
                 </div>
               </div>
@@ -197,7 +199,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                    {team.displayId || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
+                    {team.display_id}
                   </span>
                   {onEdit && (
                     <button

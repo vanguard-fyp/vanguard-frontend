@@ -3,14 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Warehouse as WarehouseIcon, Search, ChevronDown, ChevronUp, Plus, History, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
 
 import type { ResourceItem, ResourceRequest, AIStockAdvisory, Warehouse } from '../../../../types';
-import { ResupplyRequestModal } from './ResupplyRequestModal';
 import { useDeleteInventoryItem, useWarehouses } from '../../../../hooks';
 import { useToast } from '../../../../context/ToastContext';
 
 interface InventoryStageProps {
   inventory: ResourceItem[];
   requests: ResourceRequest[];
-  onRequestCreated: (newReq: Partial<ResourceRequest>) => void;
+  onCreateRequisition: (item: ResourceItem) => void;
 }
 
 const categoryColors: Record<string, string> = {
@@ -21,43 +20,42 @@ const categoryColors: Record<string, string> = {
   'Emergency supplies': 'bg-purple-50 text-purple-800 border-purple-200',
 };
 
-function getAIStockAdvisory(item: ResourceItem): AIStockAdvisory {
+function getAIStockAdvisory(item: ResourceItem, warehouseLabel: string): AIStockAdvisory {
   if (item.status === 'Critical') {
     return {
-      suggestedQty: item.minThreshold * 3,
+      suggested_qty: item.min_threshold * 3,
       urgency: 'Critical',
       confidence: 96,
-      forecastRationale: `Critical stock depletion detected at ${item.warehouseLocation}. High evacuation influx in Kelantan requires immediate regional allocation.`,
-      depletionTrend: 'Depletion rate: 15% per hour (Projected zero-stock in ~3.2 hours).',
+      forecast_rationale: `Critical stock depletion detected at ${warehouseLabel}. High evacuation influx in Kelantan requires immediate regional allocation.`,
+      depletion_trend: 'Depletion rate: 15% per hour (Projected zero-stock in ~3.2 hours).',
     };
   }
   if (item.status === 'Low Stock') {
     return {
-      suggestedQty: item.minThreshold * 2,
+      suggested_qty: item.min_threshold * 2,
       urgency: 'High',
       confidence: 88,
-      forecastRationale: `Stock below safety reserve at ${item.warehouseLocation}. Proactive replenishment recommended.`,
-      depletionTrend: 'Depletion rate: 6% per hour (Projected zero-stock in ~14 hours).',
+      forecast_rationale: `Stock below safety reserve at ${warehouseLabel}. Proactive replenishment recommended.`,
+      depletion_trend: 'Depletion rate: 6% per hour (Projected zero-stock in ~14 hours).',
     };
   }
   return {
-    suggestedQty: item.minThreshold,
+    suggested_qty: item.min_threshold,
     urgency: 'Medium',
     confidence: 75,
-    forecastRationale: `Stock level optimal at ${item.warehouseLocation}. Standard replenishment scheduled.`,
-    depletionTrend: 'Nominal consumption rate.',
+    forecast_rationale: `Stock level optimal at ${warehouseLabel}. Standard replenishment scheduled.`,
+    depletion_trend: 'Nominal consumption rate.',
   };
 }
 
 export const InventoryStage: React.FC<InventoryStageProps> = ({
   inventory,
   requests,
-  onRequestCreated,
+  onCreateRequisition,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const [requestModalItem, setRequestModalItem] = useState<ResourceItem | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: warehouses = [] } = useWarehouses();
@@ -68,19 +66,19 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
     const map: Record<string, Warehouse> = {};
     warehouses.forEach((w) => {
       map[w.id] = w;
-      map[w.name.toLowerCase()] = w;
     });
     return map;
   }, [warehouses]);
 
   const resolveWarehouseInfo = (item: ResourceItem) => {
-    const fromId = item.warehouseId ? warehouseMap[item.warehouseId] : undefined;
-    const fromName = item.warehouseLocation ? warehouseMap[item.warehouseLocation.toLowerCase()] : undefined;
-    const w = fromId || fromName;
+    const w = item.warehouse_id ? warehouseMap[item.warehouse_id] : undefined;
     return {
-      fullAddress: w?.fullAddress || item.warehouseLocation || 'Strategic National Depot',
-      district: w?.district || item.warehouseLocation || 'Central Logistics Sector',
-      contactNumber: w?.contactNumber || '+603-8888-0000',
+      label: w
+        ? `${w.name} (${w.district}, ${w.state})`
+        : 'Strategic National Depot',
+      fullAddress: w?.full_address || 'Central Logistics Depot',
+      district: w?.district || 'Central Logistics Sector',
+      contactNumber: w?.contact_number || '+603-8888-0000',
     };
   };
 
@@ -88,7 +86,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
     const wInfo = resolveWarehouseInfo(item);
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.warehouseLocation.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      wInfo.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
       wInfo.district.toLowerCase().includes(searchQuery.toLowerCase()) ||
       wInfo.fullAddress.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
@@ -97,18 +95,14 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
 
   const categories = ['All', ...Array.from(new Set(inventory.map((i) => i.category)))];
 
-  const handleOpenRequest = (item: ResourceItem) => {
-    setRequestModalItem(item);
-  };
-
   const handleDeleteItem = async (item: ResourceItem) => {
     try {
       await deleteItemMutation.mutateAsync(item.id);
-      toast.success(`"${item.name}" removed from inventory catalog.`);
+      toast.success(`"${item.name}" removed from active stock tracking. Resource type catalog entry preserved.`);
       setConfirmDeleteId(null);
       if (expandedItemId === item.id) setExpandedItemId(null);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete inventory item');
+      toast.error(err.message || 'Failed to remove inventory item');
     }
   };
 
@@ -161,10 +155,10 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
       <div className="space-y-3">
         {filteredInventory.map((item) => {
           const isExpanded = expandedItemId === item.id;
-          const itemRequests = requests.filter((r) => r.itemRequested === item.name);
-          const pct = Math.min(100, Math.round((item.stockLevel / (item.minThreshold * 2)) * 100));
+          const itemRequests = requests.filter((r) => r.resource_type_id === item.resource_type_id);
+          const pct = Math.min(100, Math.round((item.stock_level / (item.min_threshold * 2)) * 100));
           const locCtx = resolveWarehouseInfo(item);
-          const aiAdvisory = getAIStockAdvisory(item);
+          const aiAdvisory = getAIStockAdvisory(item, locCtx.label);
 
           return (
             <motion.div
@@ -182,7 +176,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                      {item.displayId || (item.id.startsWith('res-') ? item.id.split('-').slice(0, 3).join('-').toUpperCase() : item.id.length > 13 ? `RES-${item.id.slice(0, 6).toUpperCase()}` : item.id)}
+                      {item.display_id}
                     </span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${categoryColors[item.category]}`}>
                       {item.category}
@@ -206,7 +200,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                   </div>
                   <h4 className="text-xs font-bold text-slate-900 truncate">{item.name}</h4>
                   <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
-                    <span className="text-slate-700 font-semibold">{item.warehouseLocation}</span>
+                    <span className="text-slate-700 font-semibold">{locCtx.label}</span>
                     <span className="text-slate-300">·</span>
                     <span className="text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
                       📍 {locCtx.district}
@@ -218,7 +212,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                   {/* Stock Bar */}
                   <div className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <span className="text-xs font-bold text-slate-900">{item.stockLevel.toLocaleString()}</span>
+                      <span className="text-xs font-bold text-slate-900">{item.stock_level.toLocaleString()}</span>
                       <span className="text-[10px] text-slate-400 font-medium">{item.unit}</span>
                     </div>
                     <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
@@ -238,18 +232,18 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleOpenRequest(item);
+                      onCreateRequisition(item);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg transition-colors shadow-2xs"
                   >
                     <Plus size={13} />
-                    Request Resupply
+                    Create Requisition
                   </button>
 
                   {confirmDeleteId === item.id ? (
                     <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg p-1.5" onClick={(e) => e.stopPropagation()}>
                       <AlertTriangle size={12} className="text-red-500 shrink-0" />
-                      <span className="text-[10px] text-red-700 font-bold whitespace-nowrap">Remove?</span>
+                      <span className="text-[10px] text-red-700 font-bold whitespace-nowrap">Remove from stock?</span>
                       <button
                         onClick={() => handleDeleteItem(item)}
                         disabled={deleteItemMutation.isPending}
@@ -297,15 +291,15 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white border border-slate-200 rounded-lg p-3 shadow-2xs">
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Available Stock</p>
-                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.stockLevel.toLocaleString()} {item.unit}</p>
+                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.stock_level.toLocaleString()} {item.unit}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Min Safety Threshold</p>
-                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.minThreshold.toLocaleString()} {item.unit}</p>
+                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.min_threshold.toLocaleString()} {item.unit}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Depot Location & Sector</p>
-                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.warehouseLocation}</p>
+                        <p className="text-xs font-bold text-slate-800 mt-0.5">{locCtx.label}</p>
                         <p className="text-[10px] text-blue-600 font-medium mt-0.5">{locCtx.district}</p>
                       </div>
                       <div>
@@ -326,13 +320,13 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                         <span className="text-[11px] font-bold text-violet-700 font-mono">{aiAdvisory.confidence}% confidence</span>
                       </div>
 
-                      <p className="text-xs text-slate-700 leading-relaxed font-normal">{aiAdvisory.forecastRationale}</p>
-                      <p className="text-[11px] font-semibold text-violet-800 italic">{aiAdvisory.depletionTrend}</p>
+                      <p className="text-xs text-slate-700 leading-relaxed font-normal">{aiAdvisory.forecast_rationale}</p>
+                      <p className="text-[11px] font-semibold text-violet-800 italic">{aiAdvisory.depletion_trend}</p>
 
                       <div className="flex items-center gap-2 pt-1">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/80 text-violet-900 border border-violet-200 text-xs font-semibold rounded-lg shadow-2xs">
                           <Sparkles size={12} className="text-violet-600" />
-                          <span>AI Target Buffer: <strong>+{aiAdvisory.suggestedQty} {item.unit}</strong></span>
+                          <span>AI Target Buffer: <strong>+{aiAdvisory.suggested_qty} {item.unit}</strong></span>
                         </span>
                       </div>
                     </div>
@@ -351,8 +345,8 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
                               className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between text-xs"
                             >
                               <div>
-                                <span className="font-mono font-bold text-slate-400 mr-2">{req.requestId || req.id}</span>
-                                <span className="font-bold text-slate-800">{req.quantityRequested} {req.unit}</span>
+                                <span className="font-mono font-bold text-slate-400 mr-2">{req.display_id}</span>
+                                <span className="font-bold text-slate-800">{req.quantity_requested} {req.unit}</span>
                                 <span className="text-slate-500 ml-2">by {req.agency} ({req.district})</span>
                               </div>
                               <span
@@ -391,17 +385,6 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({
         )}
       </div>
 
-      {/* Resupply Request Modal */}
-      <AnimatePresence>
-        {requestModalItem && (
-          <ResupplyRequestModal
-            item={requestModalItem}
-            onClose={() => setRequestModalItem(null)}
-            onSubmit={onRequestCreated}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 };
-

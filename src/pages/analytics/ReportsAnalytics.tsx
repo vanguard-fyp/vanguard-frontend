@@ -105,14 +105,14 @@ const ReportsAnalytics: React.FC = () => {
     used: r.value,
   }));
 
-  const totalIncidents = summaryData?.totalIncidents ?? monthlyIncidentTrend.reduce((s, m) => s + m.incidents, 0);
-  const totalResolved = summaryData?.totalResolved ?? monthlyIncidentTrend.reduce((s, m) => s + m.resolved, 0);
-  const resolutionRate = summaryData?.resolutionRate ?? (totalIncidents > 0 ? Math.round((totalResolved / totalIncidents) * 100) : 0);
-  const totalEvacuated = summaryData?.totalEvacuated ?? (totalIncidents * 650);
-  const avgResponseTimeMin = summaryData?.avgResponseTimeMin ?? 26;
-  const incidentTrendPct = summaryData?.incidentTrendPct ?? 12.0;
-  const resolutionRateImprovementPct = summaryData?.resolutionRateImprovementPct ?? 3.0;
-  const responseTimeDeltaMin = summaryData?.responseTimeDeltaMin ?? -8;
+  const totalIncidents = summaryData?.total_incidents ?? monthlyIncidentTrend.reduce((s, m) => s + m.incidents, 0);
+  const totalResolved = summaryData?.total_resolved ?? monthlyIncidentTrend.reduce((s, m) => s + m.resolved, 0);
+  const resolutionRate = summaryData?.resolution_rate ?? (totalIncidents > 0 ? Math.round((totalResolved / totalIncidents) * 100) : 0);
+  const totalEvacuated = summaryData?.total_evacuated ?? (totalIncidents * 650);
+  const avgResponseTimeMin = summaryData?.avg_response_time_min ?? 26;
+  const incidentTrendPct = summaryData?.incident_trend_pct ?? 12.0;
+  const resolutionRateImprovementPct = summaryData?.resolution_rate_improvement_pct ?? 3.0;
+  const responseTimeDeltaMin = summaryData?.response_time_delta_min ?? -8;
 
   const isLoading = isSummaryLoading || isTrendsLoading || isTypesLoading || isRespLoading || isResLoading;
 

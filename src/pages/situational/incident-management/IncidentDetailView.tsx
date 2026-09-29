@@ -31,10 +31,9 @@ import {
   Droplets,
   Edit3,
 } from 'lucide-react';
-import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
-import { useUpdateIncident, useResolveIncident } from '../../../hooks';
+import { useIncidentLogs, useUpdateIncident, useResolveIncident } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useToast } from '../../../context/ToastContext';
@@ -70,8 +69,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   onVerify,
   onTrackInIntelligence,
 }) => {
-  const isTracked = incident.status !== 'Unverified' && !!incident.impactTimeline?.length;
+  const isTracked = !!incident.impact_timeline?.length;
   const { user } = useAuth();
+  const { data: incidentLogs = [], isLoading: isLoadingLogs } = useIncidentLogs(incident.id);
   const updateIncident = useUpdateIncident();
   const resolveIncident = useResolveIncident();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
@@ -88,17 +88,18 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState('');
-  const [resolverName, setResolverName] = useState(user?.name ?? `${user?.name} (${user?.role})`);
-  const [verifierName, setVerifierName] = useState(user?.name ?? `${user?.name} (${user?.role})`);
-  const [rejectReason, setRejectReason] = useState('Duplicate report / ground check unconfirmed');
+  const [resolverName] = useState(user?.name ?? 'EOC Incident Commander');
+  const [verifierName] = useState(user?.name ?? 'EOC Watch Commander');
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectReasonError, setRejectReasonError] = useState('');
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
   // Assessment edit fields
-  const [assessmentPop, setAssessmentPop] = useState(incident.affectedPopulation || 0);
-  const [assessmentCas, setAssessmentCas] = useState(incident.casualtiesCount || 0);
-  const [assessmentInfra, setAssessmentInfra] = useState(incident.infrastructureDamage || 'None');
-  const [assessmentAccess, setAssessmentAccess] = useState(incident.accessibilityScore ?? 50);
+  const [assessmentPop, setAssessmentPop] = useState(incident.affected_population || 0);
+  const [assessmentCas, setAssessmentCas] = useState(incident.casualties_count || 0);
+  const [assessmentInfra, setAssessmentInfra] = useState(incident.infrastructure_damage || 'None');
+  const [assessmentAccess, setAssessmentAccess] = useState(incident.accessibility_score ?? 50);
 
   // Dynamic Live Weather Forecast state
   const [liveWeather, setLiveWeather] = useState<{
@@ -145,15 +146,15 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
   // Sync assessment states when incident changes
   useEffect(() => {
-    setAssessmentPop(incident.affectedPopulation || 0);
-    setAssessmentCas(incident.casualtiesCount || 0);
-    setAssessmentInfra(incident.infrastructureDamage || 'None');
-    setAssessmentAccess(incident.accessibilityScore ?? 50);
+    setAssessmentPop(incident.affected_population || 0);
+    setAssessmentCas(incident.casualties_count || 0);
+    setAssessmentInfra(incident.infrastructure_damage || 'None');
+    setAssessmentAccess(incident.accessibility_score ?? 50);
   }, [incident]);
 
   // Determine if this incident originates from hydrological / telemetry monitoring (hide triggers if Citizen/SOS)
   const isSensorSource =
-    incident.sourceType === 'Metrological / Sensor' ||
+    incident.source === 'Metrological / Sensor' ||
     (incident.source &&
       !incident.source.toLowerCase().includes('citizen') &&
       !incident.source.toLowerCase().includes('sos') &&
@@ -168,10 +169,10 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       {
         id: incident.id,
         updates: {
-          affectedPopulation: Number(assessmentPop) || 0,
-          casualtiesCount: Number(assessmentCas) || 0,
-          infrastructureDamage: assessmentInfra as any,
-          accessibilityScore: Number(assessmentAccess) || 50,
+          affected_population: Number(assessmentPop) || 0,
+          casualties_count: Number(assessmentCas) || 0,
+          infrastructure_damage: assessmentInfra as any,
+          accessibility_score: Number(assessmentAccess) || 50,
         },
       },
       {
@@ -190,15 +191,16 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         id: incident.id,
         updates: {
           status: 'Verified',
-          verifiedBy: verifierName,
-          verifiedAt: new Date().toISOString(),
+          verified_by: verifierName,
+          verified_by_user_id: user?.id,
+          verified_at: new Date().toISOString(),
         },
       },
       {
         onSuccess: () => {
           setShowVerifyModal(false);
           onVerify(incident.id);
-          toastSuccess('Incident Verified', `${getCleanIncidentId(incident.id, incident.displayId)} has been verified and activated.`);
+          toastSuccess('Incident Verified', `${getCleanIncidentId(incident.id, incident.display_id)} has been verified and activated.`);
         },
         onError: () => toastError('Verification Failed', 'Could not verify incident. Please retry.'),
       }
@@ -206,19 +208,24 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   };
 
   const handleConfirmReject = () => {
+    const trimmedReason = rejectReason.trim();
+    if (!trimmedReason) {
+      setRejectReasonError('A rejection note is required.');
+      return;
+    }
     updateIncident.mutate(
       {
         id: incident.id,
         updates: {
           status: 'Rejected',
-          verifiedBy: `Rejected by ${verifierName}`,
-          rejectionReason: rejectReason,
+          verified_by_user_id: user?.id,
+          rejection_reason: trimmedReason,
         },
       },
       {
         onSuccess: () => {
           setShowRejectModal(false);
-          toastWarning('Incident Rejected', `Report ${getCleanIncidentId(incident.id, incident.displayId)} has been rejected and logged.`);
+          toastWarning('Incident Rejected', `Report ${getCleanIncidentId(incident.id, incident.display_id)} has been rejected and logged.`);
           onBack();
         },
         onError: () => toastError('Rejection Failed', 'Could not reject incident. Please retry.'),
@@ -232,7 +239,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       {
         onSuccess: () => {
           setShowResolveModal(false);
-          toastSuccess('Incident Resolved', `${getCleanIncidentId(incident.id, incident.displayId)} has been closed and archived.`);
+          toastSuccess('Incident Resolved', `${getCleanIncidentId(incident.id, incident.display_id)} has been closed and archived.`);
           onBack();
         },
         onError: () => toastError('Resolution Failed', 'Could not close incident. Please retry.'),
@@ -240,7 +247,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     );
   };
 
-  const fieldCommanderPhone = incident.reporterContact?.match(/\+?[\d\-\s()]{8,}/)?.[0] || null;
+  const reporterContact = incident.reporter_contact?.match(/\+?[\d\-\s()]{8,}/)?.[0] || null;
 
   const handleCopyPhone = (phone: string) => {
     navigator.clipboard.writeText(phone);
@@ -249,7 +256,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   };
 
   const handleCopyId = () => {
-    navigator.clipboard.writeText(incident.id);
+    navigator.clipboard.writeText(getCleanIncidentId(incident.id, incident.display_id));
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
   };
@@ -273,11 +280,8 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono font-medium text-slate-500">
-            LAST SYNC: {formatDateTime(incident.occurredAt)}
+            LAST SYNC: {formatDateTime(incident.occurred_at)}
           </span>
-          <div className="h-4 w-px bg-slate-200" />
-          <DisasterBadge type="severity" value={incident.severity} />
-          <DisasterBadge type="level" value={incident.disasterLevel} />
         </div>
       </div>
 
@@ -292,10 +296,10 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleCopyId}
-                title="Click to copy full UUID"
-                className="flex items-center gap-1.5 text-xs font-mono font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 transition-colors cursor-pointer"
+                title="Click to copy incident ID"
+                className="flex items-center gap-1.5 text-xs font-mono font-bold bg-white/10 hover:bg-white/15 text-blue-100 px-2.5 py-1.5 rounded-lg border border-white/10 transition-colors cursor-pointer"
               >
-                <span>INCIDENT ID: {getCleanIncidentId(incident.id, incident.displayId)}</span>
+                <span>INCIDENT ID: {getCleanIncidentId(incident.id, incident.display_id)}</span>
                 {copiedId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-slate-400" />}
               </button>
               <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700">
@@ -309,7 +313,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 flex items-center gap-1.5 font-medium">
-              <MapPin size={14} className="text-red-400 shrink-0" />
+              <MapPin size={14} className="text-blue-300 shrink-0" />
               {incident.location}, {incident.district}, {incident.state}
             </p>
           </div>
@@ -320,17 +324,22 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             </p>
             <p className="text-sm font-extrabold text-slate-100">{incident.source}</p>
             <p className="text-xs text-slate-400 pt-1 border-t border-slate-700">
-              Officer: <span className="text-slate-200 font-medium">{incident.verifiedBy || 'Unassigned'}</span>
+              Officer: <span className="text-slate-200 font-medium">{incident.verified_by ?? 'Unassigned'}</span>
             </p>
-            {incident.verifiedAt && (
-              <p className="text-[10px] text-emerald-400 font-mono">
-                Verified: {formatDateTime(incident.verifiedAt)}
+            {(incident.verified_by_role || incident.verified_by_agency) && (
+              <p className="text-[10px] text-slate-400 font-medium">
+                {[incident.verified_by_role, incident.verified_by_agency].filter(Boolean).join(' · ')}
               </p>
             )}
-            {incident.resolvedAt && (
+            {incident.verified_at && (
+              <p className="text-[10px] text-emerald-400 font-mono">
+                Verified: {formatDateTime(incident.verified_at)}
+              </p>
+            )}
+            {incident.resolved_at && (
               <p className="text-[10px] text-emerald-300 font-mono flex items-center gap-1 font-bold">
                 <CheckCircle size={10} className="text-emerald-400" />
-                Resolved: {formatDateTime(incident.resolvedAt)}
+                Resolved: {formatDateTime(incident.resolved_at)}
               </p>
             )}
           </div>
@@ -357,9 +366,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 mb-1">
               <span className="text-[10px] font-extrabold uppercase tracking-wider">Impacted Population</span>
-              <Users size={16} className="text-blue-600" />
+              <Users size={16} className="text-slate-600" />
             </div>
-            <p className="text-2xl font-black text-slate-900">{incident.affectedPopulation.toLocaleString()}</p>
+            <p className="text-2xl font-black text-slate-900">{(incident.affected_population ?? 0).toLocaleString()}</p>
             <span className="text-[10px] text-slate-500 font-medium">Est. residents in zone</span>
           </div>
 
@@ -368,25 +377,25 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <span className="text-[10px] font-extrabold uppercase tracking-wider">Confirmed Casualties</span>
               <AlertTriangle size={16} className="text-red-600" />
             </div>
-            <p className="text-2xl font-black text-slate-900">{incident.casualtiesCount}</p>
+            <p className="text-2xl font-black text-slate-900">{incident.casualties_count ?? 0}</p>
             <span className="text-[10px] text-slate-500 font-medium">Requiring immediate aid</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 mb-1">
               <span className="text-[10px] font-extrabold uppercase tracking-wider">Infrastructural Risk</span>
-              <Building2 size={16} className="text-amber-600" />
+              <Building2 size={16} className="text-slate-600" />
             </div>
-            <p className="text-lg font-black text-slate-900 truncate">{incident.infrastructureDamage}</p>
+            <p className="text-lg font-black text-slate-900 truncate">{incident.infrastructure_damage}</p>
             <span className="text-[10px] text-slate-500 font-medium">Primary impact area</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 mb-1">
               <span className="text-[10px] font-extrabold uppercase tracking-wider">Access Score</span>
-              <Zap size={16} className="text-purple-600" />
+              <Zap size={16} className="text-slate-600" />
             </div>
-            <p className="text-2xl font-black text-slate-900">{incident.accessibilityScore}<span className="text-xs text-slate-400 font-normal">/100</span></p>
+            <p className="text-2xl font-black text-slate-900">{incident.accessibility_score ?? 0}<span className="text-xs text-slate-400 font-normal">/100</span></p>
             <span className="text-[10px] text-slate-500 font-medium">Ground transit viability</span>
           </div>
         </div>
@@ -396,17 +405,17 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Hydrological Trigger & Prediction (Only shown when source is telemetry / hydrological sensor, not Citizen/SOS) */}
-          {isSensorSource && incident.triggerAlert && (
+          {isSensorSource && incident.trigger_alert && (
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
                 <Radio size={16} className="text-orange-600" /> Hydrological Telemetry &amp; Forecast
               </h2>
-              <TriggerAlertPanel alert={incident.triggerAlert} size="full" />
+              <TriggerAlertPanel alert={incident.trigger_alert} size="full" />
             </div>
           )}
 
-          {isTracked && incident.impactTimeline && (
-            <ImpactTimeline timeline={incident.impactTimeline} mode="confirmed-only" size="full" />
+          {isTracked && incident.impact_timeline && (
+            <ImpactTimeline timeline={incident.impact_timeline} mode="confirmed-only" size="full" />
           )}
 
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
@@ -424,13 +433,12 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   <CloudRain size={14} className="text-blue-600" />
                   Live Weather Forecast &amp; Location Metrology
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">Open-Meteo Satellite Sync</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Reported Weather</span>
-                  <p className="text-xs font-bold text-slate-800 mt-0.5">{incident.weatherCondition}</p>
+                  <p className="text-xs font-bold text-slate-800 mt-0.5">{incident.weather_condition}</p>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
@@ -484,64 +492,57 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               </div>
 
               {/* Segmented Tab Controls */}
-              <div className="grid grid-cols-4 gap-1 p-1 bg-slate-200/60 rounded-lg">
+              <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 border border-slate-200 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setActiveCommandTab('verify')}
-                  className={`relative flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'verify'
-                    ? 'bg-white text-blue-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  className={`relative flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'verify'
+                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
                     }`}
                 >
-                  <div className="flex items-center gap-1">
-                    <CheckCircle size={13} />
-                    <span>Verify</span>
-                  </div>
+                  <CheckCircle size={13} />
+                  <span>Verify</span>
+
                   {incident.status === 'Unverified' && (
-                    <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
                   )}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveCommandTab('deploy')}
-                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'deploy'
-                    ? 'bg-white text-orange-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'deploy'
+                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
                     }`}
                 >
-                  <div className="flex items-center gap-1">
-                    <Send size={13} />
-                    <span>Deploy</span>
-                  </div>
+                  <Send size={13} />
+                  <span>Deploy</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveCommandTab('resolve')}
-                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'resolve'
-                    ? 'bg-white text-purple-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'resolve'
+                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
                     }`}
                 >
-                  <div className="flex items-center gap-1">
-                    <CheckSquare size={13} />
-                    <span>Resolve</span>
-                  </div>
+                  <CheckSquare size={13} />
+                  <span>Resolve</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveCommandTab('export')}
-                  className={`flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'export'
-                    ? 'bg-white text-slate-800 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'export'
+                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
                     }`}
                 >
-                  <div className="flex items-center gap-1">
-                    <Download size={13} />
-                    <span>Export</span>
-                  </div>
+                  <Download size={13} />
+                  <span>Export</span>
                 </button>
               </div>
             </div>
@@ -555,7 +556,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Step 1 · Verification & Triage
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">EOC Directive</span>
                   </div>
 
                   {incident.status === 'Unverified' ? (
@@ -576,7 +576,10 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                       </button>
 
                       <button
-                        onClick={() => setShowRejectModal(true)}
+                        onClick={() => {
+                          setRejectReasonError('');
+                          setShowRejectModal(true);
+                        }}
                         disabled={updateIncident.isPending}
                         className="w-full px-4 py-2 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
                       >
@@ -585,12 +588,12 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-start gap-2.5">
-                        <CheckCircle size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5">
+                        <CheckCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
                         <div>
-                          <p className="font-bold text-emerald-950">Verified & Confirmed</p>
-                          <p className="text-[11px] text-emerald-800 mt-0.5">
-                            Verified by {incident.verifiedBy || 'EOC Watch Commander'}.
+                          <p className="font-bold text-blue-950">Verified & Confirmed</p>
+                          <p className="text-[11px] text-blue-800 mt-0.5">
+                            Verified by {incident.verified_by || 'EOC Watch Commander'}.
                           </p>
                         </div>
                       </div>
@@ -598,7 +601,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                       {onTrackInIntelligence && (
                         <button
                           onClick={() => onTrackInIntelligence(incident)}
-                          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-black hover:bg-black-100 text-white text-xs font-bold rounded-lg border border-black transition-colors cursor-pointer"
                         >
                           <ArrowUpRight size={14} /> Track in Intelligence Module
                         </button>
@@ -625,56 +628,50 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <Send size={14} /> Dispatch via Rescue Ops →
                   </a>
 
-                  {/* Field Commander Contact Card */}
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+              {reporterContact &&     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Field Commander Line
+                        Reporter Contact
                       </span>
-                      <PhoneCall size={12} className="text-blue-600" />
                     </div>
 
-                    <div className="flex items-center justify-between bg-white border border-slate-200 px-3 py-2 rounded-md">
-                      <span className="text-xs font-mono font-bold text-slate-800">
-                        {fieldCommanderPhone || '03-8888 2010 (NADMA)'}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyPhone(fieldCommanderPhone || '03-8888 2010')}
-                        className="text-slate-400 hover:text-slate-700 text-[11px] flex items-center gap-1 font-medium cursor-pointer"
-                        title="Copy phone number"
-                      >
-                        {copiedPhone ? (
-                          <>
-                            <Check size={12} className="text-emerald-600" />
-                            <span className="text-emerald-600 font-bold">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={12} />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+<div className="flex items-stretch gap-2">
+                      <div className="flex items-center justify-between flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
+                        <span className="text-xs font-mono font-bold text-slate-800 truncate">
+                          {reporterContact}
+                        </span>
 
-                    <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPhone(reporterContact || '')}
+                          className="ml-3 flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-blue-600 font-semibold transition-colors cursor-pointer shrink-0"
+                          title="Copy phone number"
+                        >
+                          {copiedPhone ? (
+                            <>
+                              <Check size={12} className="text-blue-600" />
+                              <span className="text-blue-600">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
                       <a
-                        href={`tel:${(fieldCommanderPhone || '0388882010').replace(/\s/g, '')}`}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                        href={`tel:${reporterContact.replace(/\s/g, '')}`}
+                        className="flex items-center justify-center w-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
+                        title="Call reporter"
                       >
-                        <Phone size={13} />
-                        <span>Direct Call</span>
+                        <Phone size={14} />
                       </a>
-                      <button
-                        type="button"
-                        onClick={() => setShowContactModal(true)}
-                        className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                      >
-                        Details
-                      </button>
                     </div>
+                    
                   </div>
+                    }
                 </div>
               )}
 
@@ -685,30 +682,36 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Step 3 · Lifecycle Resolution
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">Audit</span>
                   </div>
 
                   {incident.status === 'Resolved' ? (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1">
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1.5">
                       <span className="text-emerald-700 font-bold flex items-center gap-1">
                         <CheckCircle size={14} /> Incident Resolved & Closed
                       </span>
                       <p className="text-[11px] text-emerald-800">
-                        Closed by {incident.verifiedBy || 'EOC Command'}.
+                        Closed by <strong>{incident.verified_by || 'EOC Command'}</strong>
+                        {incident.resolved_at ? ` · ${formatDateTime(incident.resolved_at)}` : ''}.
                       </p>
+                      {incident.outcome_notes && (
+                        <div className="mt-2 pt-2 border-t border-emerald-200">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-1">Outcome Notes</p>
+                          <p className="text-[11px] text-emerald-900 leading-relaxed whitespace-pre-wrap">{incident.outcome_notes}</p>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-900">
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
                         <p className="font-bold mb-0.5">🏁 Complete Incident Handover</p>
-                        <p className="text-[11px] text-purple-800">
+                        <p className="text-[11px] text-blue-800">
                           Closes mission records, releases assigned rescue teams, and files closing audit.
                         </p>
                       </div>
 
                       <button
                         onClick={() => setShowResolveModal(true)}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-black hover:bg-black-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
                       >
                         <CheckSquare size={14} /> Mark Incident Resolved
                       </button>
@@ -724,30 +727,39 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Step 4 · Official Documents
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">PDF SITREP</span>
                   </div>
 
                   <div className="space-y-2">
                     <button
-                      onClick={() => incidentService.downloadSitrepPdf(incident.id, incident.displayId)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      onClick={() => incidentService.downloadSitrepPdf(incident.id, incident.display_id)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5
+  bg-slate-50 hover:bg-blue-50
+  text-slate-800 hover:text-blue-700
+  text-xs font-bold rounded-lg
+  border border-slate-200 hover:border-blue-200
+  transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
                         <Download size={14} className="text-blue-600" />
                         Official SITREP PDF
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">EOC-PDF</span>
+
                     </button>
 
                     <button
-                      onClick={() => incidentService.downloadSitrepPoster(incident.id, incident.displayId)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-lg border border-amber-200 transition-colors cursor-pointer"
+                      onClick={() => incidentService.downloadSitrepPoster(incident.id, incident.display_id)}
+                      className="w-full flex items-center justify-between px-3.5 py-2.5
+  bg-slate-50 hover:bg-blue-50
+  text-slate-800 hover:text-blue-700
+  text-xs font-bold rounded-lg
+  border border-slate-200 hover:border-blue-200
+  transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
-                        <Printer size={14} className="text-amber-700" />
+                        <Printer size={14} className="text-blue-600" />
                         Warning Poster PDF
                       </span>
-                      <span className="text-[10px] font-mono text-amber-600">A4 Print</span>
+
                     </button>
                   </div>
                 </div>
@@ -763,8 +775,10 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             </div>
             <div className="p-4 max-h-[380px] overflow-y-auto">
               <div className="space-y-3 relative before:absolute before:inset-0 before:left-3 before:w-0.5 before:bg-slate-200">
-                {incident.actionLog && incident.actionLog.length > 0 ? (
-                  incident.actionLog.map((log, idx) => (
+                {isLoadingLogs ? (
+                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium italic">Loading operational log…</div>
+                ) : incidentLogs.length > 0 ? (
+                  incidentLogs.map((log, idx) => (
                     <div key={log.id || idx} className="relative flex items-start gap-3 pl-7">
                       <div
                         className={`absolute left-1.5 top-1.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full ring-4 ring-white ${log.action.toLowerCase().includes('create')
@@ -782,7 +796,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-xs font-bold text-slate-800">{log.action}</span>
                           <span className="text-[10px] font-mono text-slate-400">
-                            {formatDateTime(log.loggedAt, 'Recent')}
+                            {formatDateTime(log.logged_at, 'Recent')}
                           </span>
                         </div>
                         <p className="text-xs text-slate-600">
@@ -837,13 +851,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Closing Officer / Resolver</label>
-                  <input
-                    type="text"
-                    value={resolverName}
-                    onChange={(e) => setResolverName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-900"
-                    placeholder="EOC Incident Commander"
-                  />
+                  <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium select-none">
+                    {resolverName || 'EOC Incident Commander'}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Outcome Synthesis Notes</label>
@@ -905,15 +915,15 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reporter / Source Contact</p>
-                <p className="text-sm font-bold text-slate-800">{incident.reporterContact || 'No contact recorded'}</p>
+                <p className="text-sm font-bold text-slate-800">{incident.reporter_contact || 'No contact recorded'}</p>
               </div>
 
-              {fieldCommanderPhone ? (
+              {reporterContact ? (
                 <a
-                  href={`tel:${fieldCommanderPhone.replace(/\s/g, '')}`}
+                  href={`tel:${reporterContact.replace(/\s/g, '')}`}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
                 >
-                  <PhoneCall size={15} /> Call {fieldCommanderPhone}
+                  <PhoneCall size={15} /> Call {reporterContact}
                 </a>
               ) : (
                 <div className="text-xs text-slate-500 font-medium bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -975,15 +985,15 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-500">Severity:</span>
-                  <span className="font-bold text-red-600">{incident.severity} · {incident.disasterLevel}</span>
+                  <span className="font-bold text-red-600">{incident.severity} · {incident.disaster_level}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-500">Est. Population:</span>
-                  <span className="font-mono font-bold text-slate-900">{incident.affectedPopulation.toLocaleString()} people</span>
+                  <span className="font-mono font-bold text-slate-900">{(incident.affected_population ?? 0).toLocaleString()} people</span>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <label className="block text-xs font-bold text-slate-700">Verifying Officer Name & Agency</label>
                 <input
                   type="text"
@@ -992,7 +1002,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 font-medium"
                   placeholder="e.g. Dato' Ir. Ahmad Rosli (NADMA)"
                 />
-              </div>
+              </div> */}
 
               <div className="flex gap-3 pt-2">
                 <button
@@ -1049,24 +1059,18 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Rejecting Officer</label>
-                  <input
-                    type="text"
-                    value={verifierName}
-                    onChange={(e) => setVerifierName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-red-600 font-medium"
-                    placeholder="e.g. Commander Azmi Yusof"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Reason for Rejection</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Reason for Rejection <span className="text-red-600">*</span></label>
                   <textarea
                     value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
+                    onChange={(e) => {
+                      setRejectReason(e.target.value);
+                      if (e.target.value.trim()) setRejectReasonError('');
+                    }}
                     rows={3}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-red-600 resize-none font-medium"
                     placeholder="e.g. Duplicate report, false alarm, or resolved prior to verification..."
                   />
+                  {rejectReasonError && <p className="mt-1 text-[11px] font-medium text-red-600">{rejectReasonError}</p>}
                 </div>
               </div>
 
@@ -1079,7 +1083,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                 </button>
                 <button
                   onClick={handleConfirmReject}
-                  disabled={updateIncident.isPending}
+                  disabled={updateIncident.isPending || !rejectReason.trim()}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
                 >
                   {updateIncident.isPending ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
@@ -1113,7 +1117,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   <div>
                     <h3 className="text-sm font-bold text-white">Update Disaster Assessment Metrics</h3>
                     <p className="text-[10px] text-slate-400">
-                      Official ground damage &amp; impact updates for {getCleanIncidentId(incident.id, incident.displayId)}
+                      Official ground damage &amp; impact updates for {getCleanIncidentId(incident.id, incident.display_id)}
                     </p>
                   </div>
                 </div>

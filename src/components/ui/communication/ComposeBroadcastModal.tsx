@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, Megaphone, Smartphone, Globe, Tv, MapPin, Search } from 'lucide-react';
-import { findPostcode } from 'malaysia-postcodes';
+import { X, Send, Megaphone, MapPin, Search } from 'lucide-react';
+import { findPostcode, getCities } from 'malaysia-postcodes';
 import type { PublicAnnouncement, SeverityLevel } from '../../../types';
-import { availableChannels } from '../../../constants';
-import { MALAYSIA_STATES_LIST, MALAYSIA_DISTRICTS_MAP } from '../../../constants/malaysiaLocations';
+import { MALAYSIA_STATES_LIST } from '../../../constants/malaysiaLocations';
+import { useAuth } from '../../../context/AuthContext';
 
 const PACKAGE_STATE_MAP: Record<string, string> = {
   'wp kuala lumpur': 'WP Kuala Lumpur',
@@ -41,30 +41,19 @@ const categories: PublicAnnouncement['category'][] = [
   'Safety Announcement',
 ];
 
-const channelIcons: Record<string, React.ReactNode> = {
-  'SMS Broadcast': <Smartphone size={13} />,
-  'MyJPJ App': <Globe size={13} />,
-  'NADMA Portal': <Globe size={13} />,
-  'TV/Radio Alert': <Tv size={13} />,
-};
-
 export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
   onClose,
   onPublish,
 }) => {
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<PublicAnnouncement['category']>('Emergency Alert');
   const [severity, setSeverity] = useState<SeverityLevel>('High');
   const [targetState, setTargetState] = useState('Kelantan');
-  const [selectedDistricts, setSelectedDistricts] = useState<string[]>(['Kota Bharu', 'Pasir Mas']);
+  const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [postcodeScopeInput, setPostcodeScopeInput] = useState('');
   const [postcodeMatchMsg, setPostcodeMatchMsg] = useState('');
   const [content, setContent] = useState('');
-  const [selectedChannels, setSelectedChannels] = useState<string[]>([
-    'SMS Broadcast',
-    'MyJPJ App',
-    'NADMA Portal',
-  ]);
 
   // Validation
   const [titleError, setTitleError] = useState('');
@@ -84,56 +73,73 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
   // When targetState changes, pick default districts for that state
   const handleStateChange = (newState: string) => {
     setTargetState(newState);
-    const available = MALAYSIA_DISTRICTS_MAP[newState] || [];
-    if (available.length > 0) {
-      setSelectedDistricts([available[0]]);
-    } else {
-      setSelectedDistricts([]);
-    }
+
+
+    setSelectedDistricts([]);
+    setPostcodeScopeInput('');
+    setPostcodeMatchMsg('');
   };
 
   const handlePostcodeScope = (code: string) => {
-    setPostcodeScopeInput(code);
-    const clean = code.trim();
-    if (clean.length === 5 && /^\d{5}$/.test(clean)) {
-      try {
-        const found = findPostcode(clean);
-        if (found && found.state) {
-          const rawState = found.state.toLowerCase();
-          const mappedState =
-            PACKAGE_STATE_MAP[rawState] ||
-            MALAYSIA_STATES_LIST.find((s) => s.toLowerCase() === rawState) ||
-            targetState;
+    // Only allow numbers
+    const clean = code.replace(/\D/g, '').slice(0, 5);
 
-          setTargetState(mappedState);
-          const validDistricts = MALAYSIA_DISTRICTS_MAP[mappedState] || [];
-          const city = found.city?.trim();
-          
-          // Match city to official district list
-          const matchedDistrict = validDistricts.find(
-            (d) => d.toLowerCase() === city?.toLowerCase() || (city && (d.toLowerCase().includes(city.toLowerCase()) || city.toLowerCase().includes(d.toLowerCase())))
+    setPostcodeScopeInput(clean);
+
+    // Wait until a complete Malaysian postcode is entered
+    if (clean.length !== 5) {
+      setPostcodeMatchMsg('');
+      return;
+    }
+
+    try {
+      const found = findPostcode(clean);
+
+      if (
+        found &&
+        'found' in found &&
+        found.found &&
+        'state' in found &&
+        'city' in found
+      ) {
+        const rawState = found.state.trim().toLowerCase();
+
+        const mappedState =
+          PACKAGE_STATE_MAP[rawState] ||
+          MALAYSIA_STATES_LIST.find(
+            (state) => state.toLowerCase() === rawState
           );
 
-          if (matchedDistrict) {
-            setSelectedDistricts((prev) =>
-              prev.includes(matchedDistrict) ? prev : [matchedDistrict, ...prev]
-            );
-            setPostcodeMatchMsg(`Found: ${matchedDistrict}, ${mappedState}`);
-          } else if (validDistricts.length > 0) {
-            setSelectedDistricts([validDistricts[0]]);
-            setPostcodeMatchMsg(`Scoped to: ${mappedState}`);
-          } else {
-            setPostcodeMatchMsg(`Scoped to: ${mappedState}`);
-          }
-          if (attemptedSubmit) setDistrictError('');
+        const city = found.city?.trim();
+
+        if (!mappedState || !city) {
+          setPostcodeMatchMsg('Location information unavailable');
           return;
         }
-      } catch {
-        // Postcode not found
+
+        // Automatically update state
+        setTargetState(mappedState);
+
+        // Automatically use the postcode's city/locality
+        // as the target district/area.
+        setSelectedDistricts([city]);
+
+        setPostcodeMatchMsg(`Found: ${city}, ${mappedState}`);
+
+        if (attemptedSubmit) {
+          setDistrictError('');
+        }
+
+        return;
       }
-      setPostcodeMatchMsg('Postcode not found in directory');
-    } else {
-      setPostcodeMatchMsg('');
+
+      setPostcodeMatchMsg('Postcode not found in Malaysia postcode directory');
+      setSelectedDistricts([]);
+    } catch (error) {
+      console.error('Postcode lookup failed:', error);
+
+      setPostcodeMatchMsg('Unable to look up postcode');
+      setSelectedDistricts([]);
     }
   };
 
@@ -144,12 +150,6 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
       setSelectedDistricts([...selectedDistricts, d]);
     }
     if (attemptedSubmit) setDistrictError('');
-  };
-
-  const toggleChannel = (ch: string) => {
-    setSelectedChannels((prev) =>
-      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
-    );
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -184,15 +184,14 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
       title: title.trim(),
       category,
       severity,
-      targetState,
-      targetDistricts: selectedDistricts,
+      target_state: targetState,
+      target_districts: selectedDistricts,
       content: content.trim(),
-      channels: selectedChannels as PublicAnnouncement['channels'],
-      issuedBy: 'Director General of NADMA Malaysia',
+      issued_by_user_id: user?.id,
     });
   };
 
-  const availableDistrictsForState = MALAYSIA_DISTRICTS_MAP[targetState] || [];
+  const availableDistrictsForState = getCities(targetState);
 
   return (
     <div
@@ -240,9 +239,8 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
                 if (attemptedSubmit && e.target.value.trim()) setTitleError('');
               }}
               placeholder="e.g. MANDATORY EVACUATION ORDER FOR KOTA BHARU FLOOD ZONES"
-              className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:bg-white transition-colors ${
-                titleError ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600'
-              }`}
+              className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:bg-white transition-colors ${titleError ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600'
+                }`}
             />
             {titleError && (
               <span className="block mt-1 text-[11px] text-red-500 font-medium">{titleError}</span>
@@ -286,26 +284,6 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Scope by Postcode */}
-          <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
-                <Search size={13} className="text-blue-600" />
-                <span>Quick Scope by Postcode (Optional)</span>
-              </label>
-              {postcodeMatchMsg && (
-                <span className="text-[11px] font-semibold text-blue-700">{postcodeMatchMsg}</span>
-              )}
-            </div>
-            <input
-              type="text"
-              maxLength={5}
-              value={postcodeScopeInput}
-              onChange={(e) => handlePostcodeScope(e.target.value)}
-              placeholder="Enter 5-digit postcode (e.g. 15000, 50480, 80000)..."
-              className="w-full bg-white border border-blue-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 font-mono"
-            />
-          </div>
 
           {/* Real Target State Selection */}
           <div>
@@ -325,6 +303,31 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             </select>
           </div>
 
+          {/* Quick Scope by Postcode */}
+          <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                <Search size={13} className="text-blue-600" />
+                <span>Auto-Scope by Malaysian Postcode</span>
+              </label>
+
+              {postcodeMatchMsg && (
+                <span className="text-[11px] font-semibold text-blue-700">
+                  {postcodeMatchMsg}
+                </span>
+              )}
+            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
+              value={postcodeScopeInput}
+              onChange={(e) => handlePostcodeScope(e.target.value)}
+              placeholder="Enter 5-digit postcode (e.g. 15000, 50480, 80000)..."
+              className="w-full bg-white border border-blue-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 font-mono"
+            />
+          </div>
+          
           {/* Real Target Districts for Selected State */}
           <div>
             <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
@@ -354,16 +357,16 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
               <div className="flex flex-wrap gap-1.5">
                 {availableDistrictsForState.map((districtName) => {
                   const isChecked = selectedDistricts.includes(districtName);
+
                   return (
                     <button
                       key={districtName}
                       type="button"
                       onClick={() => handleToggleDistrict(districtName)}
-                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer border ${
-                        isChecked
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
-                      }`}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer border ${isChecked
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300'
+                        }`}
                     >
                       {isChecked && '✓ '}
                       {districtName}
@@ -400,40 +403,12 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
                 if (attemptedSubmit && e.target.value.trim()) setContentError('');
               }}
               placeholder="Enter full public emergency announcement text and instructions for citizens..."
-              className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white resize-none transition-colors ${
-                contentError ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600'
-              }`}
+              className={`w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white resize-none transition-colors ${contentError ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200 focus:border-blue-600'
+                }`}
             />
             {contentError && (
               <span className="block mt-1 text-[11px] text-red-500 font-medium">{contentError}</span>
             )}
-          </div>
-
-          {/* Channels Selection */}
-          <div>
-            <label className="text-xs font-bold text-slate-800 block mb-1.5">
-              Distribution Channels <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {availableChannels.map((ch) => {
-                const isSelected = selectedChannels.includes(ch);
-                return (
-                  <button
-                    key={ch}
-                    type="button"
-                    onClick={() => toggleChannel(ch)}
-                    className={`flex items-center gap-2 p-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50 text-blue-800 border-blue-300 shadow-2xs'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {channelIcons[ch]}
-                    {ch}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* Footer Actions */}

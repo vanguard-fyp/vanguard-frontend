@@ -76,10 +76,10 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
       setName(teamToEdit.name || '');
       setAgency(teamToEdit.agency || 'SMART');
       setCommander(teamToEdit.commander || '');
-      setCommanderContact(teamToEdit.contactNumber || '');
-      setPersonnelCount(teamToEdit.personnelCount || 10);
-      setCurrentLocation(teamToEdit.currentLocation || '');
-      setLocationQuery(teamToEdit.currentLocation || '');
+      setCommanderContact(teamToEdit.contact_number || '');
+      setPersonnelCount(teamToEdit.personnel_count || 10);
+      setCurrentLocation(teamToEdit.current_location || '');
+      setLocationQuery(teamToEdit.current_location || '');
       setSpecialization(teamToEdit.specialization || '');
       setVehiclesList(teamToEdit.vehicles || []);
       setEquipmentList(teamToEdit.equipment || []);
@@ -323,9 +323,9 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
             name,
             agency,
             commander,
-            contactNumber: commanderContact,
-            personnelCount: Number(personnelCount) || 10,
-            currentLocation: finalLocation,
+            contact_number: commanderContact,
+            personnel_count: Number(personnelCount) || 10,
+            current_location: finalLocation,
             vehicles: finalVehicles,
             equipment: finalEquipment,
             specialization: specialization || undefined,
@@ -337,10 +337,10 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
           name,
           agency,
           commander,
-          contactNumber: commanderContact,
-          personnelCount: Number(personnelCount) || 10,
+          contact_number: commanderContact,
+          personnel_count: Number(personnelCount) || 10,
           status: 'Available',
-          currentLocation: finalLocation,
+          current_location: finalLocation,
           coordinates: [3.139, 101.6869],
           vehicles: finalVehicles,
           equipment: finalEquipment,

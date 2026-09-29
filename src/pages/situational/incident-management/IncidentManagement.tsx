@@ -88,8 +88,52 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [newDescription, setNewDescription] = useState('');
   const [newReporterContact, setNewReporterContact] = useState('');
   const [newWeatherCondition, setNewWeatherCondition] = useState('');
+  const [isWeatherLoading, setIsWeatherLoading] = useState(false);
   const [newLat, setNewLat] = useState('6.1254');
   const [newLng, setNewLng] = useState('102.2381');
+
+  // Auto-fill weather condition from open-meteo when lat/lng change and the field is empty
+  useEffect(() => {
+    const lat = parseFloat(newLat);
+    const lng = parseFloat(newLng);
+    if (!lat || !lng || !reportModalOpen) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsWeatherLoading(true);
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=precipitation_probability&timezone=Asia%2FKuala_Lumpur`,
+          { signal: controller.signal }
+        );
+        const data = await res.json();
+        if (!data?.current_weather) return;
+        const code: number = data.current_weather.weathercode ?? 0;
+        const wind: number = data.current_weather.windspeed ?? 0;
+        const rainProb: number = data.hourly?.precipitation_probability?.[0] ?? 0;
+        let desc = 'Normal / Clear';
+        if (code === 0 || code === 1) desc = 'Clear sky';
+        else if (code === 2 || code === 3) desc = 'Partly cloudy / Overcast';
+        else if (code >= 51 && code <= 55) desc = 'Light Drizzle';
+        else if (code >= 61 && code <= 65) desc = 'Rain showers';
+        else if (code >= 71 && code <= 77) desc = 'Snow / Sleet';
+        else if (code >= 80 && code <= 82) desc = 'Heavy rain showers';
+        else if (code >= 95 && code <= 99) desc = 'Thunderstorm & Lightning';
+        if (wind > 40) desc += ` · Strong winds ${wind}km/h`;
+        if (rainProb > 70) desc += ` · ${rainProb}% rain probability`;
+        setNewWeatherCondition(desc);
+      } catch {
+        // Silently ignore — user can still type manually
+      } finally {
+        setIsWeatherLoading(false);
+      }
+    }, 800); // debounce 800ms after lat/lng stops changing
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [newLat, newLng, reportModalOpen]);
 
   // Form Validation Errors (inline red span)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -147,7 +191,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         inc.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
         inc.state.toLowerCase().includes(searchQuery.toLowerCase()) ||
         inc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inc.displayId && inc.displayId.toLowerCase().includes(searchQuery.toLowerCase()));
+        (inc.display_id && inc.display_id.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchSeverity = filterSeverity === 'All' || inc.severity === filterSeverity;
       const matchStatus =
         filterStatus === 'All'
@@ -233,14 +277,14 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     setEditingIncident(incident);
     setEditTitle(incident.title);
     setEditSeverity(incident.severity);
-    setEditDisasterLevel(incident.disasterLevel);
+    setEditDisasterLevel(incident.disaster_level);
     setEditStatus(incident.status);
     setEditDescription(incident.description);
-    setEditAffectedPopulation(incident.affectedPopulation || 0);
-    setEditCasualtiesCount(incident.casualtiesCount || 0);
-    setEditInfrastructureDamage(incident.infrastructureDamage || 'None');
-    setEditAccessibilityScore(incident.accessibilityScore ?? 50);
-    setEditWeatherCondition(incident.weatherCondition || '');
+    setEditAffectedPopulation(incident.affected_population || 0);
+    setEditCasualtiesCount(incident.casualties_count || 0);
+    setEditInfrastructureDamage(incident.infrastructure_damage || 'None');
+    setEditAccessibilityScore(incident.accessibility_score ?? 50);
+    setEditWeatherCondition(incident.weather_condition || '');
     setEditErrors({});
     setEditModalOpen(true);
   };
@@ -261,14 +305,14 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         updates: {
           title: editTitle,
           severity: editSeverity,
-          disasterLevel: editDisasterLevel,
+          disaster_level: editDisasterLevel,
           status: editStatus as any,
           description: editDescription,
-          affectedPopulation: Number(editAffectedPopulation) || 0,
-          casualtiesCount: Number(editCasualtiesCount) || 0,
-          infrastructureDamage: editInfrastructureDamage as any,
-          accessibilityScore: Number(editAccessibilityScore) || 50,
-          weatherCondition: editWeatherCondition.trim() || undefined,
+          affected_population: Number(editAffectedPopulation) || 0,
+          casualties_count: Number(editCasualtiesCount) || 0,
+          infrastructure_damage: editInfrastructureDamage as any,
+          accessibility_score: Number(editAccessibilityScore) || 50,
+          weather_condition: editWeatherCondition.trim() || undefined,
         },
       });
       toast.success('Incident and impact metrics updated successfully!');
@@ -303,8 +347,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     const errors: Record<string, string> = {};
     if (!newTitle.trim()) errors.title = 'Incident title is required';
     if (!newLocation.trim()) errors.location = 'Specific location / address is required';
-    if (!newDistrict.trim()) errors.district = 'District is required';
-    if (!newPostcode.trim()) errors.postcode = 'Postcode is required for exact location dispatch';
+    // Postcode is optional
     if (!newDescription.trim()) errors.description = 'Incident description is required';
 
     if (Object.keys(errors).length > 0) {
@@ -317,34 +360,32 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     const lngNum = parseFloat(newLng) || 102.2381;
 
     const payload = {
-      title: newTitle,
+      title: newTitle.trim(),
       type: newType,
-      location: newLocation,
+      location: newLocation.trim(),
       state: newState,
       district: newDistrict,
       postcode: newPostcode.trim(),
       coordinates: [latNum, lngNum] as [number, number],
       severity: newSeverity,
-      disasterLevel: newDisasterLevel,
-      occurredAt: new Date().toISOString(),
+      disaster_level: newDisasterLevel,
+      occurred_at: new Date().toISOString(),
       source:
         newSourceType === 'Citizen Reported'
           ? 'Citizen Report'
           : newSourceType === 'Metrological / Sensor'
             ? 'JPS Water Sensor'
             : 'APM Patrol',
-      sourceType: newSourceType,
-      reportedByUserId: user?.id,
-      reporterName: user?.name || 'Disaster Management Authority',
-      reporterContact: newReporterContact || undefined,
+      reported_by_user_id: user?.id,
+      reporter_name: user?.name || 'Disaster Management Authority',
+      reporter_contact: newReporterContact || undefined,
       status: 'Verified' as const,
-      weatherCondition: newWeatherCondition.trim() || 'Normal / Clear',
-      description: newDescription,
-      affectedPopulation: 0,
-      casualtiesCount: 0,
-      infrastructureDamage: 'None' as const,
-      accessibilityScore: 100,
-      aiPriorityScore: undefined,
+      weather_condition: newWeatherCondition.trim() || 'Normal / Clear',
+      description: newDescription.trim(),
+      affected_population: 0,
+      casualties_count: 0,
+      infrastructure_damage: 'None' as const,
+      accessibility_score: 100,
     };
 
     // Step 1: Detect potential duplicate against active incidents
@@ -401,14 +442,14 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     setEditingIncident(duplicateMatch);
     setEditTitle(duplicateMatch.title);
     setEditSeverity(duplicateMatch.severity);
-    setEditDisasterLevel(duplicateMatch.disasterLevel);
+    setEditDisasterLevel(duplicateMatch.disaster_level);
     setEditStatus(duplicateMatch.status);
     setEditDescription(
       `${duplicateMatch.description}\n[Update]: Additional citizen report noted matching this event.`
     );
     setEditErrors({});
     setEditModalOpen(true);
-    toast.info(`Updating existing incident ${duplicateMatch.displayId || duplicateMatch.id}`);
+    toast.info(`Updating existing incident ${duplicateMatch.display_id || duplicateMatch.id}`);
   };
 
   // Step 3.1: Confirm as Duplicate (Option B: Dismiss and return to incident management)
@@ -577,7 +618,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   return (
                     <div
                       key={incident.id}
-                      onClick={() => navigate(`/situational/incidents/${incident.displayId || incident.id}`)}
+                      onClick={() => navigate(`/situational/incidents/${incident.id}`)}
                       className={`border rounded-xl p-5 transition-all cursor-pointer relative group flex flex-col justify-between ${isInactive
                         ? 'bg-slate-100/75 border-slate-300 text-slate-500 hover:border-slate-400'
                         : 'bg-white border-slate-200 hover:border-slate-400 hover:shadow-md'
@@ -592,7 +633,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                                 : 'text-slate-600 bg-slate-100 border-slate-200'
                                 }`}
                             >
-                              {getCleanDisplayId(incident.id, incident.displayId)}
+                              {getCleanDisplayId(incident.id, incident.display_id)}
                             </span>
                             <div className="flex items-center gap-1">
                               {statusIcons[incident.status]}
@@ -625,13 +666,13 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         <div className="flex items-center gap-2 mb-3">
                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 flex items-center gap-1">
                             <RadioTower size={11} className="text-blue-500" />
-                            <span>Source: {incident.sourceType || incident.source}</span>
+                            <span>Source: {incident.source}</span>
                           </span>
-                          {incident.reporterName && (
+                          {incident.reporter_name && (
                             <span className="text-[10px] text-slate-500 flex items-center gap-1">
                               <User size={10} />
                               <span>
-                                Reported by: <strong>{incident.reporterName}</strong>
+                                Reported by: <strong>{incident.reporter_name}</strong>
                               </span>
                             </span>
                           )}
@@ -648,7 +689,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                       <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
                         <div className="flex items-center gap-2">
                           <span>
-                            Level: <strong className="text-slate-700">{incident.disasterLevel.replace('Level ', 'L')}</strong>
+                            Level: <strong className="text-slate-700">{incident.disaster_level.replace('Level ', 'L')}</strong>
                           </span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -1061,7 +1102,10 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                     placeholder="+60-12-3456 7890"
                   />
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Weather Condition (Optional)</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Weather Condition (Optional)
+                      {isWeatherLoading && <span className="ml-1 text-[10px] font-medium text-blue-600">Syncing…</span>}
+                    </label>
                     <input
                       type="text"
                       value={newWeatherCondition}
@@ -1168,7 +1212,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         Existing Active Record
                       </span>
                       <span className="text-xs font-mono font-bold text-slate-700">
-                        {duplicateMatch.displayId || duplicateMatch.id}
+                        {duplicateMatch.display_id || duplicateMatch.id}
                       </span>
                     </div>
 
@@ -1186,7 +1230,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         {duplicateMatch.status}
                       </span>
                       <span className="text-[11px] text-slate-500 font-mono ml-auto">
-                        Level: {duplicateMatch.disasterLevel.replace('Level ', 'L')}
+                        Level: {duplicateMatch.disaster_level.replace('Level ', 'L')}
                       </span>
                     </div>
 
@@ -1195,7 +1239,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                     </p>
 
                     <div className="text-[10px] text-slate-400 font-medium">
-                      Reported by: <strong>{duplicateMatch.reporterName || 'Field Team'}</strong> ({duplicateMatch.sourceType || duplicateMatch.source})
+                      Reported by: <strong>{duplicateMatch.reporter_name || 'Field Team'}</strong> ({duplicateMatch.source || duplicateMatch.source})
                     </div>
                   </div>
 
@@ -1292,7 +1336,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <div>
                     <h3 className="text-sm font-bold text-white">Update Incident Record</h3>
                     <p className="text-[10px] text-slate-400 font-mono">
-                      {editingIncident.displayId || editingIncident.id} · {editingIncident.type}
+                      {editingIncident.display_id || editingIncident.id} · {editingIncident.type}
                     </p>
                   </div>
                 </div>
@@ -1339,23 +1383,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Status</label>
-                    <select
-                      value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
-                    >
-                      <option value="Unverified">Unverified</option>
-                      <option value="Verified">Verified</option>
-                      <option value="Responding">Responding</option>
-                      <option value="Resolved">Resolved</option>
-                      <option value="Rejected">Rejected</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Level (Directive 20)</label>
                     <select
                       value={editDisasterLevel}
@@ -1366,17 +1393,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                       <option value="Level 2: State">Level 2: State</option>
                       <option value="Level 3: Federal">Level 3: Federal</option>
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Weather Condition</label>
-                    <input
-                      type="text"
-                      value={editWeatherCondition}
-                      onChange={(e) => setEditWeatherCondition(e.target.value)}
-                      placeholder="e.g. Heavy Rain / Clear"
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
-                    />
                   </div>
                 </div>
 
@@ -1490,7 +1506,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <h3 className="text-base font-bold text-slate-900">Archive / Remove Incident</h3>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                     Are you sure you want to remove <strong>{incidentToDelete.title}</strong> (
-                    <span className="font-mono">{incidentToDelete.displayId || incidentToDelete.id}</span>
+                    <span className="font-mono">{incidentToDelete.display_id || incidentToDelete.id}</span>
                     )? This will remove it from active national EOC operational dashboards.
                   </p>
                 </div>

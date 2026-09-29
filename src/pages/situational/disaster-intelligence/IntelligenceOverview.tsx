@@ -16,7 +16,7 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
 
   // Incidents that have moved past Unverified or have impact data
   const tracked = (incidents || []).filter(
-    (i) => i && (i.status !== 'Unverified' || (i.impactTimeline && i.impactTimeline.length > 0))
+    (i) => i && (i.status !== 'Unverified' || (i.impact_timeline && i.impact_timeline.length > 0))
   );
 
   const activeTracked = tracked.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected');
@@ -28,10 +28,10 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
     return true;
   });
 
-  const ranked = [...filtered].sort((a, b) => (b.aiPriorityScore || 0) - (a.aiPriorityScore || 0));
+  const ranked = [...filtered].sort((a, b) => (b.ai_priority_score || 0) - (a.ai_priority_score || 0));
   const chartData = ranked.map((inc) => ({
     name: inc.district || inc.location || 'Unknown',
-    score: inc.aiPriorityScore || 0,
+    score: inc.ai_priority_score || 0,
     severity: inc.severity || 'Medium',
   }));
 
@@ -137,7 +137,7 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
       {/* Grouped Disaster Levels List */}
       <div className="space-y-4">
         {levelOrder.map((level) => {
-          const levelIncidents = ranked.filter((i) => i.disasterLevel === level);
+          const levelIncidents = ranked.filter((i) => i.disaster_level === level);
           if (levelIncidents.length === 0) return null;
 
           const info = disasterLevelInfo[level as keyof typeof disasterLevelInfo];
@@ -171,7 +171,7 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
               {isExpanded && (
                 <div className="divide-y divide-slate-100">
                   {levelIncidents.map((incident) => {
-                    const priorityScore = incident.aiPriorityScore || 75;
+                    const priorityScore = incident.ai_priority_score || 75;
                     const isHighPriority = priorityScore >= 80;
 
                     return (
@@ -183,7 +183,7 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
                         <div className="space-y-1 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {incident.displayId || incident.id}
+                              {incident.display_id || incident.id}
                             </span>
                             <DisasterBadge type="severity" value={incident.severity} />
                             <span className="text-xs font-semibold text-slate-600">· {incident.type}</span>
@@ -219,7 +219,7 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
                               </span>
                             </div>
                             <span className="text-[10px] text-slate-400 block">
-                              {incident.affectedPopulation.toLocaleString()} at risk
+                              {incident.affected_population.toLocaleString()} at risk
                             </span>
                           </div>
 

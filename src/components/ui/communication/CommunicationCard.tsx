@@ -16,7 +16,7 @@ import { DisasterBadge } from '../dashboard/DisasterBadge';
 import { formatDateTime } from '../../../utils/dateFormatter';
 
 import type { PublicAnnouncement } from '../../../types';
-import { channelIcons, categoryIcons, categoryBadgeStyle } from '../../../constants';
+import { categoryIcons, categoryBadgeStyle } from '../../../constants';
 
 interface CommunicationCardProps {
   announcement: PublicAnnouncement;
@@ -55,7 +55,7 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
           <div className="flex-1 min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                {announcement.displayId || (announcement.id.startsWith('ann-') ? announcement.id.split('-').slice(0, 3).join('-').toUpperCase() : announcement.id.length > 15 ? `ANN-${announcement.id.slice(0, 8).toUpperCase()}` : announcement.id)}
+                {announcement.display_id || (announcement.id.startsWith('ann-') ? announcement.id.split('-').slice(0, 3).join('-').toUpperCase() : announcement.id.length > 15 ? `ANN-${announcement.id.slice(0, 8).toUpperCase()}` : announcement.id)}
               </span>
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
@@ -87,15 +87,15 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium flex-wrap">
               <span className="flex items-center gap-1">
                 <MapPin size={11} className="text-slate-400" />
-                {announcement.targetState} ({announcement.targetDistricts.join(', ')})
+                {announcement.target_state} ({announcement.target_districts.join(', ')})
               </span>
               <span>·</span>
               <span className="flex items-center gap-1">
                 <Clock size={11} className="text-slate-400" />
-                {formatDateTime(announcement.timestamp)}
+                {formatDateTime(announcement.issued_at ?? '')}
               </span>
               <span>·</span>
-              <span>Issued by: {announcement.issuedBy}</span>
+              <span>Issued by: {announcement.issued_by ?? 'EOC Authority'}</span>
             </div>
           </div>
         </div>
@@ -134,40 +134,24 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Target State</p>
                 <p className="font-bold text-slate-800 mt-0.5 flex items-center gap-1">
                   <MapPin size={12} className="text-blue-500" />
-                  {announcement.targetState}
+                  {announcement.target_state}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Affected Districts</p>
-                <p className="font-bold text-slate-800 mt-0.5">{announcement.targetDistricts.join(', ')}</p>
+                <p className="font-bold text-slate-800 mt-0.5">{announcement.target_districts.join(', ')}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase">Issuing Authority</p>
                 <p className="font-bold text-slate-800 mt-0.5 flex items-center gap-1">
                   <UserCheck size={12} className="text-emerald-600" />
-                  {announcement.issuedBy}
+                  {announcement.issued_by ?? 'EOC Authority'}
                 </p>
               </div>
             </div>
 
-            {/* Channels & Actions Bar */}
-            <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
-              <div className="space-y-1">
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Active Distribution Channels</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {announcement.channels.map((ch) => (
-                    <span
-                      key={ch}
-                      className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-white text-slate-700 rounded-lg border border-slate-200 shadow-2xs"
-                    >
-                      {channelIcons[ch]}
-                      {ch}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
+            {/* Actions Bar */}
+            <div className="flex items-center justify-end flex-wrap gap-3 pt-1">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onToggleActive(announcement.id)}

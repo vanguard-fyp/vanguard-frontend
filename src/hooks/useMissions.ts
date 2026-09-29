@@ -108,3 +108,29 @@ export function useGenerateTeamRecommendation() {
     },
   });
 }
+
+export function useAssistanceRequests(params?: { status?: string; reporter_contact?: string }) {
+  return useQuery({
+    queryKey: ['assistance_requests', params],
+    queryFn: async () => {
+      const { incidentService } = await import('../services/incidentService');
+      return incidentService.getAssistanceRequests(params);
+    },
+    staleTime: 15_000,
+  });
+}
+
+export function useUpdateAssistanceStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ requestId, status, notes }: { requestId: string; status: string; notes?: string }) => {
+      const { incidentService } = await import('../services/incidentService');
+      return incidentService.updateAssistanceStatus(requestId, status, notes);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['assistance_requests'] });
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.missions });
+    },
+  });
+}
+

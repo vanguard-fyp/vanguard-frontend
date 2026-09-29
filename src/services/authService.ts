@@ -5,11 +5,13 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  phone_number?: string;
   agency: string;
   role: UserRole;
   status: string;
   lastActive?: string;
   permissions?: string[];
+  avatar_url?: string;
 }
 
 export interface TokenResponse {

@@ -9,6 +9,8 @@ export const userRolesFilterList = [
   'Rescue Coordinator',
   'Resource Manager',
   'Government Administrator',
+  'Citizen Reporter',
+  'System / Sensor Bot'
 ];
 
 export const userRolesList: UserRole[] = [

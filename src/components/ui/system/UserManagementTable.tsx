@@ -101,7 +101,21 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
             {filteredUsers.length > 0 ? (
               filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="px-5 py-3.5 text-xs font-bold text-slate-900">{user.name}</td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      {/* Avatar */}
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-slate-200 bg-blue-50 flex items-center justify-center shrink-0">
+                        {user.avatar_url ? (
+                          <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[10px] font-bold text-blue-600">
+                            {user.name.trim().split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-slate-900">{user.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3.5 text-xs text-slate-500 font-mono font-medium">
                     {user.email}
                   </td>
@@ -127,7 +141,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                     </button>
                   </td>
                   <td className="px-4 py-3.5 text-xs text-slate-500 font-medium">
-                    {user.lastActive}
+                    {user.last_active}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-2">

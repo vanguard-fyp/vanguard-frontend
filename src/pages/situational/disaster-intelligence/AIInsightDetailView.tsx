@@ -7,8 +7,8 @@ import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimelin
 import type { AIInsightDetailViewProps } from '../../../types';
 
 export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incident, onBack, allIncidents = [] }) => {
-  const tracked = allIncidents.filter((i) => i.status !== 'Unverified' && i.impactTimeline?.length);
-  const ranked = [...tracked].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore);
+  const tracked = allIncidents.filter((i) => i.status !== 'Unverified' && i.impact_timeline?.length);
+  const ranked = [...tracked].sort((a, b) => b.ai_priority_score - a.ai_priority_score);
   const rank = ranked.findIndex((i) => i.id === incident.id) + 1;
   const drivers = getTopDrivers(incident, 2);
   const confidence = getConfidenceScore(incident);
@@ -34,16 +34,16 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
           </div>
           <div className="flex gap-2">
             <DisasterBadge type="severity" value={incident.severity} />
-            <DisasterBadge type="level" value={incident.disasterLevel} />
+            <DisasterBadge type="level" value={incident.disaster_level} />
           </div>
         </div>
         <div className="relative grid grid-cols-2 sm:grid-cols-5 gap-3 mt-7">
           {[
             { label: 'Priority rank', value: rank ? `#${rank} of ${ranked.length}` : '—', icon: Cpu },
-            { label: 'AI priority score', value: `${incident.aiPriorityScore}/100`, icon: Activity },
+            { label: 'AI priority score', value: `${incident.ai_priority_score}/100`, icon: Activity },
             { label: 'ML Confidence', value: `${confidence}%`, icon: ShieldCheck },
-            { label: 'Population impact', value: incident.affectedPopulation.toLocaleString(), icon: Users },
-            { label: 'Access constraint', value: `${100 - incident.accessibilityScore}/100`, icon: Building2 },
+            { label: 'Population impact', value: incident.affected_population.toLocaleString(), icon: Users },
+            { label: 'Access constraint', value: `${100 - incident.accessibility_score}/100`, icon: Building2 },
           ].map((metric) => (
             <div key={metric.label} className="bg-white/10 border border-white/10 rounded-xl p-3">
               <p className="text-[10px] uppercase tracking-wide text-slate-300 font-bold flex items-center gap-1">
@@ -56,7 +56,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
         </div>
       </div>
 
-      {incident.impactTimeline && <ImpactTimeline timeline={incident.impactTimeline} mode="predictive" size="full" />}
+      {incident.impact_timeline && <ImpactTimeline timeline={incident.impact_timeline} mode="predictive" size="full" />}
 
       <AIImpactPanel incident={incident} rank={rank || undefined} size="full" />
 
@@ -66,9 +66,9 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
         <p className="text-sm text-slate-600 leading-relaxed">
           The priority score is driven primarily by <strong className="text-slate-900">{drivers[0]}</strong> and{' '}
           <strong className="text-slate-900">{drivers[1]}</strong> — together these outweigh the other four factors
-          in the model. In practice: {incident.affectedPopulation.toLocaleString()} residents in the impact zone,
-          {' '}{incident.infrastructureDamage.toLowerCase()} infrastructure damage, and an accessibility score of{' '}
-          {incident.accessibilityScore}/100 combine to place this above lower-scoring incidents even where casualty
+          in the model. In practice: {incident.affected_population.toLocaleString()} residents in the impact zone,
+          {' '}{incident.infrastructure_damage.toLowerCase()} infrastructure damage, and an accessibility score of{' '}
+          {incident.accessibility_score}/100 combine to place this above lower-scoring incidents even where casualty
           counts alone might suggest otherwise.
         </p>
         <div className="grid grid-cols-2 gap-3 mt-4">
@@ -76,14 +76,14 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
             <Users size={15} className="text-blue-600 mt-0.5 shrink-0" />
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase">Population factor</p>
-              <p className="text-xs font-semibold text-slate-800">{incident.affectedPopulation.toLocaleString()} in zone</p>
+              <p className="text-xs font-semibold text-slate-800">{incident.affected_population.toLocaleString()} in zone</p>
             </div>
           </div>
           <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 flex items-start gap-2">
             <Building2 size={15} className="text-amber-600 mt-0.5 shrink-0" />
             <div>
               <p className="text-[10px] font-bold text-slate-400 uppercase">Infrastructure factor</p>
-              <p className="text-xs font-semibold text-slate-800">{incident.infrastructureDamage}</p>
+              <p className="text-xs font-semibold text-slate-800">{incident.infrastructure_damage}</p>
             </div>
           </div>
         </div>

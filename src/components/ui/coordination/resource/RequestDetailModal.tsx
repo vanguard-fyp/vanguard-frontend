@@ -40,9 +40,9 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white">{request.itemRequested}</h3>
+                  <h3 className="text-sm font-bold text-white">{request.agency} — {request.district}</h3>
                   <span className="font-mono text-[10px] text-blue-300 bg-blue-950 px-1.5 py-0.5 rounded border border-blue-800">
-                    {request.requestId}
+                    {request.display_id}
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-400">Resource Requisition & Dispatch Record</p>
@@ -77,7 +77,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                 </span>
               </div>
               <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                Quantity: {request.quantityRequested.toLocaleString()} {request.unit}
+                Quantity: {request.quantity_requested.toLocaleString()} {request.unit}
               </span>
             </div>
 
@@ -85,9 +85,9 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Requesting Officer & Agency
+                  Requesting Agency
                 </span>
-                <p className="font-bold text-slate-800">{request.requestorName || 'Officer In Charge'}</p>
+                <p className="font-bold text-slate-800">{request.agency}</p>
                 <p className="text-slate-500">{request.agency} Emergency Response Unit</p>
               </div>
 
@@ -107,7 +107,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   <FileText size={12} /> Rejection Justification & Review Notes
                 </span>
                 <p className="text-xs text-red-800 leading-relaxed font-medium">
-                  {request.rejectionReason || 'Requisition denied by EOC logistics review.'}
+                  {request.rejection_reason || 'Requisition denied by EOC logistics review.'}
                 </p>
               </div>
             )}
@@ -132,7 +132,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-blue-600 ring-4 ring-white" />
                   <p className="text-xs font-bold text-slate-800">Requisition Logged</p>
                   <p className="text-[11px] text-slate-500">
-                    Created via Field Dispatch · Timestamp: {request.timestamp ? new Date(request.timestamp).toLocaleString() : 'Recent'}
+                    Created via Field Dispatch · {request.requested_at ? new Date(request.requested_at).toLocaleString() : 'Recent'}
                   </p>
                 </div>
 
@@ -141,7 +141,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   <div className="relative">
                     <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-emerald-600 ring-4 ring-white" />
                     <p className="text-xs font-bold text-slate-800">
-                      Approved by {request.approvedBy || 'Resource Manager Ismail (NADMA)'}
+                      Approved by Resource Manager (NADMA)
                     </p>
                     <p className="text-[11px] text-slate-500">
                       Depot allocation confirmed · Automated buffer check verified
@@ -153,10 +153,10 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   <div className="relative">
                     <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-red-600 ring-4 ring-white" />
                     <p className="text-xs font-bold text-red-800">
-                      Rejected by {request.approvedBy || 'EOC Duty Officer'}
+                      Rejected by EOC Duty Officer
                     </p>
                     <p className="text-[11px] text-red-600">
-                      Reason: {request.rejectionReason || 'Requisition denied by logistics review'}
+                      Reason: {request.rejection_reason || 'Requisition denied by logistics review'}
                     </p>
                   </div>
                 )}

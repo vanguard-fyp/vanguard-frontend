@@ -2,31 +2,34 @@ import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
 import type { ImpactSnapshot, ImpactTimelineProps } from '../../../types';
+import { formatDateTime } from '../../../utils/dateFormatter';
 
 const TimelineTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const point: ImpactSnapshot = payload[0].payload;
-    const isPred = point.isPredicted;
+    const isPred = point.is_predicted;
     return (
       <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 shadow-xl text-xs max-w-[240px] space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-slate-500 font-mono font-bold text-[10px]">{label}</p>
+          <p className="text-slate-500 font-mono font-bold text-[10px]">{formatDateTime(label)}</p>
           <span
-            className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full flex items-center gap-1 ${
-              isPred
+            className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full flex items-center gap-1 ${isPred
                 ? 'bg-purple-100 text-purple-700 border border-purple-200'
                 : 'bg-blue-100 text-blue-700 border border-blue-200'
-            }`}
+              }`}
           >
             {isPred ? <Sparkles size={9} /> : <CheckCircle2 size={9} />}
             {isPred ? 'AI PREDICTION' : 'CONFIRMED'}
           </span>
         </div>
         <p className={`font-black text-sm ${isPred ? 'text-purple-700' : 'text-blue-700'}`}>
-          {point.affectedPopulation.toLocaleString()} affected
+          {point.affected_population.toLocaleString()} affected
         </p>
         <p className="text-slate-600 text-[11px] font-medium">
-          {point.impactRadiusKm} km radius · {point.severity} Severity
+          {point.casualties_count ?? 0} confirmed casualties
+        </p>
+        <p className="text-slate-600 text-[11px] font-medium">
+          {point.impact_radius_km != null ? `${point.impact_radius_km} km radius` : 'Impact radius not recorded'} · {point.severity ?? 'Unclassified'} Severity
         </p>
         {point.stage && (
           <p className="text-[10px] font-mono text-slate-400">
@@ -49,7 +52,7 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
 
   // Filter if confirmed-only is requested
   const displayTimeline = mode === 'confirmed-only'
-    ? timeline.filter((p) => !p.isPredicted)
+    ? timeline.filter((p) => !p.is_predicted)
     : timeline;
 
   if (displayTimeline.length === 0) return null;
@@ -57,27 +60,26 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
   const latest = displayTimeline[displayTimeline.length - 1];
   const first = displayTimeline[0];
   const growth = first
-    ? Math.round(((latest.affectedPopulation - first.affectedPopulation) / Math.max(first.affectedPopulation, 1)) * 100)
+    ? Math.round(((latest.affected_population - first.affected_population) / Math.max(first.affected_population, 1)) * 100)
     : 0;
 
-  // Prepare chart dataset bridging confirmed and predicted for dual-area visualization
   const lastConfirmedIdx = displayTimeline.findIndex((p, idx) => {
     const next = displayTimeline[idx + 1];
-    return !p.isPredicted && next && next.isPredicted;
+    return !p.is_predicted && next && next.is_predicted;
   });
 
   const chartData = displayTimeline.map((p, idx) => {
-    const isPred = !!p.isPredicted;
-    // For smooth visual continuity, the boundary point belongs to both lines
+    const isPred = !!p.is_predicted;
     const isBoundary = idx === lastConfirmedIdx;
     return {
       ...p,
-      confirmedPop: !isPred || isBoundary ? p.affectedPopulation : null,
-      predictedPop: isPred || isBoundary ? p.affectedPopulation : null,
+      confirmedPop: !isPred || isBoundary ? p.affected_population : null,
+      predictedPop: isPred || isBoundary ? p.affected_population : null,
+      casualties: !isPred ? (p.casualties_count ?? 0) : null,
     };
   });
 
-  const hasPredictions = mode === 'predictive' && displayTimeline.some((p) => p.isPredicted);
+  const hasPredictions = mode === 'predictive' && displayTimeline.some((p) => p.is_predicted);
 
   return (
     <div className={size === 'full' ? 'bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4' : 'space-y-2'}>
@@ -127,10 +129,10 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis dataKey="timestamp" tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="timestamp" tickFormatter={(value) => formatDateTime(value)} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} width={40} />
             <Tooltip content={<TimelineTooltip />} />
-            
+
             {/* Confirmed Series (Solid Blue) */}
             <Area
               type="monotone"
@@ -157,6 +159,16 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
                 dot={{ r: 4, fill: '#8b5cf6', stroke: '#ffffff', strokeWidth: 1.5 }}
               />
             )}
+            <Area
+              type="monotone"
+              dataKey="casualties"
+              stroke="#dc2626"
+              fill="none"
+              strokeWidth={2}
+              name="Confirmed Casualties"
+              connectNulls={false}
+              dot={{ r: 3, fill: '#dc2626', stroke: '#ffffff', strokeWidth: 1.5 }}
+            />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -164,12 +176,12 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
       {size === 'full' && (
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <p>
-            Current baseline: <span className="font-bold text-slate-800">{first.affectedPopulation.toLocaleString()} affected</span> (logged at {first.timestamp}).
+            Current baseline: <span className="font-bold text-slate-800">{first.affected_population.toLocaleString()} affected</span> (logged at {formatDateTime(first.timestamp, 'Just Now')}).
           </p>
           <p>
-            {latest.isPredicted ? 'Projected peak' : 'Latest verified reading'}:{' '}
-            <span className={`font-bold ${latest.isPredicted ? 'text-purple-700' : 'text-slate-800'}`}>
-              {latest.affectedPopulation.toLocaleString()} affected ({latest.impactRadiusKm}km radius)
+            {latest.is_predicted ? 'Projected peak' : 'Latest verified reading'}:{' '}
+            <span className={`font-bold ${latest.is_predicted ? 'text-purple-700' : 'text-slate-800'}`}>
+              {latest.affected_population.toLocaleString()} affected{latest.impact_radius_km != null ? ` (${latest.impact_radius_km}km radius)` : ''}
             </span>
           </p>
         </div>

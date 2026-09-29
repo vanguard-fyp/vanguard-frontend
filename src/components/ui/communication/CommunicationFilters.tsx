@@ -3,10 +3,9 @@ import { Search, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 
 import type {
   CommunicationCategoryFilter,
-  CommunicationChannelFilter,
   CommunicationSortBy,
 } from '../../../types';
-import { categories, severities, channels } from '../../../constants';
+import { categories, severities } from '../../../constants';
 
 interface CommunicationFiltersProps {
   searchQuery: string;
@@ -15,8 +14,6 @@ interface CommunicationFiltersProps {
   onCategoryChange: (v: CommunicationCategoryFilter) => void;
   severityFilter: string;
   onSeverityChange: (v: string) => void;
-  channelFilter: CommunicationChannelFilter;
-  onChannelChange: (v: CommunicationChannelFilter) => void;
   sortBy: CommunicationSortBy;
   onSortChange: (v: CommunicationSortBy) => void;
   totalCount: number;
@@ -30,8 +27,6 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
   onCategoryChange,
   severityFilter,
   onSeverityChange,
-  channelFilter,
-  onChannelChange,
   sortBy,
   onSortChange,
   totalCount,
@@ -71,7 +66,7 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
         </div>
       </div>
 
-      {/* Row 2: Category, Severity, Channel Filters */}
+      {/* Row 2: Category & Severity Filters */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Category Pills */}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -114,22 +109,6 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
           </div>
         </div>
 
-        {/* Channel Filter */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Channel:</span>
-          <select
-            value={channelFilter}
-            onChange={(e) => onChannelChange(e.target.value as CommunicationChannelFilter)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-blue-500"
-          >
-            {channels.map((ch) => (
-              <option key={ch} value={ch}>
-                {ch}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <span className="ml-auto text-[11px] text-slate-400 font-medium shrink-0">
           Showing {filteredCount} of {totalCount} broadcasts
         </span>
@@ -137,3 +116,4 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
     </div>
   );
 };
+

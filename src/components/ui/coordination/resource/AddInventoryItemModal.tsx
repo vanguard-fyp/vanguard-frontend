@@ -91,10 +91,9 @@ export const AddInventoryItemModal: React.FC<AddInventoryItemModalProps> = ({
         name: name.trim(),
         category,
         unit,
-        stockLevel: Number(stockLevel) || 0,
-        minThreshold: Number(minThreshold) || 10,
-        warehouseId: selectedWarehouseId || undefined,
-        warehouseLocation: finalWarehouseName,
+        stock_level: Number(stockLevel) || 0,
+        min_threshold: Number(minThreshold) || 10,
+        warehouse_id: selectedWarehouseId || undefined,
         status: computedStatus,
       } as Partial<ResourceItem>);
 
@@ -256,7 +255,7 @@ export const AddInventoryItemModal: React.FC<AddInventoryItemModalProps> = ({
                 ) : (
                   warehouses.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.name} ({w.state}) - {w.fullAddress || w.district || w.state}
+                      {w.name} ({w.state}) - {w.full_address || w.district || w.state}
                     </option>
                   ))
                 )}

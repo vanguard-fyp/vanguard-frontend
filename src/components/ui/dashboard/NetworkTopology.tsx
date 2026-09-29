@@ -514,10 +514,6 @@ export const NetworkTopology: React.FC<NetworkTopologyProps> = ({
               <div className="p-5 space-y-4 overflow-y-auto max-h-[75vh]">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <p className="text-[10px] font-bold uppercase text-slate-400">Node ID</p>
-                    <p className="text-xs font-mono font-bold text-slate-800 mt-0.5">{modalNode.id}</p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <p className="text-[10px] font-bold uppercase text-slate-400">Operational Status</p>
                     <p className="text-xs font-bold text-emerald-700 mt-0.5">{modalNode.status || 'Active'}</p>
                   </div>

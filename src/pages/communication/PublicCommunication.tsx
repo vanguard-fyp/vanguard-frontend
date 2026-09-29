@@ -5,7 +5,7 @@ import { useAnnouncements, useCreateAnnouncement, useUpdateAnnouncement, useDele
 import { CommunicationFilters } from '../../components/ui/communication/CommunicationFilters';
 import { CommunicationCard } from '../../components/ui/communication/CommunicationCard';
 import { ComposeBroadcastModal } from '../../components/ui/communication/ComposeBroadcastModal';
-import type { PublicAnnouncement, CommunicationCategoryFilter, CommunicationChannelFilter, CommunicationSortBy } from '../../types';
+import type { PublicAnnouncement, CommunicationCategoryFilter, CommunicationSortBy } from '../../types';
 import { containerAnim, itemAnim } from '../../constants';
 
 const PublicCommunication: React.FC = () => {
@@ -20,7 +20,6 @@ const PublicCommunication: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<CommunicationCategoryFilter>('All');
   const [severityFilter, setSeverityFilter] = useState<string>('All');
-  const [channelFilter, setChannelFilter] = useState<CommunicationChannelFilter>('All');
   const [sortBy, setSortBy] = useState<CommunicationSortBy>('latest');
 
   // Stats calculation
@@ -40,8 +39,8 @@ const PublicCommunication: React.FC = () => {
         (a) =>
           a.title.toLowerCase().includes(q) ||
           a.content.toLowerCase().includes(q) ||
-          a.targetState.toLowerCase().includes(q) ||
-          a.targetDistricts.some((d) => d.toLowerCase().includes(q))
+          (a.target_state ?? '').toLowerCase().includes(q) ||
+          a.target_districts.some((d) => d.toLowerCase().includes(q))
       );
     }
 
@@ -55,13 +54,6 @@ const PublicCommunication: React.FC = () => {
       result = result.filter((a) => a.severity === severityFilter);
     }
 
-    // Channel filter
-    if (channelFilter !== 'All') {
-      result = result.filter((a) =>
-        a.channels.includes(channelFilter as PublicAnnouncement['channels'][number])
-      );
-    }
-
     // Sort
     if (sortBy === 'severity') {
       const severityOrder: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
@@ -71,7 +63,7 @@ const PublicCommunication: React.FC = () => {
     }
 
     return result;
-  }, [announcements, searchQuery, categoryFilter, severityFilter, channelFilter, sortBy]);
+  }, [announcements, searchQuery, categoryFilter, severityFilter, sortBy]);
 
   const handleToggleActive = (id: string) => {
     const ann = announcements.find((a) => a.id === id);
@@ -142,8 +134,6 @@ const PublicCommunication: React.FC = () => {
           onCategoryChange={setCategoryFilter}
           severityFilter={severityFilter}
           onSeverityChange={setSeverityFilter}
-          channelFilter={channelFilter}
-          onChannelChange={setChannelFilter}
           sortBy={sortBy}
           onSortChange={setSortBy}
           totalCount={announcements.length}

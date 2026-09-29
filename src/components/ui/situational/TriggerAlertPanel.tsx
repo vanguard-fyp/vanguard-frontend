@@ -14,7 +14,7 @@ export const TriggerAlertPanel: React.FC<TriggerAlertPanelProps> = ({ alert, siz
             {alert.source}
           </span>
         </div>
-        <span className="text-[10px] font-mono text-slate-400">{alert.triggeredAt}</span>
+        <span className="text-[10px] font-mono text-slate-400">{alert.triggered_at}</span>
       </div>
 
       <div className="space-y-1.5">
@@ -36,9 +36,9 @@ export const TriggerAlertPanel: React.FC<TriggerAlertPanelProps> = ({ alert, siz
 
       <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
-          <AlertTriangle size={13} /> Predicted onset: {alert.predictedOnset}
+          <AlertTriangle size={13} /> Predicted onset: {alert.predicted_onset}
         </span>
-        <span className="text-xs font-bold text-slate-900">{alert.predictedProbability}% confidence</span>
+        <span className="text-xs font-bold text-slate-900">{alert.predicted_probability}% confidence</span>
       </div>
     </div>
   );

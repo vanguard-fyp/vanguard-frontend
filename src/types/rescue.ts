@@ -17,11 +17,12 @@ export interface MissionWizardProps {
   onClose: () => void;
   onDispatch: (data: {
     incidentId: string;
-    teamId: string;
+    teamId?: string;
+    teamIds?: string[];
     objective: string;
     priority: SeverityLevel;
     durationHrs: number;
-    notes: string;
+    notes?: string;
   }) => void;
 }
 

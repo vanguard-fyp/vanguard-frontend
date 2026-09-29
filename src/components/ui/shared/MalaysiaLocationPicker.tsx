@@ -390,7 +390,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
         {/* Postcode Search */}
         <div>
           <label className="block text-xs font-bold text-slate-800 mb-1">
-            Postcode <span className="text-red-500">*</span> <span className="text-[10px] text-slate-500 font-normal">(Auto-fills district)</span>
+            Postcode <span className="text-[10px] text-slate-500 font-normal">(Optional - auto-fills)</span>
           </label>
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />

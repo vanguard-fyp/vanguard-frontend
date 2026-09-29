@@ -98,3 +98,12 @@ export function useResolveIncident() {
   });
 }
 
+
+export function useIncidentLogs(incidentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['incidents', 'logs', incidentId ?? ''],
+    queryFn: () => incidentService.getIncidentLogs(incidentId!),
+    enabled: !!incidentId,
+    staleTime: 15_000,
+  });
+}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { X, Send, Sparkles, ThumbsUp, Package } from 'lucide-react';
 
-import type { ResourceItem, ResourceRequest, AIStockAdvisory } from '../../../../types';
+import type { ResourceItem, ResourceRequest, AIStockAdvisory, Warehouse } from '../../../../types';
+import { useWarehouses } from '../../../../hooks';
 
 interface ResupplyRequestModalProps {
   item: ResourceItem | null;
@@ -10,31 +11,31 @@ interface ResupplyRequestModalProps {
   onSubmit: (newReq: Partial<ResourceRequest>) => void;
 }
 
-function getAIStockAdvisory(item: ResourceItem): AIStockAdvisory {
+function getAIStockAdvisory(item: ResourceItem, warehouseLabel: string): AIStockAdvisory {
   if (item.status === 'Critical') {
     return {
-      suggestedQty: item.minThreshold * 3,
+      suggested_qty: item.min_threshold * 3,
       urgency: 'Critical',
       confidence: 96,
-      forecastRationale: `Critical stock depletion detected at ${item.warehouseLocation}. High evacuation influx requires immediate regional allocation.`,
-      depletionTrend: 'Depletion rate: 15% per hour (Projected zero-stock in ~3.2 hours).',
+      forecast_rationale: `Critical stock depletion detected at ${warehouseLabel}. High evacuation influx requires immediate regional allocation.`,
+      depletion_trend: 'Depletion rate: 15% per hour (Projected zero-stock in ~3.2 hours).',
     };
   }
   if (item.status === 'Low Stock') {
     return {
-      suggestedQty: item.minThreshold * 2,
+      suggested_qty: item.min_threshold * 2,
       urgency: 'High',
       confidence: 88,
-      forecastRationale: `Stock level approaching minimum threshold. Preemptive resupply recommended prior to next rain surge.`,
-      depletionTrend: 'Depletion rate: 6% per hour (Projected threshold breach in ~8 hours).',
+      forecast_rationale: `Stock level approaching minimum threshold. Preemptive resupply recommended prior to next rain surge.`,
+      depletion_trend: 'Depletion rate: 6% per hour (Projected threshold breach in ~8 hours).',
     };
   }
   return {
-    suggestedQty: item.minThreshold,
+    suggested_qty: item.min_threshold,
     urgency: 'Medium',
     confidence: 82,
-    forecastRationale: `Current stock buffer is sufficient. Routine restock scheduled to maintain optimal emergency buffer.`,
-    depletionTrend: 'Depletion rate: <2% per hour (Buffer stable).',
+    forecast_rationale: `Current stock buffer is sufficient. Routine restock scheduled to maintain optimal emergency buffer.`,
+    depletion_trend: 'Depletion rate: <2% per hour (Buffer stable).',
   };
 }
 
@@ -43,6 +44,7 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
   onClose,
   onSubmit,
 }) => {
+  const { data: warehouses = [] } = useWarehouses();
   const [reqQty, setReqQty] = useState<number>(100);
   const [reqDistrict, setReqDistrict] = useState<string>('Kota Bharu');
   const [reqAgency, setReqAgency] = useState<string>('JKM Kelantan');
@@ -50,15 +52,27 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
   const [reqJustification, setReqJustification] = useState<string>('');
   const [aiApplied, setAiApplied] = useState(false);
 
+  const warehouseMap = useMemo(() => {
+    const map: Record<string, Warehouse> = {};
+    warehouses.forEach((w) => { map[w.id] = w; });
+    return map;
+  }, [warehouses]);
+
+  const warehouseLabel = useMemo(() => {
+    if (!item) return 'Strategic National Depot';
+    const w = item.warehouse_id ? warehouseMap[item.warehouse_id] : undefined;
+    return w ? `${w.name} (${w.district}, ${w.state})` : 'Strategic National Depot';
+  }, [item, warehouseMap]);
+
   useEffect(() => {
     if (item) {
-      const adv = getAIStockAdvisory(item);
-      setReqQty(adv.suggestedQty);
+      const adv = getAIStockAdvisory(item, warehouseLabel);
+      setReqQty(adv.suggested_qty);
       setReqUrgency(adv.urgency);
-      setReqJustification(`[HIL AI Advisory] Emergency resupply request for ${item.name} at ${item.warehouseLocation}. ${adv.forecastRationale}`);
+      setReqJustification(`[HIL AI Advisory] Emergency resupply request for ${item.name} at ${warehouseLabel}. ${adv.forecast_rationale}`);
       setAiApplied(false);
     }
-  }, [item]);
+  }, [item, warehouseLabel]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -70,10 +84,10 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
 
   if (!item) return null;
 
-  const advisory = getAIStockAdvisory(item);
+  const advisory = getAIStockAdvisory(item, warehouseLabel);
 
   const handleApplyAISuggestion = () => {
-    setReqQty(advisory.suggestedQty);
+    setReqQty(advisory.suggested_qty);
     setReqUrgency(advisory.urgency);
     setAiApplied(true);
   };
@@ -81,15 +95,14 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
-      itemRequested: item.name,
-      resourceCategory: item.category,
-      quantityRequested: reqQty,
+      resource_type_id: item.resource_type_id,
+      warehouse_id: item.warehouse_id,
+      quantity_requested: reqQty,
       unit: item.unit,
       district: reqDistrict,
       agency: reqAgency,
       urgency: reqUrgency,
       justification: reqJustification,
-      requestorName: 'Logistics Officer (HIL AI Supported)',
     });
     onClose();
   };
@@ -115,7 +128,7 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-white">Create Resupply Request</h3>
               <p className="text-[11px] text-slate-300">
-                {item.name} · {item.warehouseLocation}
+                {item.name} · {warehouseLabel}
               </p>
             </div>
           </div>
@@ -144,16 +157,16 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-700 leading-relaxed font-medium">
-              {advisory.forecastRationale}
+              {advisory.forecast_rationale}
             </p>
 
             <div className="text-[11px] text-slate-500 font-mono">
-              ⚡ {advisory.depletionTrend}
+              ⚡ {advisory.depletion_trend}
             </div>
 
             <div className="pt-2 border-t border-violet-100 flex items-center justify-between">
               <span className="text-[11px] font-bold text-slate-600">
-                Recommended Qty: <span className="text-violet-900 font-extrabold">{advisory.suggestedQty} {item.unit}</span> ({advisory.urgency})
+                Recommended Qty: <span className="text-violet-900 font-extrabold">{advisory.suggested_qty} {item.unit}</span> ({advisory.urgency})
               </span>
               <button
                 type="button"

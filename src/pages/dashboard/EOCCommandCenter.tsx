@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   AlertTriangle, Users, ShieldAlert, Activity,
   MapPin, Share2, Sparkles, ChevronDown, ChevronUp,
-  TrendingUp, Clock, Zap,
+  TrendingUp, Zap,
 } from 'lucide-react';
 
 import KPICard from '../../components/ui/dashboard/KPICard';
@@ -21,7 +21,6 @@ import {
   DASHBOARD_ANIMATIONS,
 } from '../../constants/theme';
 import type { Incident } from '../../types';
-import { formatDateTime } from '../../utils/dateFormatter';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, LineChart, Line, CartesianGrid,
@@ -53,7 +52,7 @@ const EOCCommandCenter: React.FC = () => {
   const activeTeams = rescueTeams.filter((t) => t.status === 'Deployed');
 
   const criticalIncidents = activeIncidents.filter((i) => i.severity === 'Critical');
-  const totalAffected = activeIncidents.reduce((sum, i) => sum + (i.affectedPopulation || 0), 0);
+  const totalAffected = activeIncidents.reduce((sum, i) => sum + (i.affected_population || 0), 0);
   const deployedTeams = rescueTeams.filter((t) => t.status === 'Deployed' || t.status === 'En Route');
   const uniqueDistricts = Array.from(new Set(activeIncidents.map((i) => i.district || i.state).filter(Boolean)));
   const deployedAgencies = Array.from(new Set(deployedTeams.map((t) => t.agency))).slice(0, 4).join(' · ') || 'Active Standby';
@@ -62,32 +61,15 @@ const EOCCommandCenter: React.FC = () => {
   const pendingMissions = activeMissions.filter((m) => m.status === 'Pending');
 
   const priorityChartData = [...activeIncidents]
-    .sort((a, b) => b.aiPriorityScore - a.aiPriorityScore)
-    .map((inc) => ({ name: inc.district, score: inc.aiPriorityScore, severity: inc.severity }));
+    .sort((a, b) => b.ai_priority_score - a.ai_priority_score)
+    .map((inc) => ({ name: inc.district, score: inc.ai_priority_score, severity: inc.severity }));
 
   const incidentList = activeIncidents.map((i) => ({
     id: i.id, title: i.title, severity: i.severity, district: i.district,
-    affectedPopulation: i.affectedPopulation, aiPriorityScore: i.aiPriorityScore, status: i.status,
+    affectedPopulation: i.affected_population, aiPriorityScore: i.ai_priority_score, status: i.status,
   }));
 
-  const topRoster = [...activeIncidents].sort((a, b) => b.aiPriorityScore - a.aiPriorityScore).slice(0, 5);
-
-  const [filterLogsByIncident, setFilterLogsByIncident] = useState(true);
-
-  const incidentSpecificLogs = React.useMemo(() => {
-    if (!selectedIncident || !filterLogsByIncident) return activityFeed;
-    const targets = [
-      selectedIncident.id.toLowerCase(),
-      (selectedIncident.district || '').toLowerCase(),
-      (selectedIncident.location || '').toLowerCase(),
-    ].filter(Boolean);
-    const filtered = activityFeed.filter((e) => {
-      const text = `${e.event} ${e.actor || ''}`.toLowerCase();
-      return targets.some((t) => t.length > 2 && text.includes(t));
-    });
-    return filtered.length > 0 ? filtered : activityFeed;
-  }, [activityFeed, selectedIncident, filterLogsByIncident]);
-
+  const topRoster = [...activeIncidents].sort((a, b) => b.ai_priority_score - a.ai_priority_score).slice(0, 5);
 
   // Set first active incident as default selection when loaded
   React.useEffect(() => {
@@ -340,7 +322,6 @@ const EOCCommandCenter: React.FC = () => {
           <div className="flex items-center gap-1 bg-slate-200/60 p-1 rounded-lg flex-wrap">
             {([
               { key: 'roster', label: 'Priority Roster' },
-              { key: 'logs', label: 'Critical Logs' },
               { key: 'deployments', label: 'Team Status' },
               { key: 'missions', label: 'Missions' },
             ] as const).map(({ key, label }) => (
@@ -388,66 +369,12 @@ const EOCCommandCenter: React.FC = () => {
                             {inc.severity}
                           </span>
                         </td>
-                        <td className="py-2.5 pr-3 text-right font-mono font-bold text-blue-700">{inc.aiPriorityScore}</td>
-                        <td className="py-2.5 text-right text-slate-500 font-medium font-mono">{(inc.affectedPopulation ?? 0).toLocaleString()}</td>
+                        <td className="py-2.5 pr-3 text-right font-mono font-bold text-blue-700">{inc.ai_priority_score}</td>
+                        <td className="py-2.5 text-right text-slate-500 font-medium font-mono">{(inc.affected_population ?? 0).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            )}
-
-            {activeBottomTab === 'logs' && (
-              <div className="space-y-3">
-                {selectedIncident && (
-                  <div className="flex items-center justify-between bg-blue-50/70 border border-blue-200 rounded-lg px-3 py-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                      <span className="font-bold text-blue-900">
-                        {filterLogsByIncident ? `Filtered for ${selectedIncident.title} (${selectedIncident.district})` : 'Showing All Regional Logs'}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setFilterLogsByIncident(!filterLogsByIncident)}
-                      className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
-                    >
-                      {filterLogsByIncident ? 'Show All Logs' : 'Filter by Selected Node'}
-                    </button>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  {incidentSpecificLogs.map((evt) => (
-                    <div
-                      key={evt.id}
-                      className={`flex items-start gap-2.5 px-3 py-2.5 rounded-lg border ${
-                        evt.type === 'critical' || evt.type === 'alert'
-                          ? 'bg-red-50/60 border-red-100'
-                          : evt.type === 'warning'
-                          ? 'bg-amber-50/60 border-amber-100'
-                          : 'bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
-                          evt.type === 'critical' || evt.type === 'alert'
-                            ? 'bg-red-500 animate-pulse'
-                            : evt.type === 'warning'
-                            ? 'bg-amber-500'
-                            : 'bg-blue-500'
-                        }`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-slate-900 leading-snug">{evt.event}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <span className="text-[11px] text-slate-500 font-medium">{evt.actor}</span>
-                          <span className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
-                            <Clock size={10} />{formatDateTime(evt.time)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -459,8 +386,8 @@ const EOCCommandCenter: React.FC = () => {
                       <p className="text-xs font-bold text-slate-900 truncate">{team.name}</p>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${team.status === 'Deployed' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>{team.status}</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1 truncate">{team.agency} · {team.personnelCount} Personnel</p>
-                    <p className="text-[11px] text-slate-600 mt-1 font-medium truncate">📍 {team.currentLocation}</p>
+                    <p className="text-[11px] text-slate-500 mt-1 truncate">{team.agency} · {team.personnel_count} Personnel</p>
+                    <p className="text-[11px] text-slate-600 mt-1 font-medium truncate">📍 {team.current_location}</p>
                   </div>
                 ))}
               </div>
@@ -471,13 +398,12 @@ const EOCCommandCenter: React.FC = () => {
                 {activeMissions.map((mis) => (
                   <div key={mis.id} className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-white transition-colors">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono font-bold text-blue-700 shrink-0">{mis.displayId || mis.id}</span>
+                      <span className="text-[10px] font-mono font-bold text-blue-700 shrink-0">{mis.display_id || mis.id}</span>
                       <DisasterBadge type="severity" value={mis.priority} />
                     </div>
                     <p className="text-xs font-bold text-slate-900 mt-1.5 truncate">{mis.title}</p>
                     <p className="text-[11px] text-slate-600 mt-1 line-clamp-2">{mis.objective}</p>
-                    <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500 gap-2">
-                      <span className="truncate">{mis.teamName}</span>
+                    <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-end text-[10px] text-slate-500 gap-2">
                       <span className="font-semibold text-emerald-700 shrink-0">{mis.status}</span>
                     </div>
                   </div>

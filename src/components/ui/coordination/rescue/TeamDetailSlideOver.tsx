@@ -7,12 +7,9 @@ import {
   UserCheck,
   ShieldCheck,
   Target,
-  Sparkles,
 } from 'lucide-react';
 import type { RescueTeam, Mission, Incident } from '../../../../types';
 import { MissionProgressPipeline } from './MissionProgressPipeline';
-import { HILAdvisory } from './HILAdvisory';
-
 interface TeamDetailSlideOverProps {
   team: RescueTeam | null;
   missions: Mission[];
@@ -41,7 +38,6 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
   incidents,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = React.useState<'pipeline' | 'advisory'>('pipeline');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -53,8 +49,23 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
 
   if (!team) return null;
 
-  const teamMissions = missions.filter((m) => m.assignedTeamId === team.id);
-  const assignedIncident = incidents.find((i) => i.id === team.assignedIncidentId);
+  // Match missions where this team is listed in team_ids or assigned_team_id (set by
+  // backend enrichment from mission_assignments). Also fall back to incident_id match
+  // when the team is deployed on an active incident, in case enrichment was partial.
+  const deployedIncidentIds = new Set(
+    incidents
+      .filter((i) => i.status === 'Responding' || i.status === 'Verified')
+      .map((i) => i.id)
+  );
+  const teamMissions = missions.filter(
+    (m) =>
+      (m as any).team_ids?.includes(team.id) ||
+      (m as any).assigned_team_id === team.id ||
+      // fallback: team is deployed and the mission targets an active incident
+      (team.status === 'Deployed' && deployedIncidentIds.has(m.incident_id))
+  );
+  const activeMission = teamMissions.find((m) => m.status !== 'Completed' && m.status !== 'Aborted');
+  const assignedIncident = incidents.find((i) => i.id === activeMission?.incident_id);
   const sc = statusConfig[team.status] || statusConfig['Off Duty'];
   const ac = agencyColors[team.agency] || '';
 
@@ -89,13 +100,13 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
                   {team.status}
                 </span>
                 <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
-                  {team.displayId || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
+                  {team.display_id || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
                 </span>
               </div>
               <h2 className="text-xl font-bold text-white">{team.name}</h2>
               <p className="text-xs text-slate-300 flex items-center gap-1 mt-1">
                 <MapPin size={13} className="text-slate-400" />
-                {team.currentLocation} · {team.personnelCount} Personnel Squad
+                {team.current_location} · {team.personnel_count} Personnel Squad
               </p>
             </div>
 
@@ -104,32 +115,6 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X size={20} />
-            </button>
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="px-6 pt-4 pb-2 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab('pipeline')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'pipeline'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              <Target size={14} />
-              Mission Pipeline ({teamMissions.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('advisory')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                activeTab === 'advisory'
-                  ? 'bg-violet-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200/70'
-              }`}
-            >
-              <Sparkles size={14} />
-              AI Tactical Advisory & HIL
             </button>
           </div>
 
@@ -153,7 +138,7 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
                 </span>
                 <span className="text-xs font-bold text-slate-800 font-mono flex items-center gap-1">
                   <Phone size={13} className="text-slate-500" />
-                  {team.contactNumber}
+                  {team.contact_number}
                 </span>
               </div>
 
@@ -184,9 +169,6 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
                 </p>
               </div>
             )}
-
-            {/* Active Tab Content */}
-            {activeTab === 'pipeline' ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -196,15 +178,6 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
                 </div>
                 <MissionProgressPipeline missions={teamMissions} />
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-violet-600" />
-                  <h3 className="text-sm font-bold text-slate-900">AI Tactical Advisory & Decision Support</h3>
-                </div>
-                <HILAdvisory team={team} />
-              </div>
-            )}
           </div>
         </motion.div>
       </div>

@@ -29,4 +29,27 @@ export const userService = {
   deleteUser: async (id: string): Promise<void> => {
     return apiClient.delete<void>(`/users/${id}`);
   },
+
+  /**
+   * Upload a profile avatar to Supabase storage bucket and return the public URL.
+   */
+  uploadAvatar: async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const token = localStorage.getItem('vanguard_token');
+    const res = await fetch(`${baseUrl}/users/avatar`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || 'Avatar upload failed');
+    }
+    const data = await res.json();
+    return data.url as string;
+  },
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, CheckCircle2, Clock, LayoutDashboard, FileText, MapPin, Radio, AlertTriangle, Home, Zap, CheckCircle, XCircle, Droplets, Flame, Mountain, CircleDot, CloudRain, Sun, Waves, Wind } from 'lucide-react';
+import { Activity, CheckCircle2, Clock, LayoutDashboard, Radio, AlertTriangle, Home, Zap, CheckCircle, XCircle, Droplets, Flame, Mountain, CircleDot, CloudRain, Sun, Waves, Wind } from 'lucide-react';
 import type { GdacsHazardDef, GISLayerState, SitrepTab } from '../types';
 
 export const DARK_STYLE = {
@@ -99,9 +99,7 @@ export const activityTypeStyle: Record<string, { dot: string; bg: string; text: 
 };
 
 export const TABS: { id: SitrepTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={14} /> },
-  { id: 'executive', label: 'Executive SITREP', icon: <FileText size={14} /> },
-  { id: 'tactical', label: 'Tactical View', icon: <MapPin size={14} /> },
+  { id: 'dashboard', label: 'Tactical SITREP', icon: <LayoutDashboard size={14} /> },
   { id: 'operations', label: 'Live Ops Feed', icon: <Radio size={14} /> },
 ];
 

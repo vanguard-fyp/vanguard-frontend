@@ -325,7 +325,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                                 {inc.severity}
                               </span>
                               <span className="text-[9px] text-slate-600 font-semibold">
-                                {inc.affectedPopulation.toLocaleString()} affected
+                                {inc.affected_population.toLocaleString()} affected
                               </span>
                             </div>
                           </div>
@@ -349,7 +349,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                       <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                         <div>
                           <p className="text-xs font-bold text-slate-900">{p.name}</p>
-                          <p className="text-[10px] text-slate-500">{p.category} · {p.status}</p>
+                          <p className="text-[10px] text-slate-500">{p.category}</p>
                         </div>
                       </Tooltip>
                     </CircleMarker>
@@ -428,7 +428,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                       <div className="flex items-center gap-2 mt-1.5">
                         <DisasterBadge type="severity" value={hover.data.severity} />
                         <span className="text-[10px] text-slate-300 font-semibold">
-                          {hover.data.affectedPopulation.toLocaleString()} affected
+                          {hover.data.affected_population.toLocaleString()} affected
                         </span>
                       </div>
                     </>
@@ -436,7 +436,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                     <>
                       <p className="text-[11px] font-bold text-white">{hover.data.name}</p>
                       <p className="text-[9px] text-slate-400 mt-0.5">
-                        {hover.data.category} · {hover.data.status}
+                        {hover.data.category}
                       </p>
                     </>
                   )}

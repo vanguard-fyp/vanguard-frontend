@@ -12,6 +12,7 @@ interface AuthContextType {
   loginWithRole: (role: UserRole) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  updateCurrentUser: (updates: Partial<UserProfile>) => void;
   hasPermission: (permission: string) => boolean;
   canManageLevel: (level?: DisasterLevel | string) => boolean;
   isLeadOfficer: boolean;
@@ -104,6 +105,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Patch the local auth user without a full re-login (used after profile save)
+  const updateCurrentUser = useCallback((updates: Partial<UserProfile>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const merged = { ...prev, ...updates };
+      // Persist back to localStorage so page refresh keeps the change
+      localStorage.setItem('vanguard_user', JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
   // TODO: Permission Checks
   const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false;
@@ -158,6 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithRole,
         logout,
         refreshSession,
+        updateCurrentUser,
         hasPermission,
         canManageLevel,
         isLeadOfficer,

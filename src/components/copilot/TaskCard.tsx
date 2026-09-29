@@ -25,9 +25,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onAction }) => {
           >
             {task.priority}
           </span>
-          {task.displayId && (
+          {task.display_id && (
             <span className="text-[9px] font-mono font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded border border-blue-200">
-              {task.displayId}
+              {task.display_id}
             </span>
           )}
         </div>

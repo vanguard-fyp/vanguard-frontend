@@ -20,54 +20,71 @@ export const MALAYSIA_STATES_LIST = [
 
 export const MALAYSIA_DISTRICTS_MAP: Record<string, string[]> = {
   'Johor': [
-    'Johor Bahru', 'Batu Pahat', 'Muar', 'Kluang', 'Kulai', 'Segamat', 'Pontian', 'Kota Tinggi', 'Tangkak', 'Mersing'
+    'Johor Bahru', 'Kluang', 'Kota Tinggi', 'Kulai', 'Mersing', 'Muar',
+    'Pontian', 'Segamat', 'Batu Pahat', 'Tangkak',
   ],
   'Kedah': [
-    'Kota Setar', 'Kuala Muda', 'Kubang Pasu', 'Kulim', 'Baling', 'Padang Terap', 'Pendang', 'Yan', 'Sik', 'Bandar Baharu', 'Langkawi', 'Pokok Sena'
+    'Kota Setar', 'Kuala Muda', 'Kubang Pasu', 'Kulim', 'Langkawi',
+    'Padang Terap', 'Baling', 'Sik', 'Yan', 'Pendang', 'Bandar Baharu', 'Pokok Sena',
   ],
   'Kelantan': [
-    'Kota Bharu', 'Pasir Mas', 'Tumpat', 'Bachok', 'Tanah Merah', 'Pasir Puteh', 'Kuala Krai', 'Machang', 'Gua Musang', 'Jeli', 'Lojing'
+    'Kota Bharu', 'Pasir Mas', 'Tumpat', 'Bachok', 'Tanah Merah',
+    'Pasir Puteh', 'Machang', 'Kuala Krai', 'Jeli', 'Gua Musang', 'Lojing',
   ],
   'Melaka': [
-    'Melaka Tengah', 'Alor Gajah', 'Jasin'
+    'Melaka Tengah', 'Alor Gajah', 'Jasin',
   ],
   'Negeri Sembilan': [
-    'Seremban', 'Jempol', 'Port Dickson', 'Tampin', 'Kuala Pilah', 'Rembau', 'Jelebu'
+    'Seremban', 'Port Dickson', 'Rembau', 'Tampin', 'Kuala Pilah', 'Jelebu', 'Jempol',
   ],
   'Pahang': [
-    'Kuantan', 'Temerloh', 'Bentong', 'Maran', 'Rompin', 'Pekan', 'Bera', 'Raub', 'Jerantut', 'Lipis', 'Cameron Highlands'
+    'Kuantan', 'Temerloh', 'Bentong', 'Bera', 'Jerantut', 'Lipis',
+    'Maran', 'Pekan', 'Raub', 'Rompin', 'Cameron Highlands',
   ],
   'Perak': [
-    'Kinta (Ipoh)', 'Larut, Matang & Selama', 'Manjung', 'Hilir Perak', 'Kerian', 'Batang Padang', 'Kuala Kangsar', 'Perak Tengah', 'Hulu Perak', 'Kampar', 'Muallim', 'Bagan Datuk'
+    'Kinta', 'Larut, Matang & Selama', 'Manjung', 'Batang Padang',
+    'Hilir Perak', 'Hulu Perak', 'Kampar', 'Kerian', 'Kuala Kangsar',
+    'Muallim', 'Perak Tengah', 'Bagan Datuk',
   ],
   'Perlis': [
-    'Kangar', 'Arau', 'Padang Besar', 'Kuala Perlis'
+    'Kangar', 'Arau', 'Padang Besar',
   ],
   'Pulau Pinang': [
-    'Timur Laut (George Town)', 'Seberang Perai Tengah', 'Seberang Perai Utara', 'Barat Daya', 'Seberang Perai Selatan'
+    'Timur Laut', 'Barat Daya', 'Seberang Perai Tengah',
+    'Seberang Perai Utara', 'Seberang Perai Selatan',
   ],
   'Sabah': [
-    'Kota Kinabalu', 'Sandakan', 'Tawau', 'Lahad Datu', 'Keningau', 'Kinabatangan', 'Penampang', 'Papang', 'Beaufort', 'Tuaran', 'Kudat', 'Ranau', 'Semporna'
+    'Kota Kinabalu', 'Sandakan', 'Tawau', 'Lahad Datu', 'Keningau',
+    'Kinabatangan', 'Penampang', 'Beaufort', 'Tuaran', 'Kudat', 'Ranau',
+    'Semporna', 'Beluran', 'Kota Belud', 'Kota Marudu', 'Nabawan',
+    'Papar', 'Putatan', 'Sipitang', 'Tambunan', 'Tongod',
   ],
   'Sarawak': [
-    'Kuching', 'Miri', 'Sibu', 'Bintulu', 'Samarahan', 'Sri Aman', 'Betong', 'Sarikei', 'Mukah', 'Limbang', 'Kapit', 'Lawas', 'Serian'
+    'Kuching', 'Miri', 'Sibu', 'Bintulu', 'Samarahan', 'Sri Aman',
+    'Betong', 'Sarikei', 'Mukah', 'Limbang', 'Kapit', 'Lawas', 'Serian',
+    'Subis', 'Tatau', 'Beluru', 'Daro', 'Julau', 'Kanowit', 'Lubok Antu',
+    'Maradong', 'Meradong', 'Pakan', 'Saratok', 'Selangau',
   ],
   'Selangor': [
-    'Petaling (Shah Alam/PJ)', 'Hulu Langat', 'Klang', 'Gombak', 'Kuala Langat', 'Sepang', 'Kuala Selangor', 'Hulu Selangor', 'Sabak Bernam'
+    'Gombak', 'Hulu Langat', 'Hulu Selangor', 'Klang', 'Kuala Langat',
+    'Kuala Selangor', 'Petaling', 'Sabak Bernam', 'Sepang',
   ],
   'Terengganu': [
-    'Kuala Terengganu', 'Kemaman', 'Dungun', 'Besut', 'Marang', 'Hulu Terengganu', 'Setiu', 'Kuala Nerus'
+    'Kuala Terengganu', 'Kemaman', 'Dungun', 'Besut', 'Marang',
+    'Hulu Terengganu', 'Setiu', 'Kuala Nerus',
   ],
   'WP Kuala Lumpur': [
-    'Kuala Lumpur Central', 'Cheras', 'Kepong', 'Bukit Bintang', 'Setiawangsa', 'Wangsa Maju', 'Batu', 'Segambut', 'Lembah Pantai', 'Titiwangsa', 'Seputeh', 'Bandar Tun Razak'
+    'Batu', 'Bukit Bintang', 'Cheras', 'Kepong', 'Lembah Pantai',
+    'Seputeh', 'Segambut', 'Setiawangsa', 'Titiwangsa', 'Wangsa Maju',
+    'Bandar Tun Razak', 'Bandar Puchong Jaya',
   ],
   'WP Putrajaya': [
-    'Putrajaya Precinct 1-20'
+    'Putrajaya',
   ],
   'WP Labuan': [
-    'Victoria / Labuan Island'
+    'Labuan',
   ],
   'Nationwide / All States': [
-    'All Districts Nationwide'
+    'All Districts Nationwide',
   ],
 };

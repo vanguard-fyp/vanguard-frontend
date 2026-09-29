@@ -43,9 +43,8 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
         name: `${w.name} (Logistics Depot)`,
         category: 'Warehouse',
         coordinates: [lat, lng],
-        status: (w.capacityStatus as any) || 'Operational',
-        details: `${w.fullAddress || w.name} · ${w.district}, ${w.state}`,
-        contact: w.contactNumber,
+        details: `${w.full_address || w.name} · ${w.district}, ${w.state}`,
+        contact: w.contact_number,
       });
     });
     return list;
@@ -103,7 +102,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       list.push({
         id: `poi-${poi.id}`,
         title: poi.name,
-        subtitle: `${poi.category} · ${poi.status}`,
+        subtitle: `${poi.category}`,
         type: 'poi',
         lat: poi.coordinates[0],
         lng: poi.coordinates[1],

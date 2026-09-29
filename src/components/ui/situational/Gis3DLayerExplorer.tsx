@@ -442,7 +442,7 @@ export const Gis3DLayerExplorer: React.FC<Gis3DLayerExplorerProps> = ({
                     setHoveredNode({
                       id: poi.id,
                       title: poi.name,
-                      subtitle: `${poi.category} · ${poi.status}`,
+                      subtitle: `${poi.category}`,
                     })
                   }
                   onMouseLeave={() => setHoveredNode(null)}
@@ -535,7 +535,7 @@ export const Gis3DLayerExplorer: React.FC<Gis3DLayerExplorerProps> = ({
                       title: inc.title,
                       subtitle: `${inc.location} · ${inc.severity} Level`,
                       severity: inc.severity,
-                      casualties: inc.affectedPopulation,
+                      casualties: inc.affected_population,
                     })
                   }
                   onMouseLeave={() => setHoveredNode(null)}
