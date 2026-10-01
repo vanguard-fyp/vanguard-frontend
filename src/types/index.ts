@@ -8,18 +8,12 @@ export * from './system';
 export type UserRole =
   | 'NADMA Lead Officer'
   | 'Disaster Management Officer'
-  | 'Rescue Coordinator'
-  | 'Resource Manager'
-  | 'Government Administrator'
   | 'Citizen Reporter'
   | 'System / Sensor Bot';
 
 export const USER_ROLES: UserRole[] = [
   'NADMA Lead Officer',
   'Disaster Management Officer',
-  'Rescue Coordinator',
-  'Resource Manager',
-  'Government Administrator',
   'Citizen Reporter',
   'System / Sensor Bot',
 ];

@@ -23,11 +23,20 @@ export interface TokenResponse {
   permissions?: string[];
 }
 
+// Roles allowed to access the web Command Centre.
+// Citizens and bots authenticate through the mobile app only.
+export const WEB_ADMIN_ROLES: ReadonlySet<UserRole> = new Set([
+  'NADMA Lead Officer',
+  'Disaster Management Officer',
+]);
+
 export const authService = {
   /**
-   * Authenticate with email & password
+   * Authenticate with email & password via the FastAPI backend.
+   * The backend calls supabase.auth.sign_in_with_password(), verifies the
+   * role, and returns a signed JWT pair + user profile.
    */
-  login: async (email: string, password: string = 'password'): Promise<TokenResponse> => {
+  login: async (email: string, password: string): Promise<TokenResponse> => {
     const res = await apiClient.post<TokenResponse>('/auth/login', { email, password });
     if (res.access_token) {
       localStorage.setItem('vanguard_token', res.access_token);
@@ -40,14 +49,16 @@ export const authService = {
   },
 
   /**
-   * Exchange active refresh token for a fresh access token
+   * Exchange the active refresh token for a fresh access + refresh token pair.
    */
   refreshToken: async (): Promise<TokenResponse> => {
     const refreshToken = localStorage.getItem('vanguard_refresh_token');
     if (!refreshToken) {
-      throw new Error('No refresh token available');
+      throw new Error('No refresh token available. Please sign in again.');
     }
-    const res = await apiClient.post<TokenResponse>('/auth/refresh', { refresh_token: refreshToken });
+    const res = await apiClient.post<TokenResponse>('/auth/refresh', {
+      refresh_token: refreshToken,
+    });
     if (res.access_token) {
       localStorage.setItem('vanguard_token', res.access_token);
       if (res.refresh_token) {
@@ -59,35 +70,21 @@ export const authService = {
   },
 
   /**
-   * Acquire a signed demo JWT token for quick role switching
-   */
-  getDemoToken: async (role: UserRole = 'NADMA Lead Officer'): Promise<TokenResponse> => {
-    const res = await apiClient.post<TokenResponse>(`/auth/demo-token?role=${encodeURIComponent(role)}`);
-    if (res.access_token) {
-      localStorage.setItem('vanguard_token', res.access_token);
-      if (res.refresh_token) {
-        localStorage.setItem('vanguard_refresh_token', res.refresh_token);
-      }
-      localStorage.setItem('vanguard_user', JSON.stringify(res.user));
-    }
-    return res;
-  },
-
-  /**
-   * Fetch current authenticated user profile
+   * Fetch current authenticated user profile from the backend.
    */
   getCurrentUser: async (): Promise<UserProfile> => {
     return apiClient.get<UserProfile>('/auth/me');
   },
 
   /**
-   * Clear active auth session
+   * Sign out — clears local storage.
+   * Token invalidation is stateless (JWT); this is a client-side clear.
    */
   logout: async () => {
     try {
       await apiClient.post('/auth/logout');
     } catch {
-      // ignore network logout errors
+      // Ignore network errors on logout — always clear local state.
     } finally {
       localStorage.removeItem('vanguard_token');
       localStorage.removeItem('vanguard_refresh_token');
@@ -95,23 +92,13 @@ export const authService = {
     }
   },
 
-  /**
-   * Retrieve active session token
-   */
-  getToken: (): string | null => {
-    return localStorage.getItem('vanguard_token');
-  },
+  /** Retrieve the active access token from storage. */
+  getToken: (): string | null => localStorage.getItem('vanguard_token'),
 
-  /**
-   * Retrieve active refresh token
-   */
-  getRefreshToken: (): string | null => {
-    return localStorage.getItem('vanguard_refresh_token');
-  },
+  /** Retrieve the active refresh token from storage. */
+  getRefreshToken: (): string | null => localStorage.getItem('vanguard_refresh_token'),
 
-  /**
-   * Retrieve stored user from localStorage
-   */
+  /** Retrieve the stored user profile from storage. */
   getStoredUser: (): UserProfile | null => {
     const data = localStorage.getItem('vanguard_user');
     if (!data) return null;

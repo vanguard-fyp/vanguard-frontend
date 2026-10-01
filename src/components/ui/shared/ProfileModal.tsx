@@ -171,7 +171,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-sm font-bold text-slate-900 truncate">{displayName || user?.name}</h4>
-                  {avatarPreview && (
+                  {/* {avatarPreview && (
                     <button
                       type="button"
                       onClick={handleRemovePhoto}
@@ -179,7 +179,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                     >
                       <Trash2 size={11} /> Remove
                     </button>
-                  )}
+                  )} */}
                 </div>
                 <p className="text-xs text-slate-500 font-medium">{user?.role || 'Officer'}</p>
                 {pendingAvatarFile && (

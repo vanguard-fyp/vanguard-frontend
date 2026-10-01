@@ -79,8 +79,9 @@ export const LandingPage: React.FC = () => {
       <header className="font-ui sticky top-0 z-40 border-b" style={{ backgroundColor: PAPER, borderColor: `${INK}1a` }}>
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-xl font-semibold">Vanguard</span>
-            <span className="text-sm" style={{ color: `${INK}99` }}>Disaster Operations Intranet</span>
+            <span className="font-display text-xl font-semibold"> <span className="font-display text-xl font-semibold"><span className="bg-gradient-to-b from-blue-400 via-blue-600 to-blue-900 bg-clip-text text-transparent">
+            V
+          </span>anguard</span></span>
           </div>
           {isAuthenticated ? (
             <button
@@ -93,7 +94,7 @@ export const LandingPage: React.FC = () => {
           ) : (
             <button
               onClick={() => navigate('/login')}
-              className="text-sm font-semibold flex items-center gap-1.5 px-4 py-2 rounded-sm border transition-opacity hover:opacity-70"
+              className="text-sm font-semibold flex items-center gap-1.5 px-4 py-2 rounded-sm border transition-opacity hover:opacity-70 cursor-pointer"
               style={{ borderColor: INK, color: INK }}
             >
               <Lock size={14} /> Operator sign in
@@ -142,7 +143,7 @@ export const LandingPage: React.FC = () => {
             >
               <button
                 onClick={() => navigate('/login')}
-                className="font-ui text-sm font-semibold px-5 py-3 rounded-sm flex items-center gap-2 transition-opacity hover:opacity-90"
+                className="font-ui text-sm font-semibold px-5 py-3 rounded-sm flex items-center gap-2 transition-opacity hover:opacity-90 cursor-pointer"
                 style={{ backgroundColor: BLUE, color: '#fff' }}
               >
                 Enter command dashboard

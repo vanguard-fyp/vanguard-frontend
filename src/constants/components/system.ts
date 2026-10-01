@@ -1,23 +1,20 @@
 // ─── System Administration Constants ─────────────────────────────────────────
-import { Users, Shield, Sliders } from 'lucide-react';
+import { Users, Sliders } from 'lucide-react';
 import type { AdminTab, MatrixRow, UserRole } from '../../types';
 
-// User role lists — used in dropdowns, filters, and modals
+// User role lists — used in dropdowns, filters, and modals.
+// Only the 2 web admin roles are shown here; Citizen Reporter and
+// System / Sensor Bot are mobile-app roles that don't appear in the
+// web admin user management UI.
 export const userRolesFilterList = [
   'All',
+  'NADMA Lead Officer',
   'Disaster Management Officer',
-  'Rescue Coordinator',
-  'Resource Manager',
-  'Government Administrator',
-  'Citizen Reporter',
-  'System / Sensor Bot'
 ];
 
 export const userRolesList: UserRole[] = [
+  'NADMA Lead Officer',
   'Disaster Management Officer',
-  'Rescue Coordinator',
-  'Resource Manager',
-  'Government Administrator',
 ];
 
 // Agency options — used in the user edit modal and agency management
@@ -41,7 +38,6 @@ export const permOptions = [
 
 export const adminTabs: AdminTab[] = [
   { id: 'users', title: 'User Management', sub: 'Accounts & CRUD', icon: Users },
-  { id: 'rbac', title: 'Roles & Permissions', sub: 'RBAC Access Matrix', icon: Shield },
   { id: 'settings', title: 'Intelligence Thresholds', sub: 'AI Risk & Alert Triggers', icon: Sliders },
 ];
 

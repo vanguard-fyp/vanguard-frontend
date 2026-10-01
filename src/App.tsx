@@ -31,7 +31,7 @@ import { LanguageProvider } from './context/LanguageContext';
 const MainAppLayout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user, loginWithRole } = useAuth();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen flex" style={{ background: '#f8fafc', fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -49,7 +49,7 @@ const MainAppLayout: React.FC = () => {
       >
         <Header
           currentRole={user?.role || 'NADMA Lead Officer'}
-          onRoleChange={(role) => loginWithRole(role)}
+          onRoleChange={() => {}}
           onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
         />
 

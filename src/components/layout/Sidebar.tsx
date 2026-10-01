@@ -24,19 +24,9 @@ const isNavPathAllowed = (path: string, role?: string): boolean => {
   if (role === 'Disaster Management Officer') {
     return path !== '/system';
   }
-  if (role === 'Rescue Coordinator') {
-    return !['/response/resources', '/system'].includes(path);
-  }
-  if (role === 'Resource Manager') {
-    return !['/response/rescue', '/system'].includes(path);
-  }
-  if (role === 'Government Administrator') {
-    return !['/response/rescue', '/response/resources', '/system'].includes(path);
-  }
-  if (role === 'Citizen Reporter') {
-    return ['/situational/incidents', '/situational/intelligence', '/communication'].includes(path);
-  }
-  return true;
+  // Citizens and bots don't log into the web dashboard — guard here
+  // in case a stale token with a non-admin role somehow reaches the UI.
+  return false;
 };
 
 const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
@@ -357,10 +347,10 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden"
                   style={{
-                    backgroundColor: user.avatar_url ? "white" : C.logoBg,
-                    backgroundImage: user.avatar_url ? `url(${user.avatar_url})` : "none",
-                    backgroundSize: user.avatar_url ? "cover" : "none",
-                    backgroundPosition: user.avatar_url ? "center" : "none",
+                    backgroundColor: user?.avatar_url ? "white" : C.logoBg,
+                    backgroundImage: user?.avatar_url ? `url(${user.avatar_url})` : "none",
+                    backgroundSize: user?.avatar_url ? "cover" : "none",
+                    backgroundPosition: user?.avatar_url ? "center" : "none",
                   }}
                 >
                   {user?.avatar_url ? (
@@ -382,10 +372,10 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden transition-transform group-hover:scale-105"
                       style={{
-                        backgroundColor: user.avatar_url ? "white" : C.logoBg,
-                        backgroundImage: user.avatar_url ? `url(${user.avatar_url})` : "none",
-                        backgroundSize: user.avatar_url ? "cover" : "none",
-                        backgroundPosition: user.avatar_url ? "center" : "none",
+                        backgroundColor: user?.avatar_url ? "white" : C.logoBg,
+                        backgroundImage: user?.avatar_url ? `url(${user.avatar_url})` : "none",
+                        backgroundSize: user?.avatar_url ? "cover" : "none",
+                        backgroundPosition: user?.avatar_url ? "center" : "none",
                       }}
                     >
                       {user?.avatar_url ? (

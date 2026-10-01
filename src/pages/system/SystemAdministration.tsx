@@ -4,7 +4,6 @@ import { Plus } from 'lucide-react';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks';
 import { UserManagementTable } from '../../components/ui/system/UserManagementTable';
 import { UserEditModal } from '../../components/ui/system/UserEditModal';
-import { RolesPermissionsMatrix } from '../../components/ui/system/RolesPermissionsMatrix';
 import { SystemSettingsPanel } from '../../components/ui/system/SystemSettingsPanel';
 import type { AdminSection, UserAccount } from '../../types';
 import { adminTabs, containerAnim, itemAnim } from '../../constants';
@@ -132,18 +131,6 @@ const SystemAdministration: React.FC = () => {
               onDeleteUser={handleDeleteUser}
               onToggleUserStatus={handleToggleUserStatus}
             />
-          </motion.div>
-        )}
-
-        {activeTab === 'rbac' && (
-          <motion.div
-            key="rbac"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.15 }}
-          >
-            <RolesPermissionsMatrix />
           </motion.div>
         )}
 

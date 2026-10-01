@@ -141,7 +141,7 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
                   <div className="relative">
                     <div className="absolute -left-[21px] top-0.5 w-3 h-3 rounded-full bg-emerald-600 ring-4 ring-white" />
                     <p className="text-xs font-bold text-slate-800">
-                      Approved by Resource Manager (NADMA)
+                      Approved by Disaster Management Officer (NADMA)
                     </p>
                     <p className="text-[11px] text-slate-500">
                       Depot allocation confirmed · Automated buffer check verified
