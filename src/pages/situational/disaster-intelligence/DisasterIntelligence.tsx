@@ -8,14 +8,14 @@ import { AIInsightDetailView } from './AIInsightDetailView';
 import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
 import { Gis3DLayerExplorer } from '../../../components/ui/situational/Gis3DLayerExplorer';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
-import { useIncidents, useMapPOIs, useCities, useWarehouses } from '../../../hooks';
+import { useIncidents, useCities, useWarehouses } from '../../../hooks';
 import { containerAnim, defaultLayers, itemAnim, tabs } from '../../../constants';
 
 const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncident, onFocusHandled }) => {
   const [activeTab, setActiveTab] = useState<typeof tabs[number]>('Map');
   const [layers, setLayers] = useState<GISLayerState>(defaultLayers);
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
-  const [mapMode, setMapMode] = useState<'2d' | '3d' | '3d-layers'>('3d-layers');
+  const [mapMode, setMapMode] = useState<'3d-layers' | '3d' | '2d'>('3d-layers');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [flyToTarget, setFlyToTarget] = useState<FlyToTarget | null>(null);
@@ -29,12 +29,12 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     [incidents]
   );
 
-  const { data: mapPOIs = [] } = useMapPOIs();
+  // Live Overpass API is used exclusively for facilities across the map.
   const { data: backendCities = [] } = useCities();
   const { data: warehouses = [] } = useWarehouses();
 
   const combinedPOIs = useMemo(() => {
-    const list: MapPOI[] = [...mapPOIs];
+    const list: MapPOI[] = [];
     warehouses.forEach((w) => {
       const lat = typeof w.lat === 'number' && !isNaN(w.lat) ? w.lat : 4.5;
       const lng = typeof w.lng === 'number' && !isNaN(w.lng) ? w.lng : 102.0;
@@ -48,7 +48,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       });
     });
     return list;
-  }, [mapPOIs, warehouses]);
+  }, [warehouses]);
 
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -63,15 +63,19 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       floodAreas: true,
       landslideAreas: true,
       fireZones: true,
+      severeStorms: true,
+      earthquakeDrought: true,
       emergencyShelters: true,
       hospitals: true,
+      clinics: true,
+      fireStations: true,
+      policeStations: true,
       evacuationSchools: true,
+      rescueTeamLocations: true,
       utilityElectricity: true,
       utilityWater: true,
       utilityTelecom: true,
-      trafficConditions: true,
       roadAccessibility: true,
-      rescueTeamLocations: true,
     });
   };
 

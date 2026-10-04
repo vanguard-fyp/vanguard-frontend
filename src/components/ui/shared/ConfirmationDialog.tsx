@@ -5,7 +5,7 @@ import { AlertTriangle, X } from 'lucide-react';
 interface ConfirmationDialogProps {
   isOpen: boolean;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   isDestructive?: boolean;
@@ -48,7 +48,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
                 </div>
                 <div className="flex-1">
                   <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">{message}</p>
+                  <p className="text-xs text-slate-600 mt-1.5 leading-relaxed text-justify">{message}</p>
                 </div>
                 <button
                   onClick={onCancel}

@@ -51,11 +51,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
     setAvatarPreview(URL.createObjectURL(file));
   };
 
-  const handleRemovePhoto = () => {
-    setPendingAvatarFile(null);
-    setAvatarPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  // const handleRemovePhoto = () => {
+  //   setPendingAvatarFile(null);
+  //   setAvatarPreview(null);
+  //   if (fileInputRef.current) fileInputRef.current.value = '';
+  // };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,13 +204,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">Official Email</label>
-                <input
+                <div className="px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-medium select-none truncate">{email}</div>
+                {/* <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-mono text-slate-700"
-                />
+                /> */}
               </div>
             </div>
 
@@ -225,7 +226,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
               />
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1">
-                  <Building2 size={12} className="text-blue-600" />
                   Agency
                 </label>
                 {/* Read-only — agency is managed by system admin */}
@@ -239,7 +239,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
             <div>
               <label className="block text-xs font-bold text-slate-800 mb-1">Role</label>
               <div className="px-3 py-2 text-xs bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-medium select-none">
-                {user?.role || '—'} <span className="text-slate-400 ml-1">(managed by system admin)</span>
+                {user?.role || '—'} <span className="text-slate-400 ml-1"></span>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Radio, CheckCircle2, AlertCircle, Calendar, MapPin, Shield, ArrowRight } from 'lucide-react';
 import type { Mission } from '../../../../types';
-import { useUpdateMissionStatus } from '../../../../hooks';
+import { useUpdateMissionStatus, useIncidents } from '../../../../hooks';
 import { formatDateTime } from '../../../../utils/dateFormatter';
 
 interface MissionProgressPipelineProps {
@@ -11,6 +11,7 @@ interface MissionProgressPipelineProps {
 export const MissionProgressPipeline: React.FC<MissionProgressPipelineProps> = ({ missions }) => {
   const [filterMode, setFilterMode] = useState<'active' | 'completed'>('active');
   const updateStatus = useUpdateMissionStatus();
+  const { data: incidents = [] } = useIncidents();
 
   const activeMissions = missions.filter(
     (m) => m.status === 'Pending' || m.status === 'In Progress'
@@ -74,6 +75,16 @@ export const MissionProgressPipeline: React.FC<MissionProgressPipelineProps> = (
           {displayedMissions.map((mission) => {
             const teamsList = (mission as any).teams || [];
             const isCompleted = mission.status === 'Completed' || mission.status === 'Aborted';
+            const incidentDisplayId =
+              mission.incident_display_id ||
+              incidents.find((inc) => inc.id === mission.incident_id || inc.display_id === mission.incident_id)?.display_id ||
+              (mission.incident_id
+                ? (mission.incident_id.startsWith('inc-')
+                    ? mission.incident_id.split('-').slice(0, 3).join('-').toUpperCase()
+                    : mission.incident_id.length > 13
+                    ? `INC-${mission.incident_id.slice(0, 8).toUpperCase()}`
+                    : mission.incident_id)
+                : null);
 
             return (
               <div
@@ -102,10 +113,12 @@ export const MissionProgressPipeline: React.FC<MissionProgressPipelineProps> = (
                       </span>
                     </div>
                     <h4 className="text-xs font-bold text-slate-900 mt-1">{mission.title}</h4>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <MapPin size={11} className="text-slate-400" />
-                      Incident #{mission.incident_id}
-                    </p>
+                    {incidentDisplayId && (
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <MapPin size={11} className="text-slate-400 shrink-0" />
+                        Incident #{incidentDisplayId}
+                      </p>
+                    )}
                   </div>
 
                   <div className="text-right shrink-0">

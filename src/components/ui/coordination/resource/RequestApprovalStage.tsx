@@ -228,11 +228,10 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                 </div>
                 <div className="flex items-center gap-3">
                   <span
-                    className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] border ${
-                      req.status === 'Approved' || req.status === 'Dispatched'
+                    className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] border ${req.status === 'Approved' || req.status === 'Dispatched'
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : 'bg-red-50 text-red-700 border-red-200'
-                    }`}
+                      }`}
                   >
                     {req.status}
                   </span>
@@ -280,7 +279,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                       {approvingRequest.urgency} Urgency
                     </span>
                   </div>
-                  <p className="font-bold text-slate-900 text-sm">{approvingRequest.display_id}</p>
+                  <p className="font-bold text-slate-900 text-sm">{approvingRequest.item_requested}</p>
                   <p className="text-slate-700 font-medium">
                     Quantity to Allocate: <strong className="text-emerald-800">{approvingRequest.quantity_requested} {approvingRequest.unit}</strong>
                   </p>
@@ -351,7 +350,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
                       {rejectingRequest.urgency} Urgency
                     </span>
                   </div>
-                  <p className="font-bold text-slate-900 text-sm">{rejectingRequest.display_id}</p>
+                  <p className="font-bold text-slate-900 text-sm">{rejectingRequest.item_requested}</p>
                   <p className="text-slate-600">
                     Quantity: <strong>{rejectingRequest.quantity_requested} {rejectingRequest.unit}</strong>
                   </p>

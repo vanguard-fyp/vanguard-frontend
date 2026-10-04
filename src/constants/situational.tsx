@@ -110,15 +110,19 @@ export const defaultLayers: GISLayerState = {
   floodAreas: true,
   landslideAreas: true,
   fireZones: false,
+  severeStorms: false,
+  earthquakeDrought: false,
   emergencyShelters: true,
   hospitals: true,
+  clinics: true,
+  fireStations: true,
+  policeStations: true,
   evacuationSchools: true,
+  rescueTeamLocations: true,
   utilityElectricity: true,
   utilityWater: true,
   utilityTelecom: false,
-  trafficConditions: false,
   roadAccessibility: true,
-  rescueTeamLocations: true,
 };
 
 export const MINIMAL_STATUS_FILTERS = [
@@ -141,6 +145,10 @@ export const typeIcons: Record<string, React.ReactNode> = {
   Landslide: <Mountain size={16} className="text-amber-600" />,
   'Forest Fire': <Flame size={16} className="text-red-600" />,
   'Severe Storm': <Activity size={16} className="text-purple-600" />,
+  'Haze': <Wind size={16} className="text-indigo-600" />,
+  'Earthquake': <CircleDot size={16} className="text-rose-600" />,
+  'Drought': <Sun size={16} className="text-orange-500" />,
+  'Other': <Zap size={16} className="text-amber-400" />,
 };
 
 export const GDACS_HAZARD_DEFS: GdacsHazardDef[] = [

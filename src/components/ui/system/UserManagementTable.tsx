@@ -4,6 +4,7 @@ import type { UserAccount, UserManagementTableProps } from '../../../types';
 import { userRolesFilterList as roles } from '../../../constants';
 import { useAuth } from '../../../context/AuthContext';
 import { ConfirmationDialog } from '../shared/ConfirmationDialog';
+import { formatDateTime } from '../../../utils/dateFormatter';
 
 export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   users,
@@ -116,7 +117,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                       <span className="text-xs font-bold text-slate-900">{user.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5 text-xs text-slate-500 font-mono font-medium">
+                  <td className="px-4 py-3.5 text-xs text-slate-500 font-medium">
                     {user.email}
                   </td>
                   <td className="px-4 py-3.5 text-xs text-slate-700 font-semibold">{user.agency}</td>
@@ -129,8 +130,8 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                     <button
                       onClick={() => onToggleUserStatus(user.id)}
                       className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 cursor-pointer transition-colors ${user.status === 'Active'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                         }`}
                     >
                       <span
@@ -141,7 +142,14 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                     </button>
                   </td>
                   <td className="px-4 py-3.5 text-xs text-slate-500 font-medium">
-                    {user.last_active}
+                    {user.last_active && user.last_active !== 'Never' ? (
+                      <div className="flex flex-col" title={formatDateTime(user.last_active)}>
+                        <span className="text-slate-700 font-semibold">{formatDateTime(user.last_active)}</span>
+                        {/* <span className="text-[10px] text-slate-400 font-normal">({formatRelativeTime(user.last_active)})</span> */}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 italic">Never</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -178,7 +186,19 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
       <ConfirmationDialog
         isOpen={!!userToDelete}
         title="Remove User Account"
-        message={`Are you sure you want to remove ${userToDelete?.name} (${userToDelete?.email})? This action will revoke their EOC system credentials.`}
+        message={
+          <>
+            Are you sure you want to remove{" "}
+            <span className="font-bold text-slate-900">
+              {userToDelete?.name}
+            </span>{" "}
+            (
+            <span className="font-bold text-slate-900">
+              {userToDelete?.email}
+            </span>
+            )? This action will revoke their EOC system credentials.
+          </>
+        }
         confirmLabel="Remove User"
         cancelLabel="Cancel"
         isDestructive={true}

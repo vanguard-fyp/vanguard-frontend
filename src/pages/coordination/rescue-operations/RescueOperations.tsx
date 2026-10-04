@@ -544,7 +544,7 @@ const RescueOperations: React.FC = () => {
               className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
             >
               <div className="p-6 space-y-4">
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold">
                   <ShieldCheck size={20} />
                 </div>
                 <div>
@@ -567,7 +567,7 @@ const RescueOperations: React.FC = () => {
                     type="button"
                     onClick={handleConfirmDelete}
                     disabled={deleteTeamMutation.isPending}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
                   >
                     {deleteTeamMutation.isPending ? 'Decommissioning...' : 'Confirm Decommission'}
                   </button>

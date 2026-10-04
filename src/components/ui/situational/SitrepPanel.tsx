@@ -38,8 +38,26 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   const { data: missions = [] } = useMissions();
   const [lat, lng] = incident.coordinates || [4.2105, 101.9758];
 
-  const assignedTeams = rescueTeams.filter(t => t.status === 'Deployed' || t.status === 'En Route');
-  const assignedMissions = missions.filter(m => m.incident_id === incident.id);
+  const assignedMissions = missions.filter((m) => m.incident_id === incident.id);
+
+  // Identify rescue teams specifically assigned to missions for this incident
+  const assignedTeamIds = new Set<string>();
+  const assignedTeamNames = new Set<string>();
+  assignedMissions.forEach((m) => {
+    if (m.assigned_team_id) assignedTeamIds.add(m.assigned_team_id);
+    if (Array.isArray(m.team_ids)) {
+      m.team_ids.forEach((id) => assignedTeamIds.add(id));
+    }
+    if (m.team_name) assignedTeamNames.add(m.team_name.trim().toLowerCase());
+  });
+
+  const assignedTeams = rescueTeams.filter(
+    (t) =>
+      t.status !== 'Deleted' &&
+      (assignedTeamIds.has(t.id) ||
+        assignedTeamIds.has(t.display_id) ||
+        assignedTeamNames.has(t.name.trim().toLowerCase()))
+  );
   const stat = statusConfig[incident.status] ?? statusConfig.Unverified;
 
   return (

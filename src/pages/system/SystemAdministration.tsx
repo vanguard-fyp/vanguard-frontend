@@ -64,7 +64,7 @@ const SystemAdministration: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900">System Administration</h1>
           <p className="text-xs text-slate-500 font-medium mt-1">
-            Admin Management · User directory, operational RBAC controls, agency integration, and intelligence thresholds
+            Admin Management · User directory & agency integration
           </p>
         </div>
 

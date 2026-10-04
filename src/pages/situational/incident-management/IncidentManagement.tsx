@@ -279,7 +279,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     setEditSeverity(incident.severity);
     setEditDisasterLevel(incident.disaster_level);
     setEditStatus(incident.status);
-    setEditDescription(incident.description);
+    setEditDescription(incident.description || '');
     setEditAffectedPopulation(incident.affected_population || 0);
     setEditCasualtiesCount(incident.casualties_count || 0);
     setEditInfrastructureDamage(incident.infrastructure_damage || 'None');
@@ -294,6 +294,9 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     if (!editingIncident) return;
     const errors: Record<string, string> = {};
     if (!editTitle.trim()) errors.title = 'Incident title is required';
+    if (!editSeverity) errors.severity = 'Severity is required';
+    if (!editDisasterLevel) errors.disasterLevel = 'Disaster level is required';
+    if (!editDescription.trim()) errors.description = 'Operational notes / description is required';
     if (Object.keys(errors).length > 0) {
       setEditErrors(errors);
       return;
@@ -1015,6 +1018,10 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                       <option value="Landslide">Landslide</option>
                       <option value="Forest Fire">Forest Fire / Wildfire</option>
                       <option value="Severe Storm">Severe Storm</option>
+                      <option value="Haze">Haze</option>
+                      <option value="Earthquake">Earthquake</option>
+                      <option value="Drought">Drought</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
 
@@ -1369,30 +1376,46 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Severity</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Severity <span className="!text-red-500">*</span></label>
                     <select
                       value={editSeverity}
-                      onChange={(e) => setEditSeverity(e.target.value as SeverityLevel)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+                      onChange={(e) => {
+                        setEditSeverity(e.target.value as SeverityLevel);
+                        if (editErrors.severity) setEditErrors((p) => ({ ...p, severity: '' }));
+                      }}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white cursor-pointer ${
+                        editErrors.severity ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                      }`}
                     >
                       <option value="Critical">Critical</option>
                       <option value="High">High</option>
                       <option value="Medium">Medium</option>
                       <option value="Low">Low</option>
                     </select>
+                    {editErrors.severity && (
+                      <span className="text-red-500 text-xs mt-1 block">{editErrors.severity}</span>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Level (Directive 20)</label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Disaster Level (Directive 20) <span className="!text-red-500">*</span></label>
                     <select
                       value={editDisasterLevel}
-                      onChange={(e) => setEditDisasterLevel(e.target.value as DisasterLevel)}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+                      onChange={(e) => {
+                        setEditDisasterLevel(e.target.value as DisasterLevel);
+                        if (editErrors.disasterLevel) setEditErrors((p) => ({ ...p, disasterLevel: '' }));
+                      }}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white cursor-pointer ${
+                        editErrors.disasterLevel ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                      }`}
                     >
                       <option value="Level 1: District">Level 1: District</option>
                       <option value="Level 2: State">Level 2: State</option>
                       <option value="Level 3: Federal">Level 3: Federal</option>
                     </select>
+                    {editErrors.disasterLevel && (
+                      <span className="text-red-500 text-xs mt-1 block">{editErrors.disasterLevel}</span>
+                    )}
                   </div>
                 </div>
 
@@ -1453,13 +1476,21 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Operational Notes / Description</label>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">Operational Notes / Description <span className="!text-red-500">*</span></label>
                   <textarea
                     rows={3}
                     value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
+                    onChange={(e) => {
+                      setEditDescription(e.target.value);
+                      if (editErrors.description) setEditErrors((p) => ({ ...p, description: '' }));
+                    }}
+                    className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white ${
+                      editErrors.description ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                    }`}
                   />
+                  {editErrors.description && (
+                    <span className="text-red-500 text-xs mt-1 block">{editErrors.description}</span>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">

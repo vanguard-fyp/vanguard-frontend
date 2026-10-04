@@ -618,7 +618,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                       Step 2 · Tactical Operations
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">Response</span>
                   </div>
 
                   <a
@@ -628,14 +627,14 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <Send size={14} /> Dispatch via Rescue Ops →
                   </a>
 
-              {reporterContact &&     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                  {reporterContact && <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Reporter Contact
                       </span>
                     </div>
 
-<div className="flex items-stretch gap-2">
+                    <div className="flex items-stretch gap-2">
                       <div className="flex items-center justify-between flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
                         <span className="text-xs font-mono font-bold text-slate-800 truncate">
                           {reporterContact}
@@ -669,9 +668,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                         <Phone size={14} />
                       </a>
                     </div>
-                    
+
                   </div>
-                    }
+                  }
                 </div>
               )}
 

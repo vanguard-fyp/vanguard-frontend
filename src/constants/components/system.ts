@@ -15,6 +15,8 @@ export const userRolesFilterList = [
 export const userRolesList: UserRole[] = [
   'NADMA Lead Officer',
   'Disaster Management Officer',
+  'Citizen Reporter',
+  'System / Sensor Bot'
 ];
 
 // Agency options — used in the user edit modal and agency management
@@ -26,6 +28,7 @@ export const agencyOptions = [
   'PDRM Police HQ',
   'JKM Social Welfare',
   'KKM Health Ministry',
+  'Public Citizen'
 ];
 
 // Permission level options — streamlined 4-tier standard RBAC permissions

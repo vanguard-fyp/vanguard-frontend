@@ -18,7 +18,7 @@ export const USER_ROLES: UserRole[] = [
   'System / Sensor Bot',
 ];
 
-export type DisasterType = 'Flood' | 'Landslide' | 'Flash Flood' | 'Forest Fire' | 'Severe Storm';
+export type DisasterType = 'Flood' | 'Landslide' | 'Flash Flood' | 'Forest Fire' | 'Severe Storm' | 'Haze' | 'Earthquake' | 'Drought' | 'Other';
 
 export type SeverityLevel = 'Critical' | 'High' | 'Medium' | 'Low';
 
@@ -156,25 +156,46 @@ export interface GISLayerState {
   floodAreas: boolean;
   landslideAreas: boolean;
   fireZones: boolean;
+  severeStorms: boolean;
+  earthquakeDrought: boolean;
   emergencyShelters: boolean;
   hospitals: boolean;
+  clinics: boolean;
+  fireStations: boolean;
+  policeStations: boolean;
   evacuationSchools: boolean;
+  rescueTeamLocations: boolean;
   utilityElectricity: boolean;
   utilityWater: boolean;
   utilityTelecom: boolean;
-  trafficConditions: boolean;
   roadAccessibility: boolean;
-  rescueTeamLocations: boolean;
 }
 
 export interface MapPOI {
   id: string;
   name: string;
-  category: 'Shelter' | 'Hospital' | 'School' | 'Utility' | 'Rescue Team' | 'Road Closure' | 'Warehouse' | 'Depot';
+  category:
+    | 'Shelter'
+    | 'Hospital'
+    | 'Clinic'
+    | 'Police Station'
+    | 'Fire Station'
+    | 'School'
+    | 'Utility'
+    | 'Rescue Team'
+    | 'Road Closure'
+    | 'Warehouse'
+    | 'Depot'
+    | 'Pharmacy'
+    | 'Other';
   coordinates: [number, number];
   capacity?: { current: number; max: number };
   details: string;
   contact?: string;
+  distanceKm?: number;
+  place?: string;
+  website?: string;
+  openingHours?: string;
 }
 
 export interface RescueTeam {
@@ -198,6 +219,8 @@ export interface Mission {
   display_id: string;
   title: string;
   incident_id: string;
+  incident_display_id?: string;
+  incident_title?: string;
   incident_location: string;
   assigned_team_id?: string;
   team_ids?: string[];

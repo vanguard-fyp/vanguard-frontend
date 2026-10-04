@@ -5,6 +5,7 @@ import type { UserEditModalProps, UserRole } from '../../../types';
 import { userRolesList as rolesList, agencyOptions } from '../../../constants';
 import { useUploadAvatar } from '../../../hooks';
 import { useToast } from '../../../context/ToastContext';
+import { formatMalaysianPhone } from '../shared/PhoneInput';
 
 export const UserEditModal: React.FC<UserEditModalProps> = ({
   isOpen,
@@ -20,6 +21,8 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
   const [status, setStatus] = useState<'Active' | 'Inactive'>('Active');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [nameDirty, setNameDirty] = useState(false);
+  const [emailDirty, setEmailDirty] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAvatar = useUploadAvatar();
@@ -180,30 +183,40 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
 
           <div>
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
-              Full Officer Name *
+              Full Name <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
-              required
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameDirty(true);
+              }}
               placeholder="e.g. Dato' Ir. Ahmad Rosli"
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 transition-colors"
             />
+            {name === "" && nameDirty && <span className="text-xs text-red-600 font-medium mt-0.5 p-1">Please input the name</span>}
           </div>
 
           <div>
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
-              Official Email Address *
+              Email Address (read only)
             </label>
-            <input
+            <div className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-600 transition-colors">
+              {email}
+            </div>
+            {/* <input
               type="email"
-              required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setEmailDirty(true);
+              }}
               placeholder="e.g. rosli@nadma.gov.my"
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 font-mono transition-colors"
             />
+            {email === "" && emailDirty && <span className="text-xs text-red-600 font-medium mt-0.5 p-1">Please input the email</span>}
+            {email !== "" && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) && <span className="text-xs text-red-600 font-medium mt-0.5 p-1">Please input a valid email</span>} */}
           </div>
 
           <div>
@@ -212,7 +225,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
             </label>
             <input
               type="text"
-              value={phone}
+              value={formatMalaysianPhone(phone)}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+60-12-345 6789"
               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 font-mono transition-colors"

@@ -6,12 +6,15 @@ import {
   Droplets,
   Mountain,
   Flame,
+  CloudRain,
+  CircleDot,
   Home,
   Hospital,
+  Stethoscope,
+  Shield,
   GraduationCap,
   Zap,
   Wifi,
-  Car,
   RouteOff,
   ShieldCheck,
   RotateCcw,
@@ -20,34 +23,37 @@ import {
 } from 'lucide-react';
 import type { GISLayerState, LayerGroup } from '../../../types';
 
-
 const groups: LayerGroup[] = [
   {
-    title: 'Hazards & Risks',
+    title: 'Natural Hazards & Risks',
     items: [
-      { key: 'disasterHotspots', label: 'Disaster Hotspots', icon: <AlertTriangle size={15} />, iconColor: 'text-red-600', activeBg: 'bg-red-50/80', activeBorder: 'border-red-200', activeDot: 'bg-red-500' },
-      { key: 'floodAreas', label: 'Flood Inundation', icon: <Droplets size={15} />, iconColor: 'text-blue-600', activeBg: 'bg-blue-50/80', activeBorder: 'border-blue-200', activeDot: 'bg-blue-500' },
-      { key: 'landslideAreas', label: 'Landslide Hazards', icon: <Mountain size={15} />, iconColor: 'text-amber-600', activeBg: 'bg-amber-50/80', activeBorder: 'border-amber-200', activeDot: 'bg-amber-500' },
-      { key: 'fireZones', label: 'Fire Hazard Zones', icon: <Flame size={15} />, iconColor: 'text-orange-600', activeBg: 'bg-orange-50/80', activeBorder: 'border-orange-200', activeDot: 'bg-orange-500' },
+      { key: 'disasterHotspots', label: 'Active Incidents', icon: <AlertTriangle size={15} />, iconColor: 'text-red-600', activeBg: 'bg-red-50/80', activeBorder: 'border-red-200', activeDot: 'bg-red-500' },
+      { key: 'floodAreas', label: 'Flood & Flash Flood', icon: <Droplets size={15} />, iconColor: 'text-blue-600', activeBg: 'bg-blue-50/80', activeBorder: 'border-blue-200', activeDot: 'bg-blue-500' },
+      { key: 'landslideAreas', label: 'Landslide Threats', icon: <Mountain size={15} />, iconColor: 'text-amber-600', activeBg: 'bg-amber-50/80', activeBorder: 'border-amber-200', activeDot: 'bg-amber-500' },
+      { key: 'fireZones', label: 'Forest Fire / Hotspots', icon: <Flame size={15} />, iconColor: 'text-orange-600', activeBg: 'bg-orange-50/80', activeBorder: 'border-orange-200', activeDot: 'bg-orange-500' },
+      { key: 'severeStorms', label: 'Severe Storm & Haze', icon: <CloudRain size={15} />, iconColor: 'text-indigo-600', activeBg: 'bg-indigo-50/80', activeBorder: 'border-indigo-200', activeDot: 'bg-indigo-500' },
+      { key: 'earthquakeDrought', label: 'Earthquake & Drought', icon: <CircleDot size={15} />, iconColor: 'text-rose-600', activeBg: 'bg-rose-50/80', activeBorder: 'border-rose-200', activeDot: 'bg-rose-500' },
     ],
   },
   {
-    title: 'Response Assets & Shelters',
+    title: 'Emergency Facilities & Shelters',
     items: [
-      { key: 'emergencyShelters', label: 'Evac Shelters', icon: <Home size={15} />, iconColor: 'text-emerald-600', activeBg: 'bg-emerald-50/80', activeBorder: 'border-emerald-200', activeDot: 'bg-emerald-500' },
-      { key: 'hospitals', label: 'Trauma Hospitals', icon: <Hospital size={15} />, iconColor: 'text-pink-600', activeBg: 'bg-pink-50/80', activeBorder: 'border-pink-200', activeDot: 'bg-pink-500' },
-      { key: 'evacuationSchools', label: 'Evac Schools', icon: <GraduationCap size={15} />, iconColor: 'text-purple-600', activeBg: 'bg-purple-50/80', activeBorder: 'border-purple-200', activeDot: 'bg-purple-500' },
-      { key: 'rescueTeamLocations', label: 'Rescue Squads', icon: <ShieldCheck size={15} />, iconColor: 'text-blue-700', activeBg: 'bg-blue-50/80', activeBorder: 'border-blue-200', activeDot: 'bg-blue-600' },
+      { key: 'emergencyShelters', label: 'Evac Shelters (PPS)', icon: <Home size={15} />, iconColor: 'text-emerald-600', activeBg: 'bg-emerald-50/80', activeBorder: 'border-emerald-200', activeDot: 'bg-emerald-500' },
+      { key: 'hospitals', label: 'Hospitals & Medical', icon: <Hospital size={15} />, iconColor: 'text-pink-600', activeBg: 'bg-pink-50/80', activeBorder: 'border-pink-200', activeDot: 'bg-pink-500' },
+      { key: 'clinics', label: 'Clinics & Dispensaries', icon: <Stethoscope size={15} />, iconColor: 'text-teal-600', activeBg: 'bg-teal-50/80', activeBorder: 'border-teal-200', activeDot: 'bg-teal-500' },
+      { key: 'fireStations', label: 'Fire Stations (Bomba)', icon: <Flame size={15} />, iconColor: 'text-red-500', activeBg: 'bg-red-50/80', activeBorder: 'border-red-200', activeDot: 'bg-red-500' },
+      { key: 'policeStations', label: 'Police Stations (PDRM)', icon: <Shield size={15} />, iconColor: 'text-sky-700', activeBg: 'bg-sky-50/80', activeBorder: 'border-sky-200', activeDot: 'bg-sky-600' },
+      { key: 'evacuationSchools', label: 'Schools & Halls', icon: <GraduationCap size={15} />, iconColor: 'text-purple-600', activeBg: 'bg-purple-50/80', activeBorder: 'border-purple-200', activeDot: 'bg-purple-500' },
+      { key: 'rescueTeamLocations', label: 'Rescue Squads & Hubs', icon: <ShieldCheck size={15} />, iconColor: 'text-blue-700', activeBg: 'bg-blue-50/80', activeBorder: 'border-blue-200', activeDot: 'bg-blue-600' },
     ],
   },
   {
-    title: 'Infrastructure & Utilities',
+    title: 'Critical Infrastructure & Utilities',
     items: [
       { key: 'utilityElectricity', label: 'Electricity Grid', icon: <Zap size={15} />, iconColor: 'text-amber-500', activeBg: 'bg-amber-50/80', activeBorder: 'border-amber-200', activeDot: 'bg-amber-400' },
       { key: 'utilityWater', label: 'Water Network', icon: <Droplets size={15} />, iconColor: 'text-cyan-600', activeBg: 'bg-cyan-50/80', activeBorder: 'border-cyan-200', activeDot: 'bg-cyan-500' },
-      { key: 'utilityTelecom', label: 'Telecom Grid', icon: <Wifi size={15} />, iconColor: 'text-violet-600', activeBg: 'bg-violet-50/80', activeBorder: 'border-violet-200', activeDot: 'bg-violet-500' },
-      { key: 'trafficConditions', label: 'Traffic Flow', icon: <Car size={15} />, iconColor: 'text-orange-600', activeBg: 'bg-orange-50/80', activeBorder: 'border-orange-200', activeDot: 'bg-orange-500' },
-      { key: 'roadAccessibility', label: 'Road Closures', icon: <RouteOff size={15} />, iconColor: 'text-slate-600', activeBg: 'bg-slate-100', activeBorder: 'border-slate-300', activeDot: 'bg-slate-600' },
+      { key: 'utilityTelecom', label: 'Telecom Towers', icon: <Wifi size={15} />, iconColor: 'text-violet-600', activeBg: 'bg-violet-50/80', activeBorder: 'border-violet-200', activeDot: 'bg-violet-500' },
+      { key: 'roadAccessibility', label: 'Road Closures / Access', icon: <RouteOff size={15} />, iconColor: 'text-slate-600', activeBg: 'bg-slate-100', activeBorder: 'border-slate-300', activeDot: 'bg-slate-600' },
     ],
   },
 ];
