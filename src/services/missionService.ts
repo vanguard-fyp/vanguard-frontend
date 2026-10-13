@@ -1,5 +1,44 @@
 import { apiClient } from './apiClient';
-import type { Mission, RescueTeam } from '../types';
+import type { Mission, Page, RescueTeam, SeverityLevel, SuggestedTeam } from '../types';
+
+export interface TeamSelection {
+  team_id: string;
+  personnel: number;
+  source: 'ai' | 'officer';
+}
+
+export interface MissionDispatchRequest {
+  title: string;
+  incident_id: string;
+  priority: SeverityLevel;
+  objective: string;
+  duration_hours: number;
+  teams: TeamSelection[];
+  approval: { confirmed: boolean; note?: string };
+  idempotency_key?: string;
+  source_assessment_id?: string | null;
+  recommended_personnel?: number | null;
+}
+
+export interface RescueRecommendation {
+  incident_id: string;
+  status: string;
+  analysis_status?: string;
+  assessment_id?: string;
+  assessment_version?: number;
+  generated_at?: string | null;
+  is_stale?: boolean;
+  required_personnel?: number | null;
+  required_personnel_basis?: string | null;
+  covered_personnel?: number;
+  shortfall_personnel?: number;
+  mission_title?: string | null;
+  mission_objective?: string | null;
+  suggested_teams: SuggestedTeam[];
+  excluded?: { team_id: string; reason: string }[];
+  advisory_only?: boolean;
+  message?: string | null;
+}
 
 export const missionService = {
   /**
@@ -9,11 +48,26 @@ export const missionService = {
     return apiClient.get<Mission[]>('/missions');
   },
 
+  getMissionsPage: async (params: { limit: number; offset: number; status?: string }): Promise<Page<Mission>> => {
+    return apiClient.get<Page<Mission>>('/missions', { ...params, paginated: true });
+  },
+
   /**
-   * Create / dispatch a new rescue mission
+   * Approve and dispatch a mission (authenticated officer = approver; each team
+   * carries its own personnel count and selection source).
    */
-  createMission: async (mission: Partial<Mission>): Promise<Mission> => {
-    return apiClient.post<Mission>('/missions', mission);
+  dispatchMission: async (req: MissionDispatchRequest): Promise<Mission> => {
+    return apiClient.post<Mission>('/missions', req);
+  },
+
+  /** Approve deployment of additional teams to an existing mission. */
+  addTeams: async (missionId: string, teams: TeamSelection[], approval: { confirmed: boolean; note?: string }): Promise<Mission> => {
+    return apiClient.post<Mission>(`/missions/${missionId}/teams`, { teams, approval });
+  },
+
+  /** AI-suggested teams from the latest persisted assessment, re-checked against live capacity. */
+  getRescueRecommendation: async (incidentId: string): Promise<RescueRecommendation> => {
+    return apiClient.get<RescueRecommendation>('/missions/recommendations', { incident_id: incidentId });
   },
 
   /**
@@ -63,19 +117,5 @@ export const missionService = {
    */
   deleteRescueTeam: async (id: string): Promise<void> => {
     return apiClient.delete<void>(`/missions/teams/${id}`);
-  },
-
-  /**
-   * Get AI Recommendation for a rescue team
-   */
-  getTeamRecommendation: async (teamId: string): Promise<any> => {
-    return apiClient.get<any>(`/missions/team/${teamId}/recommendation`);
-  },
-
-  /**
-   * Force generate/regenerate AI Recommendation for a rescue team
-   */
-  generateTeamRecommendation: async (teamId: string): Promise<any> => {
-    return apiClient.post<any>(`/missions/team/${teamId}/recommendation/generate`, {});
   },
 };

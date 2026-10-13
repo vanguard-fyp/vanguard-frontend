@@ -26,10 +26,9 @@ export interface AdminTab {
 }
 
 export interface UserManagementTableProps {
-  users: UserAccount[];
   onEditUser: (user: UserAccount) => void;
   onDeleteUser: (id: string) => void;
-  onToggleUserStatus: (id: string) => void;
+  onToggleUserStatus: (user: UserAccount) => void;
 }
 
 export interface UserEditModalProps {

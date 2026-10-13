@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { missionService } from '../services/missionService';
-import type { Mission, RescueTeam } from '../types';
+import type { MissionDispatchRequest, TeamSelection } from '../services/missionService';
+import type { RescueTeam } from '../types';
 
 export const MISSION_KEYS = {
   missions: ['missions'] as const,
@@ -15,14 +16,41 @@ export function useMissions() {
   });
 }
 
-export function useCreateMission() {
+/** Approved dispatch (server re-validates capacity atomically). */
+export function useDispatchMission() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<Mission>) => missionService.createMission(data),
-    onSuccess: () => {
+    mutationFn: (data: MissionDispatchRequest) => missionService.dispatchMission(data),
+    onSettled: () => {
+      // Refresh on success AND failure: a capacity conflict means our view is stale.
       qc.invalidateQueries({ queryKey: MISSION_KEYS.missions });
       qc.invalidateQueries({ queryKey: MISSION_KEYS.teams });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
+      qc.invalidateQueries({ queryKey: ['intelligence'] });
     },
+  });
+}
+
+export function useAddTeamsToMission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ missionId, teams, note }: { missionId: string; teams: TeamSelection[]; note?: string }) =>
+      missionService.addTeams(missionId, teams, { confirmed: true, note }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.missions });
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.teams });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
+    },
+  });
+}
+
+export function useRescueRecommendation(incidentId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['missions', 'recommendation', incidentId],
+    queryFn: () => missionService.getRescueRecommendation(incidentId as string),
+    enabled: !!incidentId,
+    staleTime: 15_000,
+    retry: 1,
   });
 }
 
@@ -86,25 +114,6 @@ export function useDeleteRescueTeam() {
     mutationFn: (id: string) => missionService.deleteRescueTeam(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: MISSION_KEYS.teams });
-    },
-  });
-}
-
-export function useTeamRecommendation(teamId: string | null | undefined) {
-  return useQuery({
-    queryKey: ['missions', 'team', teamId, 'recommendation'],
-    queryFn: () => missionService.getTeamRecommendation(teamId!),
-    enabled: !!teamId,
-    staleTime: 60_000,
-  });
-}
-
-export function useGenerateTeamRecommendation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (teamId: string) => missionService.generateTeamRecommendation(teamId),
-    onSuccess: (_, teamId) => {
-      qc.invalidateQueries({ queryKey: ['missions', 'team', teamId, 'recommendation'] });
     },
   });
 }

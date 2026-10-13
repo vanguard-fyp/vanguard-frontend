@@ -30,14 +30,22 @@ import {
   Thermometer,
   Droplets,
   Edit3,
+  BrainCircuit,
+  Image as ImageIcon,
+  Maximize2,
+  Video,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
-import { useIncidentLogs, useUpdateIncident, useResolveIncident } from '../../../hooks';
+import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useToast } from '../../../context/ToastContext';
-import type { CommandTabType, IncidentDetailViewProps } from '../../../types';
+import { formatFullLocation } from '../../../utils/locationFormatter';
+import { FACT_STATE_LABEL, editedFieldVerification, factState } from '../../../utils/facts';
+import { fmtText, isNum } from '../../../utils/display';
+import type { CommandTabType, FactField, FactState, Incident, IncidentDetailViewProps } from '../../../types';
 import { useAuth } from '../../../context/AuthContext';
 import { statusIcons } from '../../../constants/situational';
 
@@ -61,6 +69,32 @@ function getWeatherDescription(code: number): string {
   if (code >= 80 && code <= 82) return 'Heavy monsoon rain showers';
   if (code >= 95 && code <= 99) return 'Thunderstorm & Lightning';
   return 'Overcast / Monsoon Conditions';
+}
+
+const FACT_BADGE_CLASS: Record<FactState, string> = {
+  verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  reported: 'bg-slate-50 text-slate-600 border-slate-200',
+  disputed: 'bg-amber-50 text-amber-700 border-amber-200',
+  unknown: 'bg-slate-100 text-slate-500 border-slate-200',
+};
+
+/** Provenance chip shown next to each officer-entered fact. */
+const FactBadge: React.FC<{ incident: Incident; field: FactField }> = ({ incident, field }) => {
+  const state = factState(incident, field);
+  return (
+    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${FACT_BADGE_CLASS[state]}`}>
+      {FACT_STATE_LABEL[state]}
+    </span>
+  );
+};
+
+/** A fact's display value, or "Not reported" when its provenance is unknown. */
+function factValue(incident: Incident, field: FactField, render: (v: NonNullable<Incident[FactField]>) => React.ReactNode) {
+  const v = incident[field];
+  if (factState(incident, field) === 'unknown' || v === null || v === undefined) {
+    return <span className="text-slate-400 italic font-semibold text-base">Not reported</span>;
+  }
+  return render(v);
 }
 
 export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
@@ -101,48 +135,57 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [assessmentInfra, setAssessmentInfra] = useState(incident.infrastructure_damage || 'None');
   const [assessmentAccess, setAssessmentAccess] = useState(incident.accessibility_score ?? 50);
 
-  // Dynamic Live Weather Forecast state
+  // Lightbox (signed URL of the enlarged item)
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const hasMedia = (incident.media_urls?.length ?? 0) > 0;
+  const { data: media = [], isLoading: isLoadingMedia, isError: isMediaError } = useIncidentMedia(incident.id, hasMedia);
+
+  // Live conditions at the incident pin (Open-Meteo). Missing values stay null — never a default.
   const [liveWeather, setLiveWeather] = useState<{
-    temp: number;
-    weatherDesc: string;
-    windSpeed: number;
-    humidity: number;
-    rainProb: number;
+    temp: number | null;
+    weatherDesc: string | null;
+    windSpeed: number | null;
+    humidity: number | null;
+    rainProb: number | null;
   } | null>(null);
-  const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  const [weatherStatus, setWeatherStatus] = useState<'idle' | 'loading' | 'ok' | 'unavailable' | 'no_location'>('idle');
+  const [lat, lng] = incident.coordinates ?? [];
+  const hasPin = isNum(lat) && isNum(lng) && !(lat === 0 && lng === 0);
 
   useEffect(() => {
-    const fetchLiveForecast = async () => {
-      const lat = incident.coordinates?.[0] || 4.2105;
-      const lng = incident.coordinates?.[1] || 101.9758;
-      setIsLoadingWeather(true);
-      try {
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=relative_humidity_2m,precipitation_probability&timezone=Asia%2FKuala_Lumpur`
-        );
-        const data = await res.json();
-        if (data?.current_weather) {
-          const code = data.current_weather.weathercode;
-          const desc = getWeatherDescription(code);
-          const hourly = data.hourly || {};
-          const humidity = hourly.relative_humidity_2m?.[0] ?? 78;
-          const rainProb = hourly.precipitation_probability?.[0] ?? 60;
-          setLiveWeather({
-            temp: data.current_weather.temperature,
-            weatherDesc: desc,
-            windSpeed: data.current_weather.windspeed,
-            humidity,
-            rainProb,
-          });
-        }
-      } catch {
-        // Fallback
-      } finally {
-        setIsLoadingWeather(false);
-      }
-    };
-    fetchLiveForecast();
-  }, [incident.coordinates]);
+    if (!hasPin) {
+      setLiveWeather(null);
+      setWeatherStatus('no_location');
+      return;
+    }
+    const ctrl = new AbortController();
+    setWeatherStatus('loading');
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=relative_humidity_2m,precipitation_probability&timezone=Asia%2FKuala_Lumpur`,
+      { signal: ctrl.signal }
+    )
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((data) => {
+        const cw = data?.current_weather;
+        if (!cw) throw new Error('No current weather');
+        const hourly = data.hourly ?? {};
+        setLiveWeather({
+          temp: isNum(cw.temperature) ? cw.temperature : null,
+          weatherDesc: isNum(cw.weathercode) ? getWeatherDescription(cw.weathercode) : null,
+          windSpeed: isNum(cw.windspeed) ? cw.windspeed : null,
+          humidity: isNum(hourly.relative_humidity_2m?.[0]) ? hourly.relative_humidity_2m[0] : null,
+          rainProb: isNum(hourly.precipitation_probability?.[0]) ? hourly.precipitation_probability[0] : null,
+        });
+        setWeatherStatus('ok');
+      })
+      .catch(() => {
+        if (ctrl.signal.aborted) return;
+        setLiveWeather(null);
+        setWeatherStatus('unavailable');
+      });
+    return () => ctrl.abort();
+  }, [hasPin, lat, lng]);
 
   // Sync assessment states when incident changes
   useEffect(() => {
@@ -165,15 +208,16 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         incident.source.toLowerCase().includes('telemetry')));
 
   const handleSaveAssessment = () => {
+    const facts = {
+      affected_population: Number(assessmentPop) || 0,
+      casualties_count: Number(assessmentCas) || 0,
+      infrastructure_damage: assessmentInfra as Incident['infrastructure_damage'],
+      accessibility_score: Math.min(100, Math.max(0, Number(assessmentAccess) || 0)),
+    };
     updateIncident.mutate(
       {
         id: incident.id,
-        updates: {
-          affected_population: Number(assessmentPop) || 0,
-          casualties_count: Number(assessmentCas) || 0,
-          infrastructure_damage: assessmentInfra as any,
-          accessibility_score: Number(assessmentAccess) || 50,
-        },
+        updates: { ...facts, field_verification: editedFieldVerification(incident, facts) },
       },
       {
         onSuccess: () => {
@@ -280,8 +324,16 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono font-medium text-slate-500">
-            LAST SYNC: {formatDateTime(incident.occurred_at)}
+            OCCURRED: {formatDateTime(incident.occurred_at)}
           </span>
+          <button
+            type="button"
+            onClick={() => navigate(`/situational/intelligence?incidentId=${incident.id}`)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
+          >
+            <BrainCircuit size={14} />
+            View intelligence assessment
+          </button>
         </div>
       </div>
 
@@ -314,7 +366,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
             <p className="text-xs sm:text-sm text-slate-300 flex items-center gap-1.5 font-medium">
               <MapPin size={14} className="text-blue-300 shrink-0" />
-              {incident.location}, {incident.district}, {incident.state}
+              {formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district)}
             </p>
           </div>
 
@@ -365,29 +417,44 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Impacted Population</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">Reported Affected</span>
               <Users size={16} className="text-slate-600" />
             </div>
-            <p className="text-2xl font-black text-slate-900">{(incident.affected_population ?? 0).toLocaleString()}</p>
-            <span className="text-[10px] text-slate-500 font-medium">Est. residents in zone</span>
+            <p className="text-2xl font-black text-slate-900">
+              {factValue(incident, 'affected_population', (v) => Number(v).toLocaleString())}
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-500 font-medium">Field report, not a model estimate</span>
+              <FactBadge incident={incident} field="affected_population" />
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Confirmed Casualties</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">Reported Casualties</span>
               <AlertTriangle size={16} className="text-red-600" />
             </div>
-            <p className="text-2xl font-black text-slate-900">{incident.casualties_count ?? 0}</p>
-            <span className="text-[10px] text-slate-500 font-medium">Requiring immediate aid</span>
+            <p className="text-2xl font-black text-slate-900">
+              {factValue(incident, 'casualties_count', (v) => Number(v).toLocaleString())}
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-500 font-medium">Requiring immediate aid</span>
+              <FactBadge incident={incident} field="casualties_count" />
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Infrastructural Risk</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider">Infrastructure Damage</span>
               <Building2 size={16} className="text-slate-600" />
             </div>
-            <p className="text-lg font-black text-slate-900 truncate">{incident.infrastructure_damage}</p>
-            <span className="text-[10px] text-slate-500 font-medium">Primary impact area</span>
+            <p className="text-lg font-black text-slate-900 truncate">
+              {factValue(incident, 'infrastructure_damage', (v) => String(v))}
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-500 font-medium">Primary impact area</span>
+              <FactBadge incident={incident} field="infrastructure_damage" />
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
@@ -395,8 +462,15 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <span className="text-[10px] font-extrabold uppercase tracking-wider">Access Score</span>
               <Zap size={16} className="text-slate-600" />
             </div>
-            <p className="text-2xl font-black text-slate-900">{incident.accessibility_score ?? 0}<span className="text-xs text-slate-400 font-normal">/100</span></p>
-            <span className="text-[10px] text-slate-500 font-medium">Ground transit viability</span>
+            <p className="text-2xl font-black text-slate-900">
+              {factValue(incident, 'accessibility_score', (v) => (
+                <>{String(v)}<span className="text-xs text-slate-400 font-normal">/100</span></>
+              ))}
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-500 font-medium">Ground transit viability</span>
+              <FactBadge incident={incident} field="accessibility_score" />
+            </div>
           </div>
         </div>
       </div>
@@ -437,15 +511,23 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Reported Weather</span>
-                  <p className="text-xs font-bold text-slate-800 mt-0.5">{incident.weather_condition}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    Reported Weather <FactBadge incident={incident} field="weather_condition" />
+                  </span>
+                  <p className="text-xs font-bold text-slate-800 mt-0.5">{fmtText(incident.weather_condition, 'Not reported')}</p>
                 </div>
 
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Live Conditions</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Live Conditions (Open-Meteo)</span>
                   <p className="text-xs font-bold text-blue-700 mt-0.5 flex items-center gap-1">
                     <Thermometer size={12} />
-                    {liveWeather ? `${liveWeather.temp}°C · ${liveWeather.weatherDesc}` : (isLoadingWeather ? 'Syncing...' : '29°C · Overcast')}
+                    {weatherStatus === 'loading'
+                      ? 'Syncing…'
+                      : weatherStatus === 'no_location'
+                        ? 'No incident pin'
+                        : liveWeather
+                          ? `${isNum(liveWeather.temp) ? `${liveWeather.temp}°C` : 'Temp unavailable'} · ${fmtText(liveWeather.weatherDesc)}`
+                          : 'Unavailable'}
                   </p>
                 </div>
 
@@ -453,7 +535,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Rain / Humidity</span>
                   <p className="text-xs font-bold text-slate-800 mt-0.5 flex items-center gap-1">
                     <Droplets size={12} className="text-blue-500" />
-                    {liveWeather ? `Rain: ${liveWeather.rainProb}% · Hum: ${liveWeather.humidity}%` : 'Rain: 65% · Hum: 80%'}
+                    {liveWeather
+                      ? `Rain: ${isNum(liveWeather.rainProb) ? `${liveWeather.rainProb}%` : 'n/a'} · Hum: ${isNum(liveWeather.humidity) ? `${liveWeather.humidity}%` : 'n/a'}`
+                      : weatherStatus === 'loading' ? 'Syncing…' : 'Unavailable'}
                   </p>
                 </div>
               </div>
@@ -461,15 +545,74 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 font-medium">
                 <span className="flex items-center gap-1">
                   <Navigation size={12} className="text-slate-400" />
-                  Target Zone: <strong className="text-slate-700">{incident.district}, {incident.state} {incident.postcode ? `(${incident.postcode})` : ''}</strong>
+                  Target Zone: <strong className="text-slate-700">{formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district)} {incident.postcode ? `(${incident.postcode})` : ''}</strong>
                 </span>
-                {liveWeather && (
+                {liveWeather && isNum(liveWeather.windSpeed) && (
                   <span className="flex items-center gap-1 font-mono text-[10px]">
                     <Wind size={11} className="text-slate-400" /> Wind: {liveWeather.windSpeed} km/h
                   </span>
                 )}
               </div>
             </div>
+
+            {/* Field evidence — private bucket, served as short-lived signed URLs */}
+            {hasMedia && (
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <ImageIcon size={14} className="text-blue-600" />
+                    Field Evidence &amp; Attached Media ({incident.media_urls!.length})
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">Authenticity not machine-verified · click to enlarge</span>
+                </div>
+                {isLoadingMedia ? (
+                  <p className="text-xs text-slate-400 italic">Loading media…</p>
+                ) : isMediaError ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                    Media could not be loaded. The attachments are still recorded on the incident.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {media.map((m) =>
+                      m.status === 'available' && m.url ? (
+                        <div
+                          key={m.ref}
+                          onClick={() => m.kind === 'image' && setSelectedMediaUrl(m.url)}
+                          className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-video cursor-pointer hover:border-blue-500 hover:shadow-md transition-all"
+                        >
+                          {m.kind === 'video' ? (
+                            <video src={m.url} controls preload="metadata" className="w-full h-full object-cover" />
+                          ) : (
+                            <>
+                              <img
+                                src={m.url}
+                                alt="Field evidence"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                <span className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-slate-900 shadow-sm transition-opacity">
+                                  <Maximize2 size={14} />
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div
+                          key={m.ref}
+                          className="rounded-xl border border-dashed border-slate-300 bg-slate-50 aspect-video flex flex-col items-center justify-center gap-1 text-slate-400"
+                        >
+                          {m.kind === 'video' ? <Video size={16} /> : <ImageIcon size={16} />}
+                          <span className="text-[10px] font-semibold">
+                            {m.status === 'unsupported' ? 'Unsupported format' : 'Unavailable'}
+                          </span>
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
         </div>
@@ -987,8 +1130,12 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   <span className="font-bold text-red-600">{incident.severity} · {incident.disaster_level}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="font-semibold text-slate-500">Est. Population:</span>
-                  <span className="font-mono font-bold text-slate-900">{(incident.affected_population ?? 0).toLocaleString()} people</span>
+                  <span className="font-semibold text-slate-500">Reported Affected:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {factState(incident, 'affected_population') === 'unknown'
+                      ? 'Not reported'
+                      : `${incident.affected_population.toLocaleString()} people`}
+                  </span>
                 </div>
               </div>
 
@@ -1197,6 +1344,51 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     Save Assessment Metrics
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Citizen Media Lightbox Modal ── */}
+      <AnimatePresence>
+        {selectedMediaUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+            onClick={() => setSelectedMediaUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-4xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700"
+            >
+              <button
+                type="button"
+                onClick={() => setSelectedMediaUrl(null)}
+                className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full transition-colors z-10 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+              <img
+                src={selectedMediaUrl}
+                alt="Enlarged Citizen Evidence"
+                className="w-full max-h-[80vh] object-contain"
+              />
+              <div className="p-3 bg-slate-900/90 border-t border-slate-800 text-xs text-slate-300 flex items-center justify-between">
+                <span>Field Evidence · {incident.title}</span>
+                <a
+                  href={selectedMediaUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-400 hover:text-blue-300 font-bold"
+                >
+                  Open in New Tab →
+                </a>
               </div>
             </motion.div>
           </motion.div>

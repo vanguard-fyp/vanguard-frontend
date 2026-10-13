@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -13,16 +14,18 @@ import {
   XCircle,
   Eye,
   EyeOff,
+  Camera,
+  Play,
+  X,
 } from 'lucide-react';
 import { TeamCard } from '../../../components/ui/coordination/rescue/TeamCard';
 import { TeamDetailSlideOver } from '../../../components/ui/coordination/rescue/TeamDetailSlideOver';
 import { RegisterTeamSlideOver } from '../../../components/ui/coordination/rescue/RegisterTeamSlideOver';
-import { MissionProgressPipeline } from '../../../components/ui/coordination/rescue/MissionProgressPipeline';
 import {
   useRescueTeams,
   useMissions,
   useIncidents,
-  useCreateMission,
+  useDispatchMission,
   useDeleteRescueTeam,
   useAssistanceRequests,
   useUpdateAssistanceStatus,
@@ -30,7 +33,8 @@ import {
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
 import { useToast } from '../../../context/ToastContext';
 
-import type { AgencyFilter, SeverityLevel, StatusFilter, TeamSortBy, RescueTeam } from '../../../types';
+import type { AgencyFilter, StatusFilter, TeamSortBy, RescueTeam } from '../../../types';
+import type { MissionDispatchRequest } from '../../../services/missionService';
 import { MissionWizard } from './MissionWizard';
 import { TeamListFilters } from '../../../components/ui/coordination/rescue/TeamListFilters';
 import { containerAnim, itemAnim } from '../../../constants';
@@ -41,7 +45,7 @@ const RescueOperations: React.FC = () => {
   const { data: missions = [] } = useMissions();
   const { data: incidents = [] } = useIncidents();
   const { data: assistanceRequests = [], isLoading: isAssistanceLoading } = useAssistanceRequests();
-  const createMissionMutation = useCreateMission();
+  const dispatchMutation = useDispatchMission();
   const deleteTeamMutation = useDeleteRescueTeam();
   const updateAssistanceMutation = useUpdateAssistanceStatus();
   const { success: toastSuccess, error: toastError } = useToast();
@@ -56,6 +60,19 @@ const RescueOperations: React.FC = () => {
   const [showClosedSos, setShowClosedSos] = useState(false);
   const [sosToCancelId, setSosToCancelId] = useState<any | null>(null);
   const [editingTeam, setEditingTeam] = useState<RescueTeam | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep link from Disaster Intelligence: /response/rescue?incidentId=… opens the wizard preselected.
+  useEffect(() => {
+    const linked = searchParams.get('incidentId');
+    if (!linked) return;
+    setWizardIncidentId(linked);
+    setShowWizard(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('incidentId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+  const [selectedMediaModal, setSelectedMediaModal] = useState<{ url: string; type: 'image' | 'video'; title: string } | null>(null);
 
   const handleOpenRegister = () => {
     setEditingTeam(null);
@@ -73,8 +90,9 @@ const RescueOperations: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('All');
   const [sortBy, setSortBy] = useState<TeamSortBy>('default');
 
-  const availableCount = teams.filter((t) => t.status === 'Available').length;
-  const deployedCount = teams.filter((t) => t.status === 'Deployed').length;
+  // Same capacity rule as the dashboard (backend capacity_service).
+  const availableCount = teams.filter((t) => t.eligible !== false && (t.available_personnel ?? (t.status === 'Available' ? 1 : 0)) > 0).length;
+  const deployedCount = teams.filter((t) => (t.active_assignment_count ?? 0) > 0 || t.status === 'Deployed').length;
   const pendingSosCount = assistanceRequests.filter((a: any) => a.status === 'Pending' || a.status === 'Acknowledged').length;
 
   const filteredTeams = useMemo(() => {
@@ -108,53 +126,21 @@ const RescueOperations: React.FC = () => {
     return result;
   }, [teams, searchQuery, filterAgency, filterStatus, sortBy]);
 
-  const handleDispatch = (data: {
-    incidentId: string;
-    teamId?: string;
-    teamIds?: string[];
-    objective: string;
-    priority: SeverityLevel;
-    durationHrs: number;
-    notes?: string;
-  }) => {
-    const matchedIncident = incidents.find((i) => i.id === data.incidentId);
-    const assignedIds = data.teamIds || (data.teamId ? [data.teamId] : []);
-    const assignedSquads = teams.filter((t) => assignedIds.includes(t.id));
-    const primarySquad = assignedSquads[0];
-
-    createMissionMutation.mutate(
-      {
-        title: `Tactical SAR Operation - ${matchedIncident?.title || 'Emergency Sector'}`,
-        incident_id: data.incidentId,
-        assigned_team_id: primarySquad?.id,
-        team_ids: assignedIds,
-        priority: data.priority,
-        status: 'In Progress',
-        objective: data.notes?.trim()
-          ? `${data.objective}\n\nCoordinator notes: ${data.notes.trim()}`
-          : data.objective,
-        estimated_completion: new Date(Date.now() + (data.durationHrs || 6) * 3600000).toISOString(),
-      },
-      {
-        onSuccess: () => {
-          toastSuccess(
-            'Mission Dispatched',
-            `Tactical mission assigned to ${assignedSquads.length} response squad(s).`
-          );
-          // If this mission was dispatched from an SOS request, mark it as Dispatched
-          if (wizardSourceSos) {
-            updateAssistanceMutation.mutate(
-              { requestId: wizardSourceSos.id, status: 'Dispatched' },
-              { onError: () => {} } // silent — mission creation already succeeded
-            );
-          }
-          setShowWizard(false);
-          setWizardIncidentId(null);
-          setWizardSourceSos(null);
-        },
-        onError: () => toastError('Dispatch Failed', 'Could not create mission. Please retry.'),
-      }
+  /** Approved dispatch. Throws on failure so the wizard stays open and shows the reason. */
+  const handleDispatch = async (req: MissionDispatchRequest): Promise<void> => {
+    const mission = await dispatchMutation.mutateAsync(req);
+    toastSuccess(
+      'Mission dispatched',
+      `${mission.display_id ?? 'Mission'} approved with ${req.teams.length} team(s), ${req.teams.reduce((a, t) => a + t.personnel, 0)} personnel.`
     );
+    if (wizardSourceSos) {
+      updateAssistanceMutation.mutate(
+        { requestId: wizardSourceSos.id, status: 'Dispatched' },
+        { onError: () => toastError('SOS status not updated', 'The mission was dispatched, but the SOS request status could not be updated.') }
+      );
+    }
+    setWizardIncidentId(null);
+    setWizardSourceSos(null);
   };
 
   const [teamToDelete, setTeamToDelete] = useState<RescueTeam | null>(null);
@@ -451,6 +437,52 @@ const RescueOperations: React.FC = () => {
                       {sos.description}
                     </p>
 
+                    {/* Citizen Submitted Photos / Videos Gallery */}
+                    {(() => {
+                      const mediaList: string[] = sos.media_urls || sos.mediaUrls || [];
+                      if (mediaList.length === 0) return null;
+
+                      return (
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            <Camera size={12} className="text-blue-600" />
+                            Citizen Attached Ground Evidence ({mediaList.length})
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {mediaList.map((url: string, idx: number) => {
+                              const isVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.includes('video');
+                              return (
+                                <div
+                                  key={idx}
+                                  onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title: `Citizen SOS Attachment #${idx + 1}` })}
+                                  className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 w-20 h-16 cursor-pointer hover:border-blue-500 shadow-2xs transition-all"
+                                >
+                                  {isVideo ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white">
+                                      <Play size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
+                                      <span className="text-[9px] font-mono mt-0.5">Video</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={url}
+                                      alt={`Citizen attachment ${idx + 1}`}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                      onError={(e) => {
+                                        (e.target as HTMLElement).style.display = 'none';
+                                      }}
+                                    />
+                                  )}
+                                  <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center">
+                                    <Eye size={12} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
                       <div className="flex items-center gap-3 text-slate-500 text-[11px]">
                         <span>Reporter: <strong className="text-slate-700">{sos.reporter_name || sos.reporterName || 'Citizen'}</strong></span>
@@ -650,6 +682,54 @@ const RescueOperations: React.FC = () => {
                     {updateAssistanceMutation.isPending ? 'Cancelling...' : 'Confirm Cancel'}
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Citizen Attachment Lightbox Modal */}
+      <AnimatePresence>
+        {selectedMediaModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setSelectedMediaModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-w-2xl w-full"
+            >
+              <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Camera size={16} className="text-blue-400" />
+                  <span className="text-xs font-bold text-white">{selectedMediaModal.title}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMediaModal(null)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[300px]">
+                {selectedMediaModal.type === 'video' ? (
+                  <video
+                    src={selectedMediaModal.url}
+                    controls
+                    autoPlay
+                    className="max-h-[60vh] max-w-full rounded-lg"
+                  />
+                ) : (
+                  <img
+                    src={selectedMediaModal.url}
+                    alt={selectedMediaModal.title}
+                    className="max-h-[60vh] max-w-full object-contain rounded-lg shadow-lg"
+                  />
+                )}
               </div>
             </motion.div>
           </div>

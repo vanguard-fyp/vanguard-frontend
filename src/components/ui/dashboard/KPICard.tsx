@@ -1,6 +1,6 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, Tooltip } from 'recharts';
 import { KPI_ACCENT_MAP } from '../../../constants';
 
 interface KPICardProps {
@@ -11,10 +11,17 @@ interface KPICardProps {
   trend?: { direction: 'up' | 'down' | 'stable'; label: string };
   /** Raw number array for sparkline / bar chart */
   sparkData?: number[];
+  /** What the sparkline shows and over which window, e.g. "New per day · 7 days to 1 Aug" */
+  sparkCaption?: string;
   /** 0–100 for donut chart */
   donutValue?: number;
+  /** progress bar: filled share 0–100 and the caption under it */
+  progressValue?: number;
+  progressCaption?: string;
   /** Which micro-viz to render in the card */
-  chartType?: 'area' | 'bar' | 'donut' | 'none';
+  chartType?: 'area' | 'bar' | 'donut' | 'progress' | 'none';
+  /** bucket labels for the sparkline tooltip (same length as sparkData) */
+  sparkLabels?: string[];
   accentColor?: 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
   onClick?: () => void;
 }
@@ -51,15 +58,21 @@ const DonutRing: React.FC<{ value: number; color: string; trackColor: string }> 
 
 const KPICard: React.FC<KPICardProps> = ({
   title, value, subtitle, icon, trend,
-  sparkData, donutValue, chartType = 'area',
+  sparkData, sparkCaption, sparkLabels, donutValue, progressValue, progressCaption, chartType = 'area',
   accentColor = 'blue', onClick,
 }) => {
   const a = KPI_ACCENT_MAP[accentColor] || KPI_ACCENT_MAP.blue;
   const sparkColors = SPARK_COLORS[accentColor] || SPARK_COLORS.blue;
-  const chartData = sparkData?.map((val, idx) => ({ i: idx, val })) || [];
-  const showArea = chartType === 'area' && chartData.length > 0;
-  const showBar = chartType === 'bar' && chartData.length > 0;
-  const showDonut = chartType === 'donut' && donutValue !== undefined;
+  const chartData = sparkData?.map((val, idx) => ({ i: idx, val, label: sparkLabels?.[idx] ?? '' })) || [];
+  const showProgress = chartType === 'progress' && progressValue !== undefined;
+  // An all-zero series is stated in words rather than drawn as a flat line.
+  const hasActivity = chartData.some((d) => d.val > 0);
+  const showArea = chartType === 'area' && hasActivity;
+  const showBar = chartType === 'bar' && hasActivity;
+  const showNoActivity = (chartType === 'area' || chartType === 'bar') && sparkData !== undefined && !hasActivity;
+  // The progress card shows the same share as a ring (top-right) and a bar.
+  const ringValue = chartType === 'progress' ? progressValue : donutValue;
+  const showDonut = (chartType === 'donut' || chartType === 'progress') && ringValue !== undefined;
 
   return (
     <div
@@ -77,7 +90,7 @@ const KPICard: React.FC<KPICardProps> = ({
 
         {/* Right side: icon or donut */}
         {showDonut ? (
-          <DonutRing value={donutValue!} color={sparkColors.stroke} trackColor={`${sparkColors.stroke}22`} />
+          <DonutRing value={Math.round(Math.min(100, Math.max(0, ringValue!)))} color={sparkColors.stroke} trackColor={`${sparkColors.stroke}22`} />
         ) : (
           <div className="p-2.5 rounded-lg shrink-0 border shadow-xs"
             style={{ background: a.iconBg, borderColor: a.iconBorder }}
@@ -89,7 +102,7 @@ const KPICard: React.FC<KPICardProps> = ({
 
       {/* Micro chart */}
       {showArea && (
-        <div className="h-10 -mx-4 -mb-1 mt-2 pointer-events-none opacity-90">
+        <div className="h-10 -mx-4 -mb-1 mt-2 opacity-90">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
               <defs>
@@ -98,6 +111,14 @@ const KPICard: React.FC<KPICardProps> = ({
                   <stop offset="100%" stopColor={sparkColors.stroke} stopOpacity={0} />
                 </linearGradient>
               </defs>
+              <Tooltip
+                cursor={false}
+                wrapperStyle={{ pointerEvents: 'none' }}
+                contentStyle={{ fontSize: 10, borderRadius: 6, padding: '2px 6px' }}
+                labelFormatter={(_, p) => (p?.[0]?.payload?.label as string) ?? ''}
+                formatter={(v) => [Number(v).toLocaleString(), '']}
+                separator=""
+              />
               <Area type="monotone" dataKey="val" stroke={sparkColors.stroke} strokeWidth={2}
                 fill={`url(#ag-${accentColor})`} isAnimationActive />
             </AreaChart>
@@ -106,13 +127,37 @@ const KPICard: React.FC<KPICardProps> = ({
       )}
 
       {showBar && (
-        <div className="h-10 -mx-4 -mb-1 mt-2 pointer-events-none opacity-90">
+        <div className="h-10 -mx-4 -mb-1 mt-2 opacity-90">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barSize={6}>
+              <Tooltip
+                cursor={false}
+                wrapperStyle={{ pointerEvents: 'none' }}
+                contentStyle={{ fontSize: 10, borderRadius: 6, padding: '2px 6px' }}
+                labelFormatter={(_, p) => (p?.[0]?.payload?.label as string) ?? ''}
+                formatter={(v) => [Number(v).toLocaleString(), '']}
+                separator=""
+              />
               <Bar dataKey="val" fill={sparkColors.stroke} radius={[2, 2, 0, 0]} isAnimationActive />
             </BarChart>
           </ResponsiveContainer>
         </div>
+      )}
+
+      {showProgress && (
+        <div className="h-8 mt-2 flex flex-col justify-center gap-1.5">
+          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, Math.max(0, progressValue!))}%`, background: sparkColors.stroke }}
+            />
+          </div>
+          {progressCaption && <p className="text-[10px] text-slate-500 font-medium">{progressCaption}</p>}
+        </div>
+      )}
+
+      {showNoActivity && (
+        <p className="h-10 mt-2 flex items-center text-[10px] text-slate-400 italic">No new records in this window</p>
       )}
 
       {/* Trend footer */}
@@ -126,7 +171,9 @@ const KPICard: React.FC<KPICardProps> = ({
                 trend.direction === 'down' ? 'text-emerald-700' : 'text-slate-500'
               }`}>{trend.label}</span>
           </div>
-          <span className="text-[10px] text-slate-400 font-mono">7h trend</span>
+          {sparkCaption && (chartType === 'area' || chartType === 'bar') && (
+            <span className="text-[10px] text-slate-400 text-right leading-tight">{sparkCaption}</span>
+          )}
         </div>
       )}
     </div>

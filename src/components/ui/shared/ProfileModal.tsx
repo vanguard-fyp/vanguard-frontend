@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Check, Camera, Building2, Trash2, Loader2 } from 'lucide-react';
+import { X, User, Check, Camera, Loader2 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { useUpdateUser } from '../../../hooks';

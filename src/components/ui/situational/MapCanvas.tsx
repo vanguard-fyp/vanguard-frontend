@@ -25,9 +25,11 @@ import {
 } from 'lucide-react';
 
 import { DisasterBadge } from '../dashboard/DisasterBadge';
-import type { GISLayerState, Incident, MapPOI, FlyToTarget, HoverInfo } from '../../../types';
+import type { GISLayerState, GisFeature, GisLayerResponse, Incident, MapPOI, FlyToTarget, HoverInfo } from '../../../types';
 import { DARK_STYLE, TOPOLOGY_PLANES } from '../../../constants';
 import { overpassService } from '../../../services/overpassService';
+import { useGisLayers } from '../../../hooks/useGeo';
+import { factState } from '../../../utils/facts';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'leaflet/dist/leaflet.css';
@@ -41,7 +43,16 @@ interface MapCanvasProps {
   onToggleLayer?: (key: keyof GISLayerState) => void;
   incidents?: Incident[];
   pois?: MapPOI[];
+  /** Feature count per layer from the loaded data (shown in the layer panel). */
+  onLayerCounts?: (counts: Partial<Record<keyof GISLayerState, number | 'loading' | 'unavailable'>>) => void;
 }
+
+// Malaysia bounding box used to place real points on the 3D topology planes.
+const MY_BOUNDS = { north: 7.4, south: 0.8, west: 99.6, east: 119.3 };
+const planePosition = (lat: number, lng: number) => ({
+  x: Math.min(97, Math.max(3, ((lng - MY_BOUNDS.west) / (MY_BOUNDS.east - MY_BOUNDS.west)) * 100)),
+  y: Math.min(97, Math.max(3, ((MY_BOUNDS.north - lat) / (MY_BOUNDS.north - MY_BOUNDS.south)) * 100)),
+});
 
 // Helper component inside Leaflet to smoothly fly to location
 const LeafletFlyTo: React.FC<{ target: FlyToTarget | null }> = ({ target }) => {
@@ -120,6 +131,7 @@ const poiHex: Record<string, string> = {
   Utility: '#d97706',
   'Road Closure': '#64748b',
   Pharmacy: '#0d9488',
+  'Flood Hotspot': '#0ea5e9',
   Other: '#64748b',
 };
 
@@ -138,6 +150,7 @@ const poiRgb: Record<string, [number, number, number]> = {
   Utility: [217, 119, 6],
   'Road Closure': [100, 116, 139],
   Pharmacy: [13, 148, 136],
+  'Flood Hotspot': [14, 165, 233],
   Other: [100, 116, 139],
 };
 
@@ -153,11 +166,50 @@ const poiToLayerKey: Record<string, keyof GISLayerState> = {
   'Rescue Team': 'rescueTeamLocations',
   Warehouse: 'rescueTeamLocations',
   Depot: 'rescueTeamLocations',
-  Utility: 'utilityElectricity',
-  'Road Closure': 'roadAccessibility',
   Pharmacy: 'clinics',
-  Other: 'utilityElectricity',
+  'Flood Hotspot': 'floodAreas',
 };
+
+const GIS_LAYERS: { key: string; toggle: keyof GISLayerState; short: string }[] = [
+  { key: 'fire_stations', toggle: 'fireStations', short: 'Fire stations' },
+  { key: 'relief_centres_trg', toggle: 'emergencyShelters', short: 'Relief centres' },
+  { key: 'flood_hotspots', toggle: 'floodAreas', short: 'Flood hotspots' },
+];
+
+const POI_CATEGORIES = new Set<string>(Object.keys(poiHex));
+
+function attr(f: GisFeature, k: string): string | null {
+  const v = f.attributes?.[k];
+  return v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim();
+}
+
+/** Convert a validated backend feature to a map POI. Only fields the layer actually has are shown. */
+function featureToPoi(f: GisFeature, layer: GisLayerResponse): MapPOI {
+  const category = (POI_CATEGORIES.has(f.category) ? f.category : 'Other') as MapPOI['category'];
+  const parts: string[] = [];
+  if (layer.layer === 'fire_stations') {
+    if (attr(f, 'address')) parts.push(attr(f, 'address')!);
+    if (attr(f, 'personnel_total')) parts.push(`Published personnel: ${attr(f, 'personnel_total')} (not live availability)`);
+  } else if (layer.layer === 'relief_centres_trg') {
+    const loc = [attr(f, 'district'), attr(f, 'state')].filter(Boolean).join(', ');
+    if (loc) parts.push(loc);
+    if (attr(f, 'capacity')) parts.push(`Designated capacity: ${attr(f, 'capacity')} (not current occupancy)`);
+  } else if (layer.layer === 'flood_hotspots') {
+    parts.push('Historical flood hotspot — not a live flood extent');
+    const loc = [attr(f, 'district'), attr(f, 'state')].filter(Boolean).join(', ');
+    if (loc) parts.push(loc);
+    if (attr(f, 'basin')) parts.push(`Basin: ${attr(f, 'basin')}`);
+  }
+  parts.push(`Source: ${layer.label ?? 'PlanMalaysia GIS'}`);
+  return {
+    id: `gis-${layer.layer}-${f.id}`,
+    name: f.name,
+    category,
+    coordinates: [f.lat, f.lng],
+    details: parts.join(' · '),
+  };
+}
+
 
 export const MapCanvas3D: React.FC<MapCanvasProps> = ({
   layers,
@@ -168,11 +220,23 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
   onToggleLayer,
   incidents = [],
   pois = [],
+  onLayerCounts,
 }) => {
   const [hover, setHover] = useState<HoverInfo>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [liveFacilities, setLiveFacilities] = useState<MapPOI[]>([]);
   const [isLoadingFacilities, setIsLoadingFacilities] = useState(false);
+
+  // Backend GIS layers — fetched only while their toggle is on.
+  const gisQueries = useGisLayers(GIS_LAYERS.map((l) => ({ key: l.key, enabled: !!layers[l.toggle] })));
+  const gisPois = useMemo(
+    () =>
+      gisQueries.flatMap((q) =>
+        q.data && q.data.status !== 'unavailable' ? q.data.features.map((f) => featureToPoi(f, q.data!)) : []
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gisQueries.map((q) => q.dataUpdatedAt).join('|')]
+  );
 
   // DeckGL view state
   const [viewState, setViewState] = useState({
@@ -287,17 +351,18 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
     };
   }, [flyToTarget, incidents]);
 
-  // Use real live Overpass OSM facilities (plus real warehouses if provided)
+  // Live Overpass OSM facilities + backend GIS layers + real warehouses if provided
   const combinedPOIs = useMemo(() => {
     const map = new Map<string, MapPOI>();
     liveFacilities.forEach((p) => map.set(p.id, p));
+    gisPois.forEach((p) => map.set(p.id, p));
     pois.forEach((p) => {
       if (p.category === 'Warehouse' && !map.has(p.id)) {
         map.set(p.id, p);
       }
     });
     return Array.from(map.values());
-  }, [pois, liveFacilities]);
+  }, [pois, liveFacilities, gisPois]);
 
   // Filter incidents based on active hazard layers
   const visibleIncidents = useMemo(() => {
@@ -344,6 +409,54 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
           position: [p.coordinates[1], p.coordinates[0]] as [number, number],
         })),
     [combinedPOIs, layers]
+  );
+
+  // Feature counts per layer (whether or not the layer is switched on), so the
+  // layer panel can say how much each layer actually contains.
+  useEffect(() => {
+    if (!onLayerCounts) return;
+    const counts: Partial<Record<keyof GISLayerState, number | 'loading' | 'unavailable'>> = {};
+    const bump = (k: keyof GISLayerState, n = 1) => {
+      const cur = counts[k];
+      counts[k] = (typeof cur === 'number' ? cur : 0) + n;
+    };
+    const t = (inc: Incident) => (inc.type || '').toLowerCase();
+    counts.disasterHotspots = incidents.length;
+    counts.floodAreas = incidents.filter((i) => t(i).includes('flood')).length;
+    counts.landslideAreas = incidents.filter((i) => t(i).includes('landslide')).length;
+    counts.fireZones = incidents.filter((i) => t(i).includes('fire')).length;
+    counts.severeStorms = incidents.filter((i) => /storm|haze|wind/.test(t(i))).length;
+    counts.earthquakeDrought = incidents.filter((i) => /earthquake|drought/.test(t(i))).length;
+    combinedPOIs.forEach((p) => {
+      const k = poiToLayerKey[p.category];
+      if (k) bump(k);
+    });
+    gisQueries.forEach((q, i) => {
+      const l = GIS_LAYERS[i];
+      if (!layers[l.toggle]) return;
+      if (q.isLoading) counts[l.toggle] = typeof counts[l.toggle] === 'number' && (counts[l.toggle] as number) > 0 ? counts[l.toggle] : 'loading';
+      else if (q.isError || q.data?.status === 'unavailable') counts[l.toggle] = typeof counts[l.toggle] === 'number' && (counts[l.toggle] as number) > 0 ? counts[l.toggle] : 'unavailable';
+    });
+    for (const k of ['emergencyShelters', 'hospitals', 'clinics', 'fireStations', 'policeStations', 'evacuationSchools', 'rescueTeamLocations'] as (keyof GISLayerState)[]) {
+      if (counts[k] === undefined) counts[k] = isLoadingFacilities ? 'loading' : 0;
+    }
+    onLayerCounts(counts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incidents, combinedPOIs, layers, isLoadingFacilities, gisQueries.map((q) => `${q.status}${q.dataUpdatedAt}`).join('|')]);
+
+  // Real points for the 3D topology planes (no decorative placeholders).
+  const planeNodes: Partial<Record<keyof GISLayerState, { label: string; x: number; y: number }[]>> = useMemo(
+    () => ({
+      disasterHotspots: visibleIncidents.slice(0, 60).map((i) => ({
+        label: `${i.display_id ?? ''} ${i.title}`.trim(),
+        ...planePosition(i.coordinates[0], i.coordinates[1]),
+      })),
+      emergencyShelters: visiblePois.slice(0, 80).map((p) => ({
+        label: `${p.category}: ${p.name}`,
+        ...planePosition(p.coordinates[0], p.coordinates[1]),
+      })),
+    }),
+    [visibleIncidents, visiblePois]
   );
 
   // DeckGL layers
@@ -505,7 +618,9 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                               {inc.severity}
                             </span>
                             <span className="text-[9px] text-slate-600 font-semibold">
-                              {inc.affected_population.toLocaleString()} affected
+                              {factState(inc, 'affected_population') === 'unknown'
+                                ? 'Affected: not reported'
+                                : `${inc.affected_population.toLocaleString()} reported affected`}
                             </span>
                           </div>
                         </div>
@@ -583,6 +698,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                     { label: 'Fire & Rescue (BOMBA)', hex: '#dc2626' },
                     { label: 'Evac Shelter / School', hex: '#059669' },
                     { label: 'Logistics Depot / Hub', hex: '#4f46e5' },
+                    { label: 'Flood hotspot (historical)', hex: '#0ea5e9' },
                   ].map((l) => (
                     <div key={l.label} className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ background: l.hex }} />
@@ -703,6 +819,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                     { label: 'Fire & Rescue (BOMBA)', hex: '#dc2626' },
                     { label: 'Evacuation Shelter', hex: '#059669' },
                     { label: 'Logistics Depot', hex: '#4f46e5' },
+                    { label: 'Flood hotspot (historical)', hex: '#0ea5e9' },
                   ].map((l) => (
                     <div key={l.label} className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ background: l.hex }} />
@@ -757,23 +874,20 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                       <span>{plane.title}</span>
                     </div>
 
+                    <div className="absolute top-2.5 right-2.5 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded-md text-[9px] font-mono text-slate-300">
+                      {(planeNodes[plane.id] ?? []).length} shown
+                    </div>
                     {isEnabled &&
-                      plane.nodes.map((node, ni) => (
+                      (planeNodes[plane.id] ?? []).map((node, ni) => (
                         <div
                           key={ni}
                           style={{ left: `${node.x}%`, top: `${node.y}%` }}
                           className="absolute transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
-                          onMouseEnter={() => setHoveredNode(node.label)}
+                          onMouseEnter={() => setHoveredNode(`${plane.id}:${ni}`)}
                           onMouseLeave={() => setHoveredNode(null)}
                         >
-                          <div className="absolute top-1/2 left-1/2 w-[1px] h-[85px] bg-gradient-to-b from-white/50 to-transparent transform -translate-x-1/2 pointer-events-none" />
-                          <div
-                            className={`size-3 rounded-full ${plane.color} animate-ping opacity-75 absolute inset-0`}
-                          />
-                          <div
-                            className={`relative size-3 rounded-full ${plane.color} border-2 border-white shadow-md`}
-                          />
-                          {hoveredNode === node.label && (
+                          <div className={`relative size-2 rounded-full ${plane.color} border border-white shadow-md`} />
+                          {hoveredNode === `${plane.id}:${ni}` && (
                             <div className="absolute bottom-5 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-slate-900 border border-slate-700 text-white text-[10px] font-mono px-2 py-0.5 rounded shadow-xl z-30">
                               {node.label}
                             </div>

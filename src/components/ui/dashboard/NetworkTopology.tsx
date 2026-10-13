@@ -15,7 +15,7 @@ interface NetworkTopologyProps {
   selectedNodeId?: string | null;
   incidents?: Array<{
     id: string; title: string; severity: string; district: string;
-    affectedPopulation: number; aiPriorityScore: number; status: string;
+    affectedPopulation: number; aiPriorityScore: number | null; status: string;
   }>;
   activityFeed?: Array<{
     id: string; time: string; event: string; actor: string; type: string;

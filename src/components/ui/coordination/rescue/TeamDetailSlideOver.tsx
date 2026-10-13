@@ -49,20 +49,10 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
 
   if (!team) return null;
 
-  // Match missions where this team is listed in team_ids or assigned_team_id (set by
-  // backend enrichment from mission_assignments). Also fall back to incident_id match
-  // when the team is deployed on an active incident, in case enrichment was partial.
-  const deployedIncidentIds = new Set(
-    incidents
-      .filter((i) => i.status === 'Responding' || i.status === 'Verified')
-      .map((i) => i.id)
-  );
+  // Match missions where this team is specifically assigned
+  // Only the team's OWN assignment records (never the mission's "primary team" alias).
   const teamMissions = missions.filter(
-    (m) =>
-      (m as any).team_ids?.includes(team.id) ||
-      (m as any).assigned_team_id === team.id ||
-      // fallback: team is deployed and the mission targets an active incident
-      (team.status === 'Deployed' && deployedIncidentIds.has(m.incident_id))
+    (m) => m.team_ids?.includes(team.id) || m.teams?.some((t) => t.id === team.id)
   );
   const activeMission = teamMissions.find((m) => m.status !== 'Completed' && m.status !== 'Aborted');
   const assignedIncident = incidents.find((i) => i.id === activeMission?.incident_id);

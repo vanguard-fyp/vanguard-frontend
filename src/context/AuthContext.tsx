@@ -140,7 +140,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const canManageLevel = useCallback(
-    (level?: DisasterLevel | string): boolean => {
+    (_level?: DisasterLevel | string): boolean => {
       if (!user) return false;
       // Both admin roles can manage all disaster levels.
       return WEB_ADMIN_ROLES.has(user.role as UserRole);

@@ -1,9 +1,11 @@
+import type { AssessmentStatus, FactField, FactState } from './intelligence';
 export * from './navigation';
 export * from './communication';
 export * from './rescue';
 export * from './resource';
 export * from './situational';
 export * from './system';
+export * from './intelligence';
 
 export type UserRole =
   | 'NADMA Lead Officer'
@@ -63,22 +65,6 @@ export interface GdacsEvent {
   source: string;
 }
 
-export interface AIRecommendation {
-  id: string;
-  entity_type: 'team' | 'resource' | 'incident';
-  entity_id: string;
-  action_text: string;
-  rationale: string;
-  confidence: number;
-  risk_level: 'Low' | 'Medium' | 'High' | 'Critical';
-  stream_status: 'pending' | 'streaming' | 'complete' | 'error';
-  model_used: string;
-  is_streaming: boolean;
-  generated_at: string;
-  completed_at?: string;
-  is_active: boolean;
-}
-
 export interface Incident {
   id: string;
   display_id: string;
@@ -86,7 +72,12 @@ export interface Incident {
   type: DisasterType;
   location: string;
   state: string;
+  /** most precise place name (e.g. Mentakab) */
   district: string;
+  /** canonical administrative area resolved by the backend from the pin */
+  administrative_area_id?: string | null;
+  /** name of that canonical district (e.g. Temerloh); enrichment only */
+  administrative_district?: string | null;
   postcode?: string;
   coordinates: [number, number];
   severity: SeverityLevel;
@@ -100,7 +91,8 @@ export interface Incident {
   casualties_count: number;
   infrastructure_damage: 'Severe' | 'Moderate' | 'Minor' | 'None';
   accessibility_score: number;
-  weather_condition: string;
+  /** null = not reported */
+  weather_condition: string | null;
   description: string;
   reporter_contact?: string;
   verified_by?: string;
@@ -111,11 +103,28 @@ export interface Incident {
   resolved_at?: string;
   resolved_by_user_id?: string;
   rejection_reason?: string;
-  ai_priority_score: number;
+  /** AI-derived (latest assessment); null until the pipeline has produced a score. */
+  ai_priority_score: number | null;
+  /** Provenance of officer-entered facts: reported | verified | disputed | unknown. */
+  field_verification?: Partial<Record<FactField, FactState>>;
+  /** Analysis run queued by the last create/update, if any. */
+  analysis?: { assessment_id: string; status: AssessmentStatus; version: number } | null;
   outcome_notes?: string;
+  media_urls?: string[];
   trigger_alert?: TriggerAlert;
   impact_timeline?: ImpactSnapshot[];
   action_log?: IncidentLog[];
+}
+
+export interface AdministrativeArea {
+  id: string;
+  state: string;
+  district: string;
+  state_code?: string;
+  district_code?: string;
+  population?: number;
+  centroid_lat?: number;
+  centroid_lng?: number;
 }
 
 export interface CopilotTask {
@@ -139,6 +148,14 @@ export interface CopilotMessage {
   timestamp: string;
   suggestions?: string[];
   tasks?: CopilotTask[];
+  /** copilot replies: where the text came from */
+  source?: CopilotSource;
+  /** copilot replies: provider/model that produced the text, e.g. "fallback:…" */
+  model?: string | null;
+  /** copilot replies: guardrail outcome (anything but 'allow' is a refusal) */
+  guardrail?: string;
+  /** user messages: the request failed and was not answered */
+  failed?: boolean;
 }
 
 export interface CopilotChatResponse {
@@ -149,7 +166,14 @@ export interface CopilotChatResponse {
   activeIncidentsCount: number;
   criticalCount: number;
   unreadAlertsCount: number;
+  /** allow | clarify | refuse_scope | refuse_action | refuse_injection | refuse_length */
+  guardrail?: string;
+  source?: CopilotSource;
+  model?: string | null;
 }
+
+/** llm = model reply · guardrail = blocked before any model call · unavailable = no model reply could be produced */
+export type CopilotSource = 'llm' | 'guardrail' | 'unavailable';
 
 export interface GISLayerState {
   disasterHotspots: boolean;
@@ -165,10 +189,6 @@ export interface GISLayerState {
   policeStations: boolean;
   evacuationSchools: boolean;
   rescueTeamLocations: boolean;
-  utilityElectricity: boolean;
-  utilityWater: boolean;
-  utilityTelecom: boolean;
-  roadAccessibility: boolean;
 }
 
 export interface MapPOI {
@@ -187,6 +207,7 @@ export interface MapPOI {
     | 'Warehouse'
     | 'Depot'
     | 'Pharmacy'
+    | 'Flood Hotspot'
     | 'Other';
   coordinates: [number, number];
   capacity?: { current: number; max: number };
@@ -212,6 +233,29 @@ export interface RescueTeam {
   contact_number: string;
   commander: string;
   specialization?: string;
+  /** Authoritative capacity from the backend (capacity_service). */
+  total_personnel?: number;
+  committed_personnel?: number;
+  available_personnel?: number;
+  active_assignment_count?: number;
+  active_mission_count?: number;
+  active_mission_ids?: string[];
+  eligible?: boolean;
+  ineligible_reason?: 'inactive' | 'off_duty' | null;
+  unsized_assignments?: number;
+}
+
+export interface MissionTeamAssignment {
+  id: string;
+  name?: string;
+  agency?: string;
+  display_id?: string;
+  assignment_id?: string;
+  assignment_status?: string;
+  assigned_personnel?: number | null;
+  selection_source?: 'ai' | 'officer' | null;
+  approved_by_user_id?: string | null;
+  approved_at?: string | null;
 }
 
 export interface Mission {
@@ -233,6 +277,10 @@ export interface Mission {
   objective: string;
   created_at?: string;
   updated_at?: string;
+  teams?: MissionTeamAssignment[];
+  recommended_personnel?: number | null;
+  approved_by_user_id?: string | null;
+  approved_at?: string | null;
 }
 
 export interface Warehouse {
@@ -284,6 +332,16 @@ export interface ResourceRequest {
   approved_by_name?: string;
   item_requested?: string;
   rejection_reason?: string;
+  /** requisition = depot -> one incident; replenishment = supplier -> depot */
+  request_type?: 'requisition' | 'replenishment';
+  incident_id?: string | null;
+  incident_display_id?: string | null;
+  incident_title?: string | null;
+  warehouse_name?: string | null;
+  supplier?: string | null;
+  approved_at?: string | null;
+  dispatched_at?: string | null;
+  delivered_at?: string | null;
 }
 
 export interface PublicAnnouncement {
@@ -354,11 +412,22 @@ export interface ActivityEvent {
 }
 
 /* ─── KPI Sparkline Trends ──────────────────────────────────── */
+/** Daily new-record counts for the dashboard sparklines (backend: analytics.get_kpi_trends). */
 export interface KpiTrends {
+  /** 'hour' when every record in the window falls within 24 h, else 'day' */
+  bucket?: 'hour' | 'day';
+  /** bucket labels aligned with each series, e.g. "01 Aug 21:00" or "01 Aug" */
+  labels?: string[];
+  /** ISO dates (Asia/Kuala_Lumpur), oldest first, aligned with each series */
+  days?: string[];
+  window_end?: string;
+  /** false when nothing happened in the last 7 days and the window ends at the latest record */
+  is_current_window?: boolean;
   incidents: number[];
   population: number[];
   teams: number[];
   missions: number[];
+  basis?: string;
 }
 
 export type TriggerSource = 'Metrology Station' | 'Seismic Sensor' | 'Hydrological Monitor' | 'Public Report';
@@ -392,15 +461,20 @@ export interface ImpactSnapshot {
   stage?: string;
 }
 
+/** Year KPIs; comparison fields are null when the previous year has no data. */
 export interface AnalyticsSummary {
+  year: string;
+  comparison_year: string;
   total_incidents: number;
   total_resolved: number;
-  resolution_rate: number;
-  total_evacuated: number;
-  avg_response_time_min: number;
-  incident_trend_pct: number;
-  resolution_rate_improvement_pct: number;
-  response_time_delta_min: number;
+  resolution_rate: number | null;
+  total_affected_reported: number;
+  /** mean minutes from incident occurrence to first team assigned */
+  avg_response_time_min: number | null;
+  response_samples: number;
+  incident_trend_pct: number | null;
+  resolution_rate_improvement_pct: number | null;
+  response_time_delta_min: number | null;
 }
 
 export interface AdminRoleOption {

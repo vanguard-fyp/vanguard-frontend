@@ -22,7 +22,6 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [nameDirty, setNameDirty] = useState(false);
-  const [emailDirty, setEmailDirty] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAvatar = useUploadAvatar();

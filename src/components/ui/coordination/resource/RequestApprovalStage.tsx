@@ -1,396 +1,342 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ClipboardCheck, Clock, CheckCircle, XCircle, Sparkles, Eye, X, AlertTriangle } from 'lucide-react';
-import { DisasterBadge } from '../../dashboard/DisasterBadge';
-import type { ResourceRequest, AIRequestRecommendation } from '../../../../types';
+import { AnimatePresence } from 'framer-motion';
+import { AlertTriangle, CheckCircle, CheckCircle2, ClipboardCheck, Eye, XCircle } from 'lucide-react';
+import type { ResourceRequest } from '../../../../types';
+import { requestFlow } from '../../../../utils/resourceFlow';
+import { usePaginatedQuery, useRequestRecommendation } from '../../../../hooks';
+import { resourceService } from '../../../../services/resourceService';
+import { PaginationBar } from '../../shared/PaginationBar';
+import { RecommendationLine, RequestSummary, ResourceDialog, requestRoute } from './ResourceUI';
+
+const PENDING = 'Pending Approval';
+const PENDING_FILTER = { status: PENDING };
+const HISTORY_FILTER = { exclude_status: PENDING };
+
+const URGENCY_PILL: Record<string, { pill: string; dot: string }> = {
+  Critical: { pill: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
+  High: { pill: 'bg-orange-50 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
+  Medium: { pill: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  Low: { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+};
+const STATUS_PILL: Record<string, string> = {
+  Approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Dispatched: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Delivered: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Rejected: 'bg-red-50 text-red-700 border-red-200',
+};
+
+/** Depot select for a request created without one; options are the depots stocking the item, best first. */
+const DepotPicker: React.FC<{ req: ResourceRequest; value: string; onChange: (id: string) => void }> = ({ req, value, onChange }) => {
+  const { data: rec, isLoading } = useRequestRecommendation(req.id);
+  const options = rec?.alternatives ?? [];
+  return (
+    <label className="block">
+      <span className="block text-xs font-bold text-slate-800 mb-1">
+        Supply from depot <span className="text-rose-500">*</span>
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={isLoading || options.length === 0}
+        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-600 cursor-pointer disabled:cursor-not-allowed"
+      >
+        <option value="">{isLoading ? 'Loading depots' : options.length ? 'Choose a depot' : 'No depot stocks this item'}</option>
+        {options.map((o) => (
+          <option key={o.warehouse_id} value={o.warehouse_id}>
+            {o.warehouse_name ?? 'Warehouse'}: {(o.stock_level ?? o.spare_quantity).toLocaleString()} {req.unit} in stock
+            {o.covers_request === false ? ' (not enough)' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+};
 
 interface RequestApprovalStageProps {
-  requests: ResourceRequest[];
-  onApprove: (id: string) => void;
+  onApprove: (id: string, warehouseId?: string) => void;
   onReject: (id: string, reason?: string) => void;
   onSelectRequest?: (req: ResourceRequest) => void;
 }
 
-function getAIRequestRecommendation(req: ResourceRequest): AIRequestRecommendation {
-  if (req.urgency === 'Critical' || req.urgency === 'High') {
-    return {
-      decision: 'Approve',
-      confidence: 94,
-      rationale: `High urgency request aligned with verified flood incident in ${req.district}. Recommended depot dispatch route available with negligible safety buffer degradation.`,
-      depot_impact: 'Stock remains above 65% minimum safety threshold post-fulfillment.',
-    };
-  }
-  return {
-    decision: 'Flag for Review',
-    confidence: 78,
-    rationale: `Medium/Low urgency item requested. Stock availability is adequate, but logistics dispatch capacity is currently prioritized for Kota Bharu emergency response.`,
-    depot_impact: 'Deferred dispatch recommended to prioritize Critical sector operations.',
+type FlowFilter = 'all' | 'requisition' | 'replenishment';
+
+export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onApprove, onReject, onSelectRequest }) => {
+  const [approving, setApproving] = useState<ResourceRequest | null>(null);
+  const [rejecting, setRejecting] = useState<ResourceRequest | null>(null);
+  const [reason, setReason] = useState('');
+  const [depotId, setDepotId] = useState('');
+  const [flowFilter, setFlowFilter] = useState<FlowFilter>('all');
+
+  const getPage = (args: { limit: number; offset: number; status?: string; exclude_status?: string }) =>
+    resourceService.getRequestsPage(args);
+  const pendingPage = usePaginatedQuery(['resources', 'requests', 'pending'], getPage, PENDING_FILTER, 5);
+  const historyPage = usePaginatedQuery(['resources', 'requests', 'history'], getPage, HISTORY_FILTER, 10);
+  const pending = pendingPage.items;
+  const shown = flowFilter === 'all' ? pending : pending.filter((r) => requestFlow(r) === flowFilter);
+  const needsDepot = !!approving && !approving.warehouse_id;
+
+  const confirmApprove = () => {
+    if (!approving || (needsDepot && !depotId)) return;
+    onApprove(approving.id, needsDepot ? depotId : undefined);
+    setApproving(null);
   };
-}
-
-export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({
-  requests,
-  onApprove,
-  onReject,
-  onSelectRequest,
-}) => {
-  const [_hilDecisions, setHilDecisions] = useState<Record<string, 'approved' | 'overridden'>>({});
-  const [approvingRequest, setApprovingRequest] = useState<ResourceRequest | null>(null);
-  const [rejectingRequest, setRejectingRequest] = useState<ResourceRequest | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-
-  const pendingRequests = requests.filter((r) => r.status === 'Pending Approval');
-  const historicalRequests = requests.filter((r) => r.status !== 'Pending Approval');
-
-  const handleOpenApproveModal = (e: React.MouseEvent, req: ResourceRequest) => {
-    e.stopPropagation();
-    setApprovingRequest(req);
+  const confirmReject = () => {
+    if (!rejecting) return;
+    onReject(rejecting.id, reason.trim() || undefined);
+    setRejecting(null);
   };
 
-  const handleConfirmApprove = () => {
-    if (!approvingRequest) return;
-    setHilDecisions((prev) => ({ ...prev, [approvingRequest.id]: 'approved' }));
-    onApprove(approvingRequest.id);
-    setApprovingRequest(null);
-  };
-
-  const handleOpenRejectModal = (e: React.MouseEvent, req: ResourceRequest) => {
-    e.stopPropagation();
-    setRejectingRequest(req);
-    setRejectionReason('');
-  };
-
-  const handleConfirmReject = () => {
-    if (!rejectingRequest) return;
-    setHilDecisions((prev) => ({ ...prev, [rejectingRequest.id]: 'overridden' }));
-    onReject(rejectingRequest.id, rejectionReason);
-    setRejectingRequest(null);
-    setRejectionReason('');
-  };
+  const filters: [FlowFilter, string, number, string][] = [
+    ['all', 'All', pending.length, 'bg-slate-900'],
+    ['requisition', 'To incidents', pending.filter((r) => requestFlow(r) === 'requisition').length, 'bg-blue-600'],
+    ['replenishment', 'Depot restock', pending.filter((r) => requestFlow(r) === 'replenishment').length, 'bg-indigo-600'],
+  ];
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs space-y-0">
+    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
       {/* Header */}
       <div className="px-5 py-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-amber-600 text-white font-bold text-xs flex items-center justify-center shadow-2xs">
-            2
-          </div>
-          <div>
+          <div className="w-7 h-7 rounded-lg bg-amber-600 text-white font-bold text-xs flex items-center justify-center"><ClipboardCheck size={16} /></div>
+          <div className='flex flex-row gap-2 justify-between w-full items-center'>
             <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <ClipboardCheck size={16} className="text-amber-600" />
-              Request Review & HIL Approval Pipeline
+              Request Review &amp; Approval
             </h3>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Human-in-the-Loop decision support · Review pending resupply authorizations and historical approvals
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] text-slate-500">· {pendingPage.total} Pending Approval</p>
+            </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full flex items-center gap-1.5">
-            <Clock size={12} />
-            {pendingRequests.length} Pending Approval
-          </span>
         </div>
       </div>
 
-      {/* Pending Queue Section */}
+      {/* Flow filter */}
+      <div className="px-5 py-2.5 border-b border-slate-200 flex items-center gap-1.5 text-xs flex-wrap">
+        {filters.map(([id, label, n, on]) => (
+          <button
+            key={id}
+            onClick={() => setFlowFilter(id)}
+            className={`px-2.5 py-1 rounded-md font-bold cursor-pointer transition-colors ${flowFilter === id ? `${on} text-white` : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+            {label} ({n})
+          </button>
+        ))}
+      </div>
+
+      {/* Pending queue */}
       <div className="divide-y divide-slate-100">
-        {pendingRequests.length > 0 ? (
-          pendingRequests.map((req) => {
-            const aiRec = getAIRequestRecommendation(req);
-
-            return (
-              <div
-                key={req.id}
-                className="p-5 transition-colors hover:bg-slate-50/60"
-              >
-                <div className="flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
-                  <div className="flex-1 min-w-0 space-y-2">
+        {pendingPage.isLoading && <div className="px-5 py-8 text-center text-xs text-slate-400">Loading review queue...</div>}
+        {pendingPage.isError && (
+          <div className="px-5 py-6 text-center text-xs text-red-700">
+            Review queue could not be loaded.{' '}
+            <button onClick={() => pendingPage.refetch()} className="underline font-bold cursor-pointer">Retry</button>
+          </div>
+        )}
+        {!pendingPage.isLoading && !pendingPage.isError && shown.length === 0 && (
+          <div className="px-5 py-8 text-center bg-slate-50/50">
+            <CheckCircle size={24} className="text-emerald-600 mx-auto mb-2" />
+            <p className="text-xs font-bold text-slate-700">No requests waiting for approval</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Approved requests continue in the delivery tracker.</p>
+          </div>
+        )}
+        {shown.map((req) => {
+          const u = URGENCY_PILL[req.urgency] ?? URGENCY_PILL.Medium;
+          const restock = requestFlow(req) === 'replenishment';
+          return (
+            <div key={req.id} className="px-5 py-3">
+              <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-4 space-y-3">
+                {/* What · how many · who · where, with the decision buttons */}
+                <div className="flex items-start justify-between gap-4 flex-wrap lg:flex-nowrap">
+                  <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-mono font-bold text-slate-400">{req.display_id}</span>
-                      <DisasterBadge type="severity" value={req.urgency} />
-                      <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                        {req.status}
+                      <span className="text-xs font-bold text-slate-400">{req.display_id}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${u.pill}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${u.dot}`} />
+                        {req.urgency}
                       </span>
                     </div>
-
-                    <h4 className="text-sm font-bold text-slate-900">{req.display_id}</h4>
-
-                    <div className="flex items-center gap-3 text-xs font-medium text-slate-600 flex-wrap">
-                      <span className="font-bold text-blue-700">
-                        {req.quantity_requested.toLocaleString()} {req.unit}
-                      </span>
-                      <span>·</span>
+                    <h4 className="text-sm font-bold text-slate-900 leading-snug">{req.item_requested}</h4>
+                    <p className="text-xs text-slate-600 flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-blue-700">{req.quantity_requested.toLocaleString()} {req.unit}</span>
+                      <span className="text-slate-400">·</span>
+                      <span>Agency: <strong className="text-slate-800">{req.agency}</strong></span>
+                      <span className="text-slate-400">·</span>
                       <span>
-                        Agency: <strong className="text-slate-800">{req.agency}</strong>
+                        {restock ? 'Restock: ' : 'Target: '}
+                        <strong className="text-slate-800">{requestRoute(req).to}</strong>
                       </span>
-                      <span>·</span>
-                      <span>
-                        Target: <strong className="text-slate-800">{req.district} Sector</strong>
-                      </span>
-                    </div>
-
-                    {/* Official Justification preview */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-0.5">
-                        Official Justification
-                      </p>
-                      <p className="text-xs text-slate-700 leading-relaxed">{req.justification}</p>
-                    </div>
-
-                    {/* HIL AI Advisory Card */}
-                    <div className="border border-violet-200 bg-gradient-to-r from-violet-50/90 to-indigo-50/90 rounded-lg p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
-                            <Sparkles size={11} className="text-white" />
-                          </div>
-                          <span className="text-xs font-bold text-violet-900">AI Decision Advisory (HIL)</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200">
-                            {aiRec.decision}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-bold text-violet-700">{aiRec.confidence}% confidence</span>
-                      </div>
-
-                      <p className="text-xs text-slate-700 leading-relaxed font-normal">{aiRec.rationale}</p>
-                      <p className="text-[11px] font-medium text-violet-800 italic">Depot Impact: {aiRec.depot_impact}</p>
-                    </div>
+                    </p>
                   </div>
-
-                  {/* Actions Column */}
-                  <div className="flex flex-col gap-2 shrink-0 self-start">
+                  <div className="flex flex-row items-center gap-2 shrink-0">
                     <button
-                      onClick={(e) => handleOpenApproveModal(e, req)}
-                      className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                    >
-                      <CheckCircle size={14} />
-                      Approve Request
-                    </button>
-
-                    <button
-                      onClick={(e) => handleOpenRejectModal(e, req)}
-                      className="flex items-center justify-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                    >
-                      <XCircle size={14} />
-                      Reject
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={() => onSelectRequest?.(req)}
-                      className="flex items-center justify-center gap-1 px-3 py-1.5 text-slate-500 hover:text-slate-900 text-xs font-semibold rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-slate-900 text-xs font-semibold rounded-lg hover:bg-slate-100 cursor-pointer"
                     >
-                      <Eye size={13} />
-                      <span>View Details</span>
+                      <Eye size={13} /> Details
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRejecting(req);
+                        setReason('');
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg cursor-pointer"
+                    >
+                      <XCircle size={14} /> Reject
+                    </button>
+                    <button
+                      onClick={() => {
+                        setApproving(req);
+                        setDepotId('');
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                    >
+                      <CheckCircle2 size={14} /> Approve
                     </button>
                   </div>
                 </div>
+
+                {/* Why it was asked for, then the AI view of whether it can be met;
+                    stacked, each card only as tall as its own content. */}
+                <div className="flex flex-col gap-3">
+                  {req.justification && (
+                    <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-3">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Official justification</p>
+                      <p className="text-xs text-slate-700 leading-relaxed">{req.justification}</p>
+                    </div>
+                  )}
+                  <RecommendationLine req={req} />
+                </div>
               </div>
-            );
-          })
-        ) : (
-          <div className="px-5 py-8 text-center bg-slate-50/50">
-            <CheckCircle size={24} className="text-emerald-600 mx-auto mb-2" />
-            <p className="text-xs font-bold text-slate-700">All pending resource requests have been processed</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Approved items have moved to Stage 3 Allocation Tracker below.</p>
+            </div>
+          );
+        })}
+        {pendingPage.total > pendingPage.pageSize && (
+          <div className="px-4">
+            <PaginationBar
+              pageIndex={pendingPage.pageIndex}
+              pageCount={pendingPage.pageCount}
+              total={pendingPage.total}
+              pageSize={pendingPage.pageSize}
+              onPageChange={pendingPage.setPageIndex}
+              isFetching={pendingPage.isFetching}
+              label="pending requests"
+            />
           </div>
         )}
       </div>
 
-      {/* Historical Approvals / Rejections */}
-      {historicalRequests.length > 0 && (
+      {/* Processed history */}
+      {historyPage.total > 0 && (
         <div className="border-t border-slate-200 bg-slate-50/30">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
-              Processed Request History ({historicalRequests.length})
-            </span>
-            <span className="text-[10px] text-slate-400">Click any row to view audit details</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Processed request history ({historyPage.total})</span>
+            <span className="text-[10px] text-slate-400">Click any row to view details</span>
           </div>
           <div className="divide-y divide-slate-100">
-            {historicalRequests.map((req) => (
-              <div
+            {historyPage.items.map((req) => (
+              <button
+                type="button"
                 key={req.id}
                 onClick={() => onSelectRequest?.(req)}
-                className="px-5 py-3 flex items-center justify-between text-xs hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                className="w-full px-5 py-3 flex items-center justify-between gap-3 text-xs text-left hover:bg-blue-50/50 transition-colors cursor-pointer group"
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-slate-400">{req.display_id}</span>
-                  <span className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                    {req.district} — {req.agency}
+                <span className="flex items-center gap-3 min-w-0">
+                  <span className="font-bold text-slate-400 shrink-0">{req.display_id}</span>
+                  <span className="font-bold text-slate-800 group-hover:text-blue-600 truncate">
+                    {req.item_requested || 'Supplies'} · {req.agency}
                   </span>
-                  <span className="text-slate-500">
-                    ({req.quantity_requested} {req.unit})
-                  </span>
-                  <span className="text-slate-400">· {req.district}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] border ${req.status === 'Approved' || req.status === 'Dispatched'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-red-50 text-red-700 border-red-200'
-                      }`}
-                  >
+                  <span className="text-slate-500 shrink-0">({req.quantity_requested.toLocaleString()} {req.unit})</span>
+                  <span className="text-slate-400 truncate hidden sm:inline">· {requestRoute(req).to}</span>
+                </span>
+                <span className="flex items-center gap-3 shrink-0">
+                  <span className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] border ${STATUS_PILL[req.status] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                     {req.status}
                   </span>
-                  <Eye size={13} className="text-slate-400 group-hover:text-blue-600 transition-colors" />
-                </div>
-              </div>
+                  <Eye size={13} className="text-slate-400 group-hover:text-blue-600" />
+                </span>
+              </button>
             ))}
           </div>
+          {historyPage.total > historyPage.pageSize && (
+            <div className="px-4 border-t border-slate-100">
+              <PaginationBar
+                pageIndex={historyPage.pageIndex}
+                pageCount={historyPage.pageCount}
+                total={historyPage.total}
+                pageSize={historyPage.pageSize}
+                onPageChange={historyPage.setPageIndex}
+                isFetching={historyPage.isFetching}
+                label="processed requests"
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Approve Confirmation Modal */}
       <AnimatePresence>
-        {approvingRequest && (
-          <div
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={() => setApprovingRequest(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-emerald-200 overflow-hidden"
-            >
-              <div className="px-6 py-4 bg-emerald-600 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle size={18} />
-                  <h3 className="text-sm font-bold">Authorize Resource Dispatch</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setApprovingRequest(null)}
-                  className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-700 transition-colors cursor-pointer"
-                >
-                  <X size={16} />
+        {approving && (
+          <ResourceDialog
+            tone="approve"
+            icon={<CheckCircle2 size={20} />}
+            title={requestFlow(approving) === 'replenishment' ? 'Authorize Depot Restock' : 'Authorize Resource Dispatch'}
+            onClose={() => setApproving(null)}
+            footer={
+              <>
+                <button onClick={() => setApproving(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
+                  Cancel
                 </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-500">{approvingRequest.display_id}</span>
-                    <span className="font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                      {approvingRequest.urgency} Urgency
-                    </span>
-                  </div>
-                  <p className="font-bold text-slate-900 text-sm">{approvingRequest.item_requested}</p>
-                  <p className="text-slate-700 font-medium">
-                    Quantity to Allocate: <strong className="text-emerald-800">{approvingRequest.quantity_requested} {approvingRequest.unit}</strong>
-                  </p>
-                  <p className="text-slate-500 text-[11px]">
-                    Destination: <strong className="text-slate-800">{approvingRequest.district} Sector</strong> · Agency: <strong className="text-slate-800">{approvingRequest.agency}</strong>
-                  </p>
-                </div>
-
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Confirming this request will mark the item as <strong className="text-slate-900">Approved</strong>, stamp your authorization credentials for audit tracking, and transfer the requisition to the active allocation & dispatch pipeline.
-                </p>
-
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setApprovingRequest(null)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmApprove}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
-                  >
-                    Confirm Authorization
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+                <button
+                  onClick={confirmApprove}
+                  disabled={needsDepot && !depotId}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Confirm Authorization
+                </button>
+              </>
+            }
+          >
+            <RequestSummary req={approving} tone="approve" quantityLabel="Quantity to Allocate" />
+            {needsDepot && <DepotPicker req={approving} value={depotId} onChange={setDepotId} />}
+            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 leading-relaxed">
+              {requestFlow(approving) === 'replenishment'
+                ? <>Marks the order <strong className="text-slate-900">Approved</strong>. Stock is added when it is received.</>
+                : <>Marks it <strong className="text-slate-900">Approved</strong>, reserves the stock and moves it to the delivery tracker.</>}
+            </p>
+          </ResourceDialog>
         )}
-      </AnimatePresence>
-
-      {/* Reject Resource Request Modal */}
-      <AnimatePresence>
-        {rejectingRequest && (
-          <div
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={() => setRejectingRequest(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 overflow-hidden"
-            >
-              <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle size={18} />
-                  <h3 className="text-sm font-bold">Reject Resource Request</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setRejectingRequest(null)}
-                  className="p-1 rounded-lg text-rose-200 hover:text-white hover:bg-rose-700 transition-colors cursor-pointer"
-                >
-                  <X size={16} />
+        {rejecting && (
+          <ResourceDialog
+            tone="reject"
+            icon={<AlertTriangle size={20} />}
+            title="Reject Resource Request"
+            onClose={() => setRejecting(null)}
+            footer={
+              <>
+                <button onClick={() => setRejecting(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
+                  Cancel
                 </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-500">{rejectingRequest.display_id}</span>
-                    <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
-                      {rejectingRequest.urgency} Urgency
-                    </span>
-                  </div>
-                  <p className="font-bold text-slate-900 text-sm">{rejectingRequest.item_requested}</p>
-                  <p className="text-slate-600">
-                    Quantity: <strong>{rejectingRequest.quantity_requested} {rejectingRequest.unit}</strong>
-                  </p>
-                  <p className="text-slate-500 text-[11px]">
-                    Agency: <strong>{rejectingRequest.agency}</strong> for <strong>{rejectingRequest.district}</strong>
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
-                    Rejection Reason / Operational Notes (Optional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={rejectionReason}
-                    onChange={(e) => setRejectionReason(e.target.value)}
-                    placeholder="e.g. Insufficient regional depot stock, dispatch prioritized for critical flash flood sector..."
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-rose-600 focus:bg-white"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setRejectingRequest(null)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmReject}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 cursor-pointer"
-                  >
-                    Confirm Rejection
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+                <button
+                  onClick={confirmReject}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold shadow-md shadow-red-600/20 cursor-pointer"
+                >
+                  Confirm Rejection
+                </button>
+              </>
+            }
+          >
+            <RequestSummary req={rejecting} tone="reject" />
+            <label className="block">
+              <span className="block text-xs font-bold text-slate-800 mb-1">
+                Rejection reason / operational notes <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+              </span>
+              <textarea
+                rows={3}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Covered by REQ-2026-002"
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600 focus:bg-white"
+              />
+            </label>
+          </ResourceDialog>
         )}
       </AnimatePresence>
     </div>

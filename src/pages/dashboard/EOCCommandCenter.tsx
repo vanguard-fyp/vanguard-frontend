@@ -53,23 +53,58 @@ const EOCCommandCenter: React.FC = () => {
 
   const criticalIncidents = activeIncidents.filter((i) => i.severity === 'Critical');
   const totalAffected = activeIncidents.reduce((sum, i) => sum + (i.affected_population || 0), 0);
-  const deployedTeams = rescueTeams.filter((t) => t.status === 'Deployed' || t.status === 'En Route');
+  const deployedTeams = rescueTeams.filter((t) => (t.committed_personnel ?? 0) > 0 || t.status === 'Deployed' || t.status === 'En Route');
   const uniqueDistricts = Array.from(new Set(activeIncidents.map((i) => i.district || i.state).filter(Boolean)));
   const deployedAgencies = Array.from(new Set(deployedTeams.map((t) => t.agency))).slice(0, 4).join(' · ') || 'Active Standby';
-  const capacityPct = rescueTeams.length > 0 ? Math.round((deployedTeams.length / rescueTeams.length) * 100) : 0;
+  // Personnel-based utilisation from the SAME capacity rule as Rescue Operations
+  // (backend capacity_service). Off-duty personnel are not deployable, so they are
+  // excluded from the denominator and reported separately.
+  const capacityTotals = teamCapacity.reduce(
+    (acc: { onDuty: number; deployed: number; offDuty: number }, t: { deployed?: number; available?: number; unavailable?: number }) => ({
+      onDuty: acc.onDuty + (t.deployed ?? 0) + (t.available ?? 0),
+      deployed: acc.deployed + (t.deployed ?? 0),
+      offDuty: acc.offDuty + (t.unavailable ?? 0),
+    }),
+    { onDuty: 0, deployed: 0, offDuty: 0 }
+  );
+  const capacityPct = capacityTotals.onDuty > 0 ? Math.round((capacityTotals.deployed / capacityTotals.onDuty) * 100) : 0;
+  const onDutyTeams = rescueTeams.filter((t) => t.status !== 'Off Duty' && t.status !== 'Deleted');
+  const offDutyTeamCount = rescueTeams.length - onDutyTeams.length;
   const inProgressMissions = activeMissions.filter((m) => m.status === 'In Progress');
   const pendingMissions = activeMissions.filter((m) => m.status === 'Pending');
 
+  const byPriority = (a: { ai_priority_score: number | null }, b: { ai_priority_score: number | null }) =>
+    (b.ai_priority_score ?? -1) - (a.ai_priority_score ?? -1);
+  // Only incidents with a backend-computed priority are charted.
   const priorityChartData = [...activeIncidents]
-    .sort((a, b) => b.ai_priority_score - a.ai_priority_score)
-    .map((inc) => ({ name: inc.district, score: inc.ai_priority_score, severity: inc.severity }));
+    .filter((inc) => inc.ai_priority_score != null)
+    .sort(byPriority)
+    // One bar per incident (the score is per incident, not per district).
+    .map((inc) => ({
+      name: inc.display_id || inc.district,
+      score: inc.ai_priority_score as number,
+      severity: inc.severity,
+      detail: `${inc.title} · ${inc.district}`,
+    }));
 
   const incidentList = activeIncidents.map((i) => ({
     id: i.id, title: i.title, severity: i.severity, district: i.district,
-    affectedPopulation: i.affected_population, aiPriorityScore: i.ai_priority_score, status: i.status,
+    affectedPopulation: i.affected_population, aiPriorityScore: i.ai_priority_score ?? null, status: i.status,
   }));
 
-  const topRoster = [...activeIncidents].sort((a, b) => b.ai_priority_score - a.ai_priority_score).slice(0, 5);
+  const topRoster = [...activeIncidents].sort(byPriority).slice(0, 5);
+
+  // Sparklines show NEW records per bucket (hour or day, chosen by the backend);
+  // the caption says which window, which moves to the latest record when nothing
+  // happened recently.
+  const perUnit = kpiTrends?.bucket === 'hour' ? 'hour' : 'day';
+  const lastLabel = kpiTrends?.labels?.[kpiTrends.labels.length - 1];
+  const sparkWindow = kpiTrends?.window_end
+    ? kpiTrends.is_current_window
+      ? perUnit === 'hour' ? 'last 12 h' : 'last 7 days'
+      : `${perUnit === 'hour' ? '12 h' : '7 days'} to ${lastLabel ?? kpiTrends.window_end.slice(0, 10)}`
+    : undefined;
+  const sparkCaption = (what: string) => (sparkWindow ? `${what}/${perUnit} · ${sparkWindow}` : undefined);
 
   // Set first active incident as default selection when loaded
   React.useEffect(() => {
@@ -79,9 +114,10 @@ const EOCCommandCenter: React.FC = () => {
   }, [incidents]);
 
   // ── Derived Response Trend Metrics ────────────────────────────────
-  const latestResp = responseTrend.length > 0 ? (responseTrend[responseTrend.length - 1]?.response_min ?? responseTrend[responseTrend.length - 1]?.responseMin ?? 22) : 22;
-  const firstResp = responseTrend.length > 0 ? (responseTrend[0]?.response_min ?? responseTrend[0]?.responseMin ?? 22) : 22;
-  const respDeltaPct = firstResp > 0 ? Math.round(((latestResp - firstResp) / firstResp) * 100) : 0;
+  // No default response time is assumed: with no measurements the card says so.
+  const latestResp: number | null = responseTrend.length > 0 ? (responseTrend[responseTrend.length - 1]?.response_min ?? responseTrend[responseTrend.length - 1]?.responseMin ?? null) : null;
+  const firstResp: number | null = responseTrend.length > 0 ? (responseTrend[0]?.response_min ?? responseTrend[0]?.responseMin ?? null) : null;
+  const respDeltaPct = latestResp != null && firstResp != null && firstResp > 0 ? Math.round(((latestResp - firstResp) / firstResp) * 100) : 0;
 
   return (
     <motion.div variants={DASHBOARD_ANIMATIONS.container} initial="hidden" animate="show"
@@ -105,26 +141,26 @@ const EOCCommandCenter: React.FC = () => {
         <KPICard title="Active Incidents" value={activeIncidents.length}
           subtitle={`${criticalIncidents.length} Critical Priority`}
           icon={<AlertTriangle size={18} />} accentColor="red"
-          sparkData={kpiTrends?.incidents} chartType="area"
+          sparkData={kpiTrends?.incidents} chartType="area" sparkCaption={sparkCaption('New')} sparkLabels={kpiTrends?.labels}
           trend={{ direction: criticalIncidents.length > 0 ? 'up' : 'stable', label: `${criticalIncidents.length} Urgent` }}
         />
         <KPICard title="Affected Population" value={totalAffected.toLocaleString()}
           subtitle={`Across ${uniqueDistricts.length} affected zones`}
           icon={<Users size={18} />} accentColor="orange"
-          sparkData={kpiTrends?.population} chartType="bar"
+          sparkData={kpiTrends?.population} chartType="bar" sparkCaption={sparkWindow ? `Running total · ${sparkWindow}` : undefined} sparkLabels={kpiTrends?.labels}
           trend={{ direction: totalAffected > 10000 ? 'up' : 'stable', label: `${uniqueDistricts.length} Active Sectors` }}
         />
-        <KPICard title="Teams Deployed" value={`${deployedTeams.length}/${rescueTeams.length}`}
-          subtitle={deployedAgencies}
+        <KPICard title="Teams Deployed" value={`${deployedTeams.length}/${onDutyTeams.length}`}
+          subtitle={`${deployedAgencies}${offDutyTeamCount > 0 ? ` · ${offDutyTeamCount} off duty` : ''}`}
           icon={<ShieldAlert size={18} />} accentColor="blue"
-          donutValue={capacityPct}
-          chartType="donut"
-          trend={{ direction: capacityPct > 60 ? 'up' : 'stable', label: `${capacityPct}% capacity` }}
+          progressValue={capacityPct}
+          chartType="progress"
+          trend={{ direction: capacityPct > 60 ? 'up' : 'stable', label: capacityTotals.onDuty > 0 ? `${capacityTotals.deployed} of ${capacityTotals.onDuty} personnel deployed` : 'No on-duty personnel' }}
         />
         <KPICard title="Active Missions" value={activeMissions.length}
           subtitle={`${inProgressMissions.length} Active · ${pendingMissions.length} Queued`}
           icon={<Activity size={18} />} accentColor="purple"
-          sparkData={kpiTrends?.missions} chartType="area"
+          sparkData={kpiTrends?.missions} chartType="area" sparkCaption={sparkCaption('New')} sparkLabels={kpiTrends?.labels}
           trend={{ direction: inProgressMissions.length > 0 ? 'stable' : 'down', label: `${inProgressMissions.length} in progress` }}
         />
       </motion.div>
@@ -196,7 +232,7 @@ const EOCCommandCenter: React.FC = () => {
             </ResponsiveContainer>
           </div>
           <p className="text-[10px] text-slate-400 mt-1 text-right font-mono">
-            Latest: <span className="font-bold text-slate-700">{latestResp} min</span>
+            Latest: <span className="font-bold text-slate-700">{latestResp != null ? `${latestResp} min` : 'No measurements yet'}</span>
           </p>
         </div>
 
@@ -228,9 +264,9 @@ const EOCCommandCenter: React.FC = () => {
             <ShieldAlert size={14} className="text-blue-600 shrink-0" />
             <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">Team Deployment Capacity</p>
           </div>
-          <div className="flex items-center gap-3 text-[10px] font-medium text-slate-500">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-600" /> Deployed</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-slate-200" /> Available</span>
+          <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-600">
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-600" /> Deployed</span>
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Available</span>
           </div>
         </div>
         <div className="h-[110px] w-full">
@@ -238,11 +274,9 @@ const EOCCommandCenter: React.FC = () => {
             <BarChart data={teamCapacity} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barGap={2} barCategoryGap="30%">
               <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#94a3b8', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-              <Bar dataKey="deployed" name="Deployed" radius={[3, 3, 0, 0]} stackId="a">
-                {teamCapacity.map((t, i) => <Cell key={i} fill={t.fill} />)}
-              </Bar>
-              <Bar dataKey="available" name="Available" radius={[3, 3, 0, 0]} stackId="a" fill="#9da1a9ff" />
+              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, borderColor: '#e2e8f0' }} />
+              <Bar dataKey="deployed" name="Deployed" stackId="a" fill="#2563eb" />
+              <Bar dataKey="available" name="Available" radius={[3, 3, 0, 0]} stackId="a" fill="#10b981" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -296,23 +330,36 @@ const EOCCommandCenter: React.FC = () => {
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs">
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <Zap size={14} className="text-amber-500 shrink-0" />
-          <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">AI Priority Severity Index</p>
-          <span className="text-[10px] text-slate-400 font-medium">by district</span>
+          <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">AI Priority Score</p>
+          <span className="text-[10px] text-slate-400 font-medium">by incident, 0–100</span>
         </div>
         <div className="h-[180px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={priorityChartData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-              <Bar dataKey="score" name="AI Score" radius={[5, 5, 0, 0]} barSize={28}>
-                {priorityChartData.map((entry, idx) => (
-                  <Cell key={idx} fill={SEVERITY_COLORS[entry.severity] || '#2563eb'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {priorityChartData.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-4 bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+              <Zap size={20} className="text-amber-500/60 mb-1.5" />
+              <p className="text-xs font-bold text-slate-700">No AI-Scored Incidents</p>
+              <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 leading-snug">
+                Incidents await automated priority scoring or execution of the hazard intelligence scan.
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={priorityChartData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                  labelFormatter={(label, p) => `${label} · ${(p?.[0]?.payload as { detail?: string } | undefined)?.detail ?? ''}`}
+                />
+                <Bar dataKey="score" name="AI Score" radius={[5, 5, 0, 0]} barSize={28}>
+                  {priorityChartData.map((entry, idx) => (
+                    <Cell key={idx} fill={SEVERITY_COLORS[entry.severity] || '#2563eb'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </motion.div>
 

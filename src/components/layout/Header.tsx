@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, Clock, Search, Menu, X, CheckCheck, AlertTriangle, Info, CheckCircle, Zap, TrendingUp } from 'lucide-react';
+import { Bell, Clock, Search, Menu, X, CheckCheck, AlertTriangle, Info, CheckCircle, Zap, TrendingUp, Package, Warehouse } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
 import type { HeaderProps, SystemNotification } from '../../types';
 import { useNotifications, useMarkNotificationRead, useMarkAllNotificationsRead } from '../../hooks/useNotifications';
-import { useIncidents } from '../../hooks';
+import { useIncidents, useInventory, useResourceRequests } from '../../hooks';
+import { searchAll, type SearchHit, type SearchKind } from '../../utils/globalSearch';
 import { formatDateTime } from '../../utils/dateFormatter';
 
 interface ExtendedHeaderProps extends HeaderProps {
@@ -19,6 +20,26 @@ const NOTIF_STYLE: Record<string, { icon: React.ReactNode; dot: string; label: s
   warning:  { icon: <AlertTriangle size={13} className="text-amber-500" />, dot: 'bg-amber-400', label: 'Warning' },
   info:     { icon: <Info size={13} className="text-blue-500" />, dot: 'bg-blue-400', label: 'Info' },
   success:  { icon: <CheckCircle size={13} className="text-emerald-500" />, dot: 'bg-emerald-400', label: 'OK' },
+};
+
+const KIND_LABEL: Record<SearchKind, string> = { incident: 'Incidents', request: 'Resource requests', stock: 'Stock items' };
+const KIND_ICON: Record<SearchKind, React.ReactNode> = {
+  incident: <AlertTriangle size={13} className="text-rose-500" />,
+  request: <Package size={13} className="text-blue-500" />,
+  stock: <Warehouse size={13} className="text-amber-600" />,
+};
+const TAG_STYLE: Record<string, string> = {
+  Critical: 'bg-red-100 text-red-700',
+  High: 'bg-orange-100 text-orange-700',
+  Medium: 'bg-amber-100 text-amber-700',
+  Low: 'bg-emerald-100 text-emerald-700',
+  'Pending Approval': 'bg-amber-100 text-amber-700',
+  Approved: 'bg-emerald-100 text-emerald-700',
+  Dispatched: 'bg-blue-100 text-blue-700',
+  Delivered: 'bg-emerald-100 text-emerald-700',
+  Rejected: 'bg-red-100 text-red-700',
+  'Low Stock': 'bg-amber-100 text-amber-700',
+  Sufficient: 'bg-emerald-100 text-emerald-700',
 };
 
 const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
@@ -70,28 +91,55 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
-  // ── Incident search data ──────────────────────────────────────────────────
+  // ── Search data: incidents, resource requests, stock items ────────────────
   const { data: incidents = [] } = useIncidents();
+  const { data: requests = [] } = useResourceRequests();
+  const { data: stock = [] } = useInventory();
   const activeIncidents = incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected');
 
-  // Top trending = highest AI priority active incidents
-  const trendingIncidents = [...activeIncidents]
-    .sort((a, b) => b.ai_priority_score - a.ai_priority_score)
-    .slice(0, 5);
+  // Shown before typing: highest AI priority active incidents.
+  const trending: SearchHit[] = [...activeIncidents]
+    .sort((a, b) => (b.ai_priority_score ?? -1) - (a.ai_priority_score ?? -1))
+    .slice(0, 5)
+    .map((i) => ({
+      kind: 'incident' as const,
+      id: i.id,
+      code: i.display_id ?? i.id.slice(0, 8).toUpperCase(),
+      title: i.title,
+      subtitle: `${i.district}, ${i.state}`,
+      tag: i.severity,
+      href: `/situational/incidents/${i.id}`,
+    }));
 
-  // Search filter
   const q = searchQuery.trim().toLowerCase();
-  const searchResults = q.length >= 2
-    ? activeIncidents.filter(
-        (i) =>
-          i.title.toLowerCase().includes(q) ||
-          (i.district || '').toLowerCase().includes(q) ||
-          (i.state || '').toLowerCase().includes(q) ||
-          (i.display_id || '').toLowerCase().includes(q)
-      ).slice(0, 6)
-    : [];
+  const searching = q.length >= 2;
+  const results = searching ? searchAll(searchQuery, { incidents, requests, stock }) : trending;
+  const [activeIdx, setActiveIdx] = useState(0);
+  useEffect(() => setActiveIdx(0), [searchQuery]);
 
-  const showDropdown = searchFocused && (searchQuery.length >= 2 ? searchResults.length > 0 : trendingIncidents.length > 0);
+  const showDropdown = searchFocused && (searching || trending.length > 0);
+
+  const openHit = (hit: SearchHit) => {
+    navigate(hit.href);
+    setSearchQuery('');
+    setSearchFocused(false);
+    searchRef.current?.blur();
+  };
+  const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!results.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx((i) => (i + 1) % results.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx((i) => (i - 1 + results.length) % results.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      openHit(results[Math.min(activeIdx, results.length - 1)]);
+    } else if (e.key === 'Escape') {
+      searchRef.current?.blur();
+    }
+  };
 
   const handleNotifClick = useCallback((n: SystemNotification) => {
     if (!n.is_read) markRead.mutate(n.id);
@@ -125,7 +173,11 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-            placeholder="Search incidents, districts… (Ctrl+K)"
+            onKeyDown={onSearchKey}
+            role="combobox"
+            aria-expanded={showDropdown}
+            aria-controls="global-search-results"
+            placeholder="Search incidents, requests, stock… (Ctrl+K)"
             className="w-full pl-9 pr-8 py-1.5 rounded-lg text-xs transition-all text-slate-800 bg-slate-100 border border-slate-200 focus:bg-white focus:border-blue-600 focus:outline-none"
           />
           {searchQuery && (
@@ -147,46 +199,60 @@ const Header: React.FC<ExtendedHeaderProps> = ({ onMobileMenuToggle }) => {
                 transition={{ duration: 0.12 }}
                 className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden"
               >
-                {/* Header */}
                 <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-1.5">
-                  {q.length >= 2
-                    ? <><Search size={11} className="text-slate-400" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{searchResults.length} Results for "{searchQuery}"</span></>
-                    : <><TrendingUp size={11} className="text-blue-500" /><span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Trending Active Incidents</span></>
-                  }
+                  {searching ? (
+                    <>
+                      <Search size={11} className="text-slate-400" />
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        {results.length} result{results.length === 1 ? '' : 's'} for "{searchQuery.trim()}"
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp size={11} className="text-blue-500" />
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Highest-priority active incidents</span>
+                    </>
+                  )}
                 </div>
 
-                {/* Results */}
-                <div className="max-h-72 overflow-y-auto">
-                  {(q.length >= 2 ? searchResults : trendingIncidents).map((inc, idx) => (
-                    <button
-                      key={inc.id}
-                      onMouseDown={() => navigate(`/situational/incidents`)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-start gap-3 cursor-pointer"
-                    >
-                      {q.length < 2 && (
-                        <span className="text-[10px] font-mono font-bold text-slate-300 mt-0.5 w-4 shrink-0">{idx + 1}</span>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-mono font-bold text-blue-600">{inc.display_id || inc.id.slice(0, 8).toUpperCase()}</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${inc.severity === 'Critical' ? 'bg-red-100 text-red-700' : inc.severity === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {inc.severity}
+                <div id="global-search-results" role="listbox" className="max-h-80 overflow-y-auto">
+                  {searching && results.length === 0 && (
+                    <p className="px-3 py-4 text-xs text-slate-500">No incident, request or stock item matches. Try an ID such as INC-2026-001 or REQ-2026-001.</p>
+                  )}
+                  {results.map((hit, idx) => {
+                    const first = idx === 0 || results[idx - 1].kind !== hit.kind;
+                    return (
+                      <React.Fragment key={`${hit.kind}-${hit.id}`}>
+                        {searching && first && (
+                          <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-slate-400">{KIND_LABEL[hit.kind]}</p>
+                        )}
+                        <button
+                          role="option"
+                          aria-selected={idx === activeIdx}
+                          onMouseDown={() => openHit(hit)}
+                          onMouseEnter={() => setActiveIdx(idx)}
+                          className={`w-full text-left px-3 py-2 flex items-start gap-3 cursor-pointer transition-colors ${idx === activeIdx ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                        >
+                          <span className="mt-0.5 shrink-0">{KIND_ICON[hit.kind]}</span>
+                          <span className="flex-1 min-w-0">
+                            <span className="flex items-center gap-2 mb-0.5">
+                              <span className="text-[10px] font-mono font-bold text-blue-600">{hit.code}</span>
+                              {hit.tag && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${TAG_STYLE[hit.tag] ?? 'bg-slate-100 text-slate-600'}`}>{hit.tag}</span>}
+                              {!searching && <Zap size={10} className="text-amber-500 ml-auto" />}
+                            </span>
+                            <span className="block text-xs font-semibold text-slate-800 truncate">{hit.title}</span>
+                            <span className="block text-[10px] text-slate-500 font-medium truncate">{hit.subtitle}</span>
                           </span>
-                          {q.length < 2 && <Zap size={10} className="text-amber-500 ml-auto" />}
-                        </div>
-                        <p className="text-xs font-semibold text-slate-800 truncate">{inc.title}</p>
-                        <p className="text-[10px] text-slate-500 font-medium">{inc.district}, {inc.state}</p>
-                      </div>
-                    </button>
-                  ))}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
 
-                <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 text-center">
-                  <button
-                    onMouseDown={() => navigate('/situational/incidents')}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
-                  >
-                    View All Incidents →
+                <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>↑↓ to move · Enter to open · Esc to close</span>
+                  <button onMouseDown={() => navigate('/situational/incidents')} className="font-bold text-blue-600 hover:text-blue-800 cursor-pointer">
+                    All incidents
                   </button>
                 </div>
               </motion.div>

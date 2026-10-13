@@ -1,38 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, Megaphone, MapPin, Search } from 'lucide-react';
-import { findPostcode, getCities } from 'malaysia-postcodes';
+import { X, Send, Megaphone, MapPin, Search, AlertTriangle, Loader2, Sparkles, Undo2 } from 'lucide-react';
 import type { PublicAnnouncement, SeverityLevel } from '../../../types';
-import { MALAYSIA_STATES_LIST } from '../../../constants/malaysiaLocations';
-import { useAuth } from '../../../context/AuthContext';
-
-const PACKAGE_STATE_MAP: Record<string, string> = {
-  'wp kuala lumpur': 'WP Kuala Lumpur',
-  'kuala lumpur': 'WP Kuala Lumpur',
-  'wp putrajaya': 'WP Putrajaya',
-  'putrajaya': 'WP Putrajaya',
-  'wp labuan': 'WP Labuan',
-  'labuan': 'WP Labuan',
-  johor: 'Johor',
-  kedah: 'Kedah',
-  kelantan: 'Kelantan',
-  melaka: 'Melaka',
-  malacca: 'Melaka',
-  'negeri sembilan': 'Negeri Sembilan',
-  pahang: 'Pahang',
-  perak: 'Perak',
-  perlis: 'Perlis',
-  'pulau pinang': 'Pulau Pinang',
-  penang: 'Pulau Pinang',
-  sabah: 'Sabah',
-  sarawak: 'Sarawak',
-  selangor: 'Selangor',
-  terengganu: 'Terengganu',
-};
+import { useAdministrativeAreas } from '../../../hooks';
+import { geoService } from '../../../services/geoService';
+import { announcementService, type BroadcastDraft } from '../../../services/announcementService';
+import { broadcastHints } from '../../../utils/broadcastHints';
 
 interface ComposeBroadcastModalProps {
   onClose: () => void;
-  onPublish: (announcement: Partial<PublicAnnouncement>) => void;
+  /** Resolves when the backend accepted the broadcast; rejects with the API error. */
+  onPublish: (announcement: Partial<PublicAnnouncement>) => Promise<void>;
 }
 
 const categories: PublicAnnouncement['category'][] = [
@@ -45,21 +23,59 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
   onClose,
   onPublish,
 }) => {
-  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<PublicAnnouncement['category']>('Emergency Alert');
   const [severity, setSeverity] = useState<SeverityLevel>('High');
-  const [targetState, setTargetState] = useState('Kelantan');
+  // Target areas come ONLY from the canonical administrative_areas table; the
+  // backend rejects anything else (422), so there is no hard-coded fallback.
+  const [targetState, setTargetState] = useState('');
+  const [postcodeBusy, setPostcodeBusy] = useState(false);
+  const postcodeSeq = useRef(0);
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [postcodeScopeInput, setPostcodeScopeInput] = useState('');
   const [postcodeMatchMsg, setPostcodeMatchMsg] = useState('');
   const [content, setContent] = useState('');
+  // AI drafting is only on click; the hints below are instant and free.
+  const [drafting, setDrafting] = useState(false);
+  const [draftInfo, setDraftInfo] = useState<BroadcastDraft | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [previousContent, setPreviousContent] = useState<string | null>(null);
+  const hints = useMemo(() => broadcastHints(title), [title]);
+  const hintDiffers = !!hints && ((hints.category && hints.category !== category) || (hints.severity && hints.severity !== severity));
+
+  const handleDraft = async () => {
+    if (title.trim().length < 3) {
+      setTitleError('Type a title first so the AI knows what to write');
+      return;
+    }
+    setDrafting(true);
+    setDraftError(null);
+    try {
+      const draft = await announcementService.draftContent({
+        title: title.trim(),
+        category,
+        severity,
+        target_state: targetState || undefined,
+        target_districts: selectedDistricts,
+      });
+      setPreviousContent(content);
+      setContent(draft.content);
+      setDraftInfo(draft);
+      setContentError('');
+    } catch (err) {
+      setDraftError(err instanceof Error ? err.message : 'Could not draft the message.');
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   // Validation
   const [titleError, setTitleError] = useState('');
   const [contentError, setContentError] = useState('');
   const [districtError, setDistrictError] = useState('');
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Close on Escape key
   useEffect(() => {
@@ -80,67 +96,43 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
     setPostcodeMatchMsg('');
   };
 
+  // Resolve a postcode through the backend (GET /geo/forward), which maps it
+  // to a canonical state/district. Out-of-order responses are ignored.
   const handlePostcodeScope = (code: string) => {
-    // Only allow numbers
     const clean = code.replace(/\D/g, '').slice(0, 5);
-
     setPostcodeScopeInput(clean);
-
-    // Wait until a complete Malaysian postcode is entered
     if (clean.length !== 5) {
       setPostcodeMatchMsg('');
       return;
     }
-
-    try {
-      const found = findPostcode(clean);
-
-      if (
-        found &&
-        'found' in found &&
-        found.found &&
-        'state' in found &&
-        'city' in found
-      ) {
-        const rawState = found.state.trim().toLowerCase();
-
-        const mappedState =
-          PACKAGE_STATE_MAP[rawState] ||
-          MALAYSIA_STATES_LIST.find(
-            (state) => state.toLowerCase() === rawState
-          );
-
-        const city = found.city?.trim();
-
-        if (!mappedState || !city) {
-          setPostcodeMatchMsg('Location information unavailable');
-          return;
+    const seq = ++postcodeSeq.current;
+    setPostcodeBusy(true);
+    geoService
+      .forward({ postcode: clean })
+      .then((res) => {
+        if (seq !== postcodeSeq.current) return;
+        if ((res.status === 'resolved' || res.status === 'partial') && res.state && res.district) {
+          setTargetState(res.state);
+          setSelectedDistricts([res.district]);
+          setPostcodeMatchMsg(`Found: ${res.district}, ${res.state}`);
+          if (attemptedSubmit) setDistrictError('');
+        } else if (res.status === 'ambiguous') {
+          setPostcodeMatchMsg('Postcode spans several districts — select them below');
+          if (res.state) setTargetState(res.state);
+          setSelectedDistricts([]);
+        } else if (res.status === 'unavailable') {
+          setPostcodeMatchMsg('Postcode lookup unavailable — select districts below');
+        } else {
+          setPostcodeMatchMsg(res.message || 'Postcode not found in the administrative area data');
+          setSelectedDistricts([]);
         }
-
-        // Automatically update state
-        setTargetState(mappedState);
-
-        // Automatically use the postcode's city/locality
-        // as the target district/area.
-        setSelectedDistricts([city]);
-
-        setPostcodeMatchMsg(`Found: ${city}, ${mappedState}`);
-
-        if (attemptedSubmit) {
-          setDistrictError('');
-        }
-
-        return;
-      }
-
-      setPostcodeMatchMsg('Postcode not found in Malaysia postcode directory');
-      setSelectedDistricts([]);
-    } catch (error) {
-      console.error('Postcode lookup failed:', error);
-
-      setPostcodeMatchMsg('Unable to look up postcode');
-      setSelectedDistricts([]);
-    }
+      })
+      .catch(() => {
+        if (seq === postcodeSeq.current) setPostcodeMatchMsg('Postcode lookup unavailable — select districts below');
+      })
+      .finally(() => {
+        if (seq === postcodeSeq.current) setPostcodeBusy(false);
+      });
   };
 
   const handleToggleDistrict = (d: string) => {
@@ -152,7 +144,7 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
     if (attemptedSubmit) setDistrictError('');
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAttemptedSubmit(true);
 
@@ -171,7 +163,13 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
       setContentError('');
     }
 
-    if (selectedDistricts.length === 0) {
+    if (areasUnavailable) {
+      setDistrictError('District list unavailable — the broadcast cannot be targeted. Retry when it loads.');
+      hasError = true;
+    } else if (!targetState) {
+      setDistrictError('Select a target state');
+      hasError = true;
+    } else if (selectedDistricts.length === 0) {
       setDistrictError('Select at least one target district');
       hasError = true;
     } else {
@@ -180,18 +178,51 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
 
     if (hasError) return;
 
-    onPublish({
-      title: title.trim(),
-      category,
-      severity,
-      target_state: targetState,
-      target_districts: selectedDistricts,
-      content: content.trim(),
-      issued_by_user_id: user?.id,
-    });
+    // The issuer is taken from the signed-in user's token by the backend.
+    // The modal stays open (and keeps the text) until the backend accepts it.
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onPublish({
+        title: title.trim(),
+        category,
+        severity,
+        target_state: targetState,
+        target_districts: selectedDistricts,
+        content: content.trim(),
+      });
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'The broadcast could not be published. Please retry.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const availableDistrictsForState = getCities(targetState);
+  const {
+    data: adminAreas = [],
+    isLoading: areasLoading,
+    isError: areasError,
+    refetch: refetchAreas,
+  } = useAdministrativeAreas();
+  const areasUnavailable = !areasLoading && (areasError || adminAreas.length === 0);
+
+  const dynamicStates = useMemo(
+    () => Array.from(new Set(adminAreas.map((a) => a.state).filter(Boolean))).sort(),
+    [adminAreas]
+  );
+
+  const availableDistrictsForState = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          adminAreas
+            .filter((a) => a.state.toLowerCase() === targetState.toLowerCase())
+            .map((a) => a.district)
+            .filter(Boolean)
+        )
+      ).sort(),
+    [adminAreas, targetState]
+  );
 
   return (
     <div
@@ -245,6 +276,23 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             {titleError && (
               <span className="block mt-1 text-[11px] text-red-500 font-medium">{titleError}</span>
             )}
+            {hints && (hints.hazardLabel || hintDiffers) && (
+              <div className="mt-1.5 flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                {hints.hazardLabel && <span>Looks like a <span className="font-semibold text-slate-700">{hints.hazardLabel.toLowerCase()}</span> notice.</span>}
+                {hintDiffers && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (hints.category) setCategory(hints.category);
+                      if (hints.severity) setSeverity(hints.severity);
+                    }}
+                    className="font-semibold text-blue-700 hover:text-blue-900 cursor-pointer"
+                  >
+                    Use {[hints.category, hints.severity].filter(Boolean).join(' · ')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Category & Severity Grid */}
@@ -290,17 +338,35 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             <label className="text-xs font-bold text-slate-800 block mb-1">
               Target State (Malaysia) <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={targetState}
-              onChange={(e) => handleStateChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
-            >
-              {MALAYSIA_STATES_LIST.map((state) => (
-                <option key={state} value={state}>
-                  {state}
+            {areasLoading ? (
+              <p className="text-xs text-slate-400 italic flex items-center gap-1.5 py-2">
+                <Loader2 size={12} className="animate-spin" /> Loading administrative areas…
+              </p>
+            ) : areasUnavailable ? (
+              <div className="flex items-center justify-between gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <span className="flex items-center gap-1.5">
+                  <AlertTriangle size={13} /> District list unavailable. Broadcasts can only target canonical districts, so publishing is blocked.
+                </span>
+                <button type="button" onClick={() => refetchAreas()} className="font-bold underline cursor-pointer shrink-0">
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <select
+                value={targetState}
+                onChange={(e) => handleStateChange(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
+              >
+                <option value="" disabled>
+                  Select a state…
                 </option>
-              ))}
-            </select>
+                {dynamicStates.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Quick Scope by Postcode */}
@@ -311,10 +377,12 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
                 <span>Auto-Scope by Malaysian Postcode</span>
               </label>
 
-              {postcodeMatchMsg && (
-                <span className="text-[11px] font-semibold text-blue-700">
-                  {postcodeMatchMsg}
-                </span>
+              {postcodeBusy ? (
+                <Loader2 size={12} className="animate-spin text-blue-600" />
+              ) : (
+                postcodeMatchMsg && (
+                  <span className="text-[11px] font-semibold text-blue-700">{postcodeMatchMsg}</span>
+                )
               )}
             </div>
             <input
@@ -332,7 +400,7 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
               <label className="text-xs font-bold text-slate-800">
-                Target Districts in {targetState} <span className="text-rose-500">*</span>
+                Target Districts{targetState ? ` in ${targetState}` : ''} <span className="text-rose-500">*</span>
               </label>
               <div className="flex items-center gap-2">
                 <button
@@ -354,6 +422,9 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             </div>
 
             <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
+              {!targetState && !areasUnavailable && (
+                <p className="text-[11px] text-slate-400 italic">Select a state (or enter a postcode) to list its districts.</p>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 {availableDistrictsForState.map((districtName) => {
                   const isChecked = selectedDistricts.includes(districtName);
@@ -392,11 +463,43 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
 
           {/* Content */}
           <div>
-            <label className="text-xs font-bold text-slate-800 block mb-1">
-              Broadcast Message Content <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1 gap-2">
+              <label className="text-xs font-bold text-slate-800">
+                Broadcast Message Content <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-3">
+                {previousContent !== null && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContent(previousContent);
+                      setPreviousContent(null);
+                      setDraftInfo(null);
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    <Undo2 size={12} /> Undo
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDraft}
+                  disabled={drafting || title.trim().length < 3}
+                  title={title.trim().length < 3 ? 'Type a title first' : 'Write the message from the title, category and target districts'}
+                  className="flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {drafting ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {drafting ? 'Drafting…' : content.trim() ? 'Redraft with AI' : 'Draft with AI'}
+                </button>
+              </div>
+            </div>
+            {!content.trim() && hints && (
+              <p className="text-[11px] text-slate-500 mb-1.5">
+                Include: {hints.include.join(' · ')}
+              </p>
+            )}
             <textarea
-              rows={4}
+              rows={6}
               value={content}
               onChange={(e) => {
                 setContent(e.target.value);
@@ -409,9 +512,26 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             {contentError && (
               <span className="block mt-1 text-[11px] text-red-500 font-medium">{contentError}</span>
             )}
+            {draftError && <span className="block mt-1 text-[11px] text-red-500 font-medium">{draftError}</span>}
+            {draftInfo && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                {draftInfo.source === 'llm'
+                  ? 'AI draft from your title, targets and the incidents and shelters on record. Check it before publishing.'
+                  : `${draftInfo.reason ?? 'AI unavailable.'} Fill in local details before publishing.`}
+                {(draftInfo.unsupported_numbers ?? []).length > 0 && (
+                  <span className="text-amber-700"> Check these figures, they are not in our data: {draftInfo.unsupported_numbers!.join(', ')}.</span>
+                )}
+              </p>
+            )}
           </div>
 
           {/* Footer Actions */}
+          {submitError && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="shrink-0 mt-0.5" /> {submitError}
+            </p>
+          )}
+
           <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
             <button
               type="button"
@@ -422,10 +542,12 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors shadow-md shadow-blue-600/20 cursor-pointer"
+              disabled={areasLoading || areasUnavailable || submitting}
+              title={areasUnavailable ? 'District list unavailable' : undefined}
+              className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-colors shadow-md shadow-blue-600/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={13} />
-              <span>Publish Broadcast</span>
+              {submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+              <span>{submitting ? 'Publishing…' : 'Publish Broadcast'}</span>
             </button>
           </div>
         </form>

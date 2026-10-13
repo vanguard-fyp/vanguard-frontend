@@ -50,7 +50,7 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
         <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium shrink-0">
           <ArrowUpDown size={12} className="text-slate-400" />
           <span>Sort:</span>
-          {(['latest', 'severity', 'active'] as CommunicationSortBy[]).map((s) => (
+          {(['latest', 'active'] as CommunicationSortBy[]).map((s) => (
             <button
               key={s}
               onClick={() => onSortChange(s)}
@@ -60,7 +60,7 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {s === 'latest' ? 'Latest' : s === 'severity' ? 'Severity' : 'Active First'}
+              {s === 'latest' ? 'Latest' : 'Active First'}
             </button>
           ))}
         </div>

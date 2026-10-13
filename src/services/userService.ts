@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { UserAccount } from '../types';
+import type { Page, UserAccount } from '../types';
 
 export const userService = {
   /**
@@ -7,6 +7,17 @@ export const userService = {
    */
   getUsers: async (): Promise<UserAccount[]> => {
     return apiClient.get<UserAccount[]>('/users');
+  },
+
+  /** Server-side page (SYSTEM_ADMIN). `exclude_self` leaves the signed-in admin out. */
+  getUsersPage: async (params: {
+    limit: number;
+    offset: number;
+    search?: string;
+    role?: string;
+    exclude_self?: boolean;
+  }): Promise<Page<UserAccount>> => {
+    return apiClient.get<Page<UserAccount>>('/users', { ...params, paginated: true });
   },
 
   /**

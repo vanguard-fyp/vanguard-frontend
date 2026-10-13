@@ -6,7 +6,6 @@ import {
   Filter,
   MapPin,
   ChevronRight,
-  ChevronDown,
   Plus,
   X,
   User,
@@ -18,17 +17,34 @@ import {
   Edit3,
   Trash2,
   AlertTriangle,
+  Image as ImageIcon,
+  Loader2,
+  BrainCircuit,
 } from 'lucide-react';
 import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
-import { useIncidents, useCreateIncident, useUpdateIncident, useDeleteIncident, useGlobalIncidents } from '../../../hooks';
+import { useIncidents, useCreateIncident, useUpdateIncident, useDeleteIncident, useGlobalIncidents, usePaginatedQuery, usePromotePrediction } from '../../../hooks';
+import { incidentService } from '../../../services/incidentService';
+import { PaginationBar } from '../../../components/ui/shared/PaginationBar';
+import { MediaUploader, hasPendingUploads, uploadedRefs, type MediaItem } from '../../../components/ui/shared/MediaUploader';
+import type { LocationResolution } from '../../../components/ui/shared/MalaysiaLocationPicker';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { MalaysiaLocationPicker } from '../../../components/ui/shared/MalaysiaLocationPicker';
 import { PhoneInput } from '../../../components/ui/shared/PhoneInput';
-import type { DisasterType, SeverityLevel, DisasterLevel, GdacsEvent, IncidentManagementProps, Incident } from '../../../types';
-import { GDACS_HAZARD_DEFS, SEVERITY_ORDER, statusIcons, typeIcons } from '../../../constants/situational';
+import { HazardPredictionsPanel } from '../../../components/ui/situational/HazardPredictionsPanel';
+import { formatFullLocation } from '../../../utils/locationFormatter';
+import { editedFieldVerification } from '../../../utils/facts';
+import type { DisasterType, SeverityLevel, DisasterLevel, GdacsEvent, IncidentManagementProps, Incident, FactField, FactState } from '../../../types';
+import { GDACS_HAZARD_DEFS, statusIcons, typeIcons } from '../../../constants/situational';
 import { containerAnim, itemAnim } from '../../../constants';
+
+const SOURCE_LABEL: Record<'Citizen Reported' | 'Metrological / Sensor' | 'Agency Patrol' | 'Emergency 999', string> = {
+  'Agency Patrol': 'Agency Patrol',
+  'Emergency 999': 'Emergency 999 Call',
+  'Citizen Reported': 'Citizen Report (relayed by officer)',
+  'Metrological / Sensor': 'Sensor Alert',
+};
 
 function getCleanDisplayId(id: string, displayId?: string): string {
   if (displayId) return displayId;
@@ -41,6 +57,8 @@ function getCleanDisplayId(id: string, displayId?: string): string {
   }
   return id.toUpperCase();
 }
+
+const ALERT_RANK: Record<string, number> = { Red: 0, Orange: 1, Green: 2 };
 
 const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const navigate = useNavigate();
@@ -70,70 +88,72 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [globalSearch, setGlobalSearch] = useState('');
   const [globalAlertLevel, setGlobalAlertLevel] = useState<string>('All');
   const [globalHazardType, setGlobalHazardType] = useState<string>('All');
-  const [globalVisibleCount, setGlobalVisibleCount] = useState<number>(6);
+  const [globalPage, setGlobalPage] = useState(0);
 
   // New Incident Modal State
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<DisasterType>('Flood');
   const [newLocation, setNewLocation] = useState('');
-  const [newState, setNewState] = useState('Kelantan');
-  const [newDistrict, setNewDistrict] = useState('Kota Bharu');
+  // No default place: state/district come from the pin.
+  const [newState, setNewState] = useState('');
+  const [newDistrict, setNewDistrict] = useState('');
   const [newPostcode, setNewPostcode] = useState('');
   const [newSeverity, setNewSeverity] = useState<SeverityLevel>('High');
   const [newDisasterLevel, setNewDisasterLevel] = useState<DisasterLevel>('Level 2: State');
   const [newSourceType, setNewSourceType] = useState<
     'Citizen Reported' | 'Metrological / Sensor' | 'Agency Patrol' | 'Emergency 999'
-  >('Citizen Reported');
+  >('Agency Patrol');
   const [newDescription, setNewDescription] = useState('');
   const [newReporterContact, setNewReporterContact] = useState('');
   const [newWeatherCondition, setNewWeatherCondition] = useState('');
-  const [isWeatherLoading, setIsWeatherLoading] = useState(false);
-  const [newLat, setNewLat] = useState('6.1254');
-  const [newLng, setNewLng] = useState('102.2381');
+  const [fetchingWeather, setFetchingWeather] = useState(false);
+  const [weatherAutoLoaded, setWeatherAutoLoaded] = useState(false);
+  // No default pin: an unplaced pin is an unresolved location, never Kota Bharu.
+  const [newLat, setNewLat] = useState('');
+  const [newLng, setNewLng] = useState('');
+  const [locationResolution, setLocationResolution] = useState<LocationResolution | null>(null);
+  const [pickerKey, setPickerKey] = useState(0);
+  // Impact facts: '' = unknown (sent with field_verification "unknown").
+  const [newAffected, setNewAffected] = useState('');
+  const [newCasualties, setNewCasualties] = useState('');
+  const [newInfra, setNewInfra] = useState<'' | 'Severe' | 'Moderate' | 'Minor' | 'None'>('');
+  const [newAccess, setNewAccess] = useState('');
+  const [newMedia, setNewMedia] = useState<MediaItem[]>([]);
+  const [lastCreated, setLastCreated] = useState<Incident | null>(null);
 
-  // Auto-fill weather condition from open-meteo when lat/lng change and the field is empty
+  // Auto-detect weather via Open-Meteo when coordinates are pinned/changed
   useEffect(() => {
-    const lat = parseFloat(newLat);
-    const lng = parseFloat(newLng);
-    if (!lat || !lng || !reportModalOpen) return;
-
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setIsWeatherLoading(true);
-      try {
-        const res = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true&hourly=precipitation_probability&timezone=Asia%2FKuala_Lumpur`,
-          { signal: controller.signal }
-        );
-        const data = await res.json();
-        if (!data?.current_weather) return;
-        const code: number = data.current_weather.weathercode ?? 0;
-        const wind: number = data.current_weather.windspeed ?? 0;
-        const rainProb: number = data.hourly?.precipitation_probability?.[0] ?? 0;
-        let desc = 'Normal / Clear';
-        if (code === 0 || code === 1) desc = 'Clear sky';
-        else if (code === 2 || code === 3) desc = 'Partly cloudy / Overcast';
-        else if (code >= 51 && code <= 55) desc = 'Light Drizzle';
-        else if (code >= 61 && code <= 65) desc = 'Rain showers';
-        else if (code >= 71 && code <= 77) desc = 'Snow / Sleet';
-        else if (code >= 80 && code <= 82) desc = 'Heavy rain showers';
-        else if (code >= 95 && code <= 99) desc = 'Thunderstorm & Lightning';
-        if (wind > 40) desc += ` · Strong winds ${wind}km/h`;
-        if (rainProb > 70) desc += ` · ${rainProb}% rain probability`;
-        setNewWeatherCondition(desc);
-      } catch {
-        // Silently ignore — user can still type manually
-      } finally {
-        setIsWeatherLoading(false);
-      }
-    }, 800); // debounce 800ms after lat/lng stops changing
-
+    const latN = parseFloat(newLat);
+    const lngN = parseFloat(newLng);
+    if (!Number.isFinite(latN) || !Number.isFinite(lngN) || (latN === 0 && lngN === 0)) return;
+    let active = true;
+    setFetchingWeather(true);
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latN}&longitude=${lngN}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!active || !data?.current) return;
+        const curr = data.current;
+        const code = curr.weather_code ?? 0;
+        let cond = 'Clear / Fair';
+        if (code >= 1 && code <= 3) cond = 'Partly Cloudy';
+        else if (code >= 51 && code <= 55) cond = 'Light Drizzle';
+        else if (code >= 61 && code <= 63) cond = 'Moderate Rain';
+        else if (code >= 65 && code <= 67) cond = 'Heavy Rain';
+        else if (code >= 80 && code <= 82) cond = 'Rain Showers';
+        else if (code >= 95) cond = 'Thunderstorm';
+        const summary = `${cond}· ${Math.round(curr.temperature_2m)}°C· Wind ${Math.round(curr.wind_speed_10m)} km/h${curr.precipitation > 0 ? `· ${curr.precipitation}mm/h precip` : ''}`;
+        setNewWeatherCondition(summary);
+        setWeatherAutoLoaded(true);
+      })
+      .catch(() => { })
+      .finally(() => {
+        if (active) setFetchingWeather(false);
+      });
     return () => {
-      clearTimeout(timer);
-      controller.abort();
+      active = false;
     };
-  }, [newLat, newLng, reportModalOpen]);
+  }, [newLat, newLng]);
 
   // Form Validation Errors (inline red span)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -158,8 +178,15 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [editWeatherCondition, setEditWeatherCondition] = useState<string>('');
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
+  const [editExistingMedia, setEditExistingMedia] = useState<string[]>([]);
+  const [editMedia, setEditMedia] = useState<MediaItem[]>([]);
+
   // Delete / Archive Incident State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Prediction the report form was opened from (null for a normal report).
+  const [promotingPredictionId, setPromotingPredictionId] = useState<string | null>(null);
+  const promotePrediction = usePromotePrediction();
   const [incidentToDelete, setIncidentToDelete] = useState<Incident | null>(null);
 
   // Count active incidents (excluding resolved, rejected, and archived)
@@ -182,30 +209,22 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     }
   }, [dynamicDisasterTypes, selectedCategory]);
 
-  const filteredIncidents = useMemo(() => {
-    const base = incidents.filter((inc) => {
-      if (inc.status === 'Archived') return false;
-      const matchCategory = selectedCategory === 'All' || inc.type === selectedCategory;
-      const matchSearch =
-        inc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inc.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inc.state.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inc.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inc.display_id && inc.display_id.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchSeverity = filterSeverity === 'All' || inc.severity === filterSeverity;
-      const matchStatus =
-        filterStatus === 'All'
-          ? inc.status !== 'Resolved' && inc.status !== 'Rejected'
-          : inc.status === filterStatus;
-      return matchCategory && matchSearch && matchSeverity && matchStatus;
-    });
-    // Always sort: Critical → High → Medium → Low
-    return base.sort(
-      (a, b) => (SEVERITY_ORDER[a.severity] ?? 4) - (SEVERITY_ORDER[b.severity] ?? 4)
-    );
-  }, [incidents, selectedCategory, searchQuery, filterSeverity, filterStatus]);
-
-  const displayedIncidents = filteredIncidents.slice(0, visibleCount);
+  // Displayed list = one server page at a time (filters applied server-side).
+  // The full list above is still used for category counts and duplicate checks.
+  const pageFilters = useMemo(
+    () => ({
+      severity: filterSeverity === 'All' ? undefined : filterSeverity,
+      status: filterStatus === 'All' ? undefined : filterStatus,
+      active_only: filterStatus === 'All' ? true : undefined,
+      disaster_type: selectedCategory === 'All' ? undefined : selectedCategory,
+      search: searchQuery.trim() || undefined,
+    }),
+    [filterSeverity, filterStatus, selectedCategory, searchQuery]
+  );
+  const incidentPage = usePaginatedQuery(['incidents'], (args) => incidentService.getIncidentsPage(args), pageFilters, 10);
+  const displayedIncidents = incidentPage.items;
+  void visibleCount;
+  void setVisibleCount;
 
   // Global Disasters Filter
   const filteredGlobalDisasters = useMemo(() => {
@@ -220,10 +239,22 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       const hazardDef = GDACS_HAZARD_DEFS.find((d) => d.id === globalHazardType);
       const matchHazard = globalHazardType === 'All' || (hazardDef ? hazardDef.matches(g.hazardType) : true);
       return matchSearch && matchAlert && matchHazard;
-    });
+    })
+      // Most severe first: Red → Orange → Green (feed order kept within a level).
+      .sort((a, b) => (ALERT_RANK[a.alertLevel] ?? 9) - (ALERT_RANK[b.alertLevel] ?? 9));
   }, [globalDisasters, globalSearch, globalAlertLevel, globalHazardType]);
 
-  const displayedGlobalDisasters = filteredGlobalDisasters.slice(0, globalVisibleCount);
+  // GDACS events are client-side (one feed); paged like the national list.
+  const GLOBAL_PAGE_SIZE = 10;
+  const globalPageCount = Math.max(1, Math.ceil(filteredGlobalDisasters.length / GLOBAL_PAGE_SIZE));
+  const safeGlobalPage = Math.min(globalPage, globalPageCount - 1);
+  const displayedGlobalDisasters = filteredGlobalDisasters.slice(
+    safeGlobalPage * GLOBAL_PAGE_SIZE,
+    (safeGlobalPage + 1) * GLOBAL_PAGE_SIZE
+  );
+  useEffect(() => {
+    setGlobalPage(0);
+  }, [globalSearch, globalAlertLevel, globalHazardType]);
 
   const availableGdacsHazards = useMemo(() => {
     const events = globalDisasters as GdacsEvent[];
@@ -260,8 +291,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     setNewLocation(`${gdacs.country} (Regional Transboundary Monitoring)`);
     setNewState('Regional / Transboundary');
     setNewDistrict(gdacs.country);
-    setNewLat(String(gdacs.lat || 4.2105));
-    setNewLng(String(gdacs.lng || 101.9758));
+    setNewLat(gdacs.lat != null ? String(gdacs.lat) : '');
+    setNewLng(gdacs.lng != null ? String(gdacs.lng) : '');
     setNewSeverity(gdacs.alertLevel === 'Red' ? 'Critical' : gdacs.alertLevel === 'Orange' ? 'High' : 'Medium');
     setNewDisasterLevel('Level 3: Federal');
     setNewSourceType('Metrological / Sensor');
@@ -269,6 +300,34 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       `Escalated from live GDACS Event ID: ${gdacs.eventId}\nSeverity metric: ${gdacs.severity}\nAffected population estimate: ${gdacs.affectedPopulation?.toLocaleString() || 'N/A'
       }\nSource portal: ${gdacs.link}\n\nSummary:\n${gdacs.description}`
     );
+    setReportModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!reportModalOpen) setPromotingPredictionId(null);
+  }, [reportModalOpen]);
+
+  const handlePromotePrediction = (prediction: any) => {
+    setPromotingPredictionId(prediction.id ?? null);
+    setNewTitle(`[Predicted] ${prediction.hazard_type || 'Disaster Hazard'} - ${prediction.district || 'Predicted Zone'}`);
+    const matchedType = (['Flood', 'Flash Flood', 'Landslide', 'Severe Storm', 'Forest Fire', 'Haze', 'Earthquake', 'Drought'] as DisasterType[]).find(
+      (t) => t.toLowerCase() === (prediction.hazard_type || '').toLowerCase()
+    ) || 'Flood';
+    setNewType(matchedType);
+    setNewState(prediction.state || '');
+    setNewDistrict(prediction.district || '');
+    setNewLocation(prediction.district ? `${prediction.district}, ${prediction.state || ''}` : '');
+    setNewLat(prediction.lat != null ? String(prediction.lat) : '');
+    setNewLng(prediction.lng != null ? String(prediction.lng) : '');
+    const score = Number(prediction.hazard_score) || 0;
+    setNewSeverity(score >= 80 ? 'Critical' : score >= 60 ? 'High' : 'Medium');
+    setNewDisasterLevel(score >= 80 ? 'Level 3: Federal' : score >= 60 ? 'Level 2: State' : 'Level 1: District');
+    setNewSourceType('Metrological / Sensor');
+    setNewDescription(prediction.advisory || `Stage-A automated prediction scan early-warning for ${prediction.district || 'the sector'}.`);
+    // The prediction's exposed population is a model estimate, not a reported
+    // figure, so the affected-population fact is left for the officer to enter.
+    setNewAffected('');
+    setPickerKey((k) => k + 1);
     setReportModalOpen(true);
   };
 
@@ -285,6 +344,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     setEditInfrastructureDamage(incident.infrastructure_damage || 'None');
     setEditAccessibilityScore(incident.accessibility_score ?? 50);
     setEditWeatherCondition(incident.weather_condition || '');
+    setEditExistingMedia(incident.media_urls || []);
+    setEditMedia([]);
     setEditErrors({});
     setEditModalOpen(true);
   };
@@ -297,6 +358,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     if (!editSeverity) errors.severity = 'Severity is required';
     if (!editDisasterLevel) errors.disasterLevel = 'Disaster level is required';
     if (!editDescription.trim()) errors.description = 'Operational notes / description is required';
+    if (hasPendingUploads(editMedia)) errors.media = 'Wait for uploads to finish.';
     if (Object.keys(errors).length > 0) {
       setEditErrors(errors);
       return;
@@ -311,14 +373,28 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
           disaster_level: editDisasterLevel,
           status: editStatus as any,
           description: editDescription,
-          affected_population: Number(editAffectedPopulation) || 0,
-          casualties_count: Number(editCasualtiesCount) || 0,
+          affected_population: Math.max(0, Math.round(Number(editAffectedPopulation) || 0)),
+          casualties_count: Math.max(0, Math.round(Number(editCasualtiesCount) || 0)),
           infrastructure_damage: editInfrastructureDamage as any,
-          accessibility_score: Number(editAccessibilityScore) || 50,
+          accessibility_score: Number.isFinite(Number(editAccessibilityScore))
+            ? Math.min(100, Math.max(0, Math.round(Number(editAccessibilityScore))))
+            : editingIncident.accessibility_score,
           weather_condition: editWeatherCondition.trim() || undefined,
+          // Existing attachments the officer kept + newly uploaded ones only.
+          media_urls: [...editExistingMedia, ...uploadedRefs(editMedia)],
+          field_verification: editedFieldVerification(editingIncident, {
+            affected_population: Number(editAffectedPopulation),
+            casualties_count: Number(editCasualtiesCount),
+            infrastructure_damage: editInfrastructureDamage,
+            accessibility_score: Number(editAccessibilityScore),
+            weather_condition: editWeatherCondition.trim() || null,
+            severity: editSeverity,
+          }),
         },
       });
-      toast.success('Incident and impact metrics updated successfully!');
+      const failed = editMedia.filter((m) => m.status === 'failed').length;
+      toast.success('Incident facts updated. AI re-assessment runs automatically if impact facts changed.');
+      if (failed) toast.error(`${failed} file(s) failed to upload and were not attached. The incident was saved.`);
       setEditModalOpen(false);
       setEditingIncident(null);
     } catch (err: any) {
@@ -350,8 +426,24 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     const errors: Record<string, string> = {};
     if (!newTitle.trim()) errors.title = 'Incident title is required';
     if (!newLocation.trim()) errors.location = 'Specific location / address is required';
-    // Postcode is optional
     if (!newDescription.trim()) errors.description = 'Incident description is required';
+    const latNum = parseFloat(newLat);
+    const lngNum = parseFloat(newLng);
+    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+      errors.location = 'Place the map pin on the incident location.';
+    } else if (!locationResolution?.administrativeAreaId) {
+      errors.district = 'Choose a canonical state and district (or move the pin inside Malaysia).';
+    } else if (locationResolution.status === 'pending' || locationResolution.status === 'ambiguous') {
+      errors.district = 'Wait for the location to resolve, or choose the correct district.';
+    }
+    const parseCount = (v: string) => (v.trim() === '' ? null : Number(v));
+    const affected = parseCount(newAffected);
+    const casualties = parseCount(newCasualties);
+    const access = parseCount(newAccess);
+    if (affected !== null && (!Number.isInteger(affected) || affected < 0)) errors.facts = 'Affected population must be a whole number.';
+    if (casualties !== null && (!Number.isInteger(casualties) || casualties < 0)) errors.facts = 'Casualties must be a whole number.';
+    if (access !== null && (!Number.isInteger(access) || access < 0 || access > 100)) errors.facts = 'Accessibility must be 0-100.';
+    if (hasPendingUploads(newMedia)) errors.media = 'Wait for uploads to finish (or remove them).';
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -359,36 +451,44 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     }
     setFormErrors({});
 
-    const latNum = parseFloat(newLat) || 6.1254;
-    const lngNum = parseFloat(newLng) || 102.2381;
+    // Unknown facts are sent with their schema default but explicitly marked
+    // "unknown", so the analysis pipeline excludes them instead of treating
+    // them as observed zeros.
+    const fv: Partial<Record<FactField, FactState>> = {
+      affected_population: affected === null ? 'unknown' : 'reported',
+      casualties_count: casualties === null ? 'unknown' : 'reported',
+      infrastructure_damage: newInfra === '' ? 'unknown' : 'reported',
+      accessibility_score: access === null ? 'unknown' : 'reported',
+      weather_condition: newWeatherCondition.trim() ? 'reported' : 'unknown',
+      severity: 'reported',
+    };
 
     const payload = {
       title: newTitle.trim(),
       type: newType,
       location: newLocation.trim(),
-      state: newState,
-      district: newDistrict,
-      postcode: newPostcode.trim(),
+      state: locationResolution?.state || newState,
+      // Precise place name (e.g. Mentakab); the backend re-resolves the canonical
+      // administrative area from the coordinates and uses this id only as a hint.
+      district: (locationResolution?.district || newDistrict).trim(),
+      administrative_area_id: locationResolution?.administrativeAreaId ?? undefined,
+      postcode: newPostcode.trim() || undefined,
       coordinates: [latNum, lngNum] as [number, number],
       severity: newSeverity,
       disaster_level: newDisasterLevel,
       occurred_at: new Date().toISOString(),
-      source:
-        newSourceType === 'Citizen Reported'
-          ? 'Citizen Report'
-          : newSourceType === 'Metrological / Sensor'
-            ? 'JPS Water Sensor'
-            : 'APM Patrol',
-      reported_by_user_id: user?.id,
-      reporter_name: user?.name || 'Disaster Management Authority',
+      // Channel the information came through. Verification is decided by the
+      // backend from the signed-in role: an officer's own report is verified.
+      source: SOURCE_LABEL[newSourceType],
       reporter_contact: newReporterContact || undefined,
-      status: 'Verified' as const,
-      weather_condition: newWeatherCondition.trim() || 'Normal / Clear',
+      weather_condition: newWeatherCondition.trim() || undefined,
       description: newDescription.trim(),
-      affected_population: 0,
-      casualties_count: 0,
-      infrastructure_damage: 'None' as const,
-      accessibility_score: 100,
+      affected_population: affected ?? 0,
+      casualties_count: casualties ?? 0,
+      infrastructure_damage: (newInfra || 'None') as 'Severe' | 'Moderate' | 'Minor' | 'None',
+      accessibility_score: access ?? 50,
+      field_verification: fv,
+      media_urls: uploadedRefs(newMedia),
     };
 
     // Step 1: Detect potential duplicate against active incidents
@@ -422,8 +522,23 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
   const executeCreation = async (payload: any) => {
     try {
-      await createIncidentMutation.mutateAsync(payload);
-      toast.success('Disaster report created successfully!');
+      const created = await createIncidentMutation.mutateAsync(payload);
+      // The prediction leaves the active list only once its incident really exists.
+      if (promotingPredictionId && created?.id) {
+        promotePrediction.mutate(
+          { id: promotingPredictionId, incidentId: created.id },
+          { onError: () => toast.error('Incident saved, but the prediction could not be marked as promoted; dismiss it manually.') }
+        );
+        setPromotingPredictionId(null);
+      }
+      const failedUploads = newMedia.filter((m) => m.status === 'failed').length;
+      toast.success(
+        created.analysis
+          ? `Incident ${created.display_id} saved. AI analysis is ${created.analysis.status}” results will appear in Disaster Intelligence.`
+          : `Incident ${created.display_id} saved. AI analysis could not be queued; you can request it from Disaster Intelligence.`
+      );
+      if (failedUploads) toast.error(`${failedUploads} file(s) failed to upload and were not attached. The incident itself was saved.`);
+      setLastCreated(created);
       setReportModalOpen(false);
       setShowDuplicateModal(false);
       setDuplicateMatch(null);
@@ -431,8 +546,22 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       setNewTitle('');
       setNewLocation('');
       setNewDescription('');
+      setNewWeatherCondition('');
+      setNewAffected('');
+      setNewCasualties('');
+      setNewInfra('');
+      setNewAccess('');
+      setNewMedia([]);
+      setNewLat('');
+      setNewLng('');
+      setNewState('');
+      setNewDistrict('');
+      setNewPostcode('');
+      setLocationResolution(null);
+      setPickerKey((k) => k + 1);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create incident report');
+      // The incident was NOT saved. Uploaded files stay listed so a retry reuses them.
+      toast.error(`Incident was not saved: ${err.message || 'request failed'}. Your uploaded files are kept for retry.`);
     }
   };
 
@@ -473,7 +602,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
   return (
     <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
-      {/* ── Page Title + Description ── */}
+      {/* Page Title + Description */}
       <motion.div variants={itemAnim}>
         <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Incident Management</h1>
         <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -519,20 +648,25 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
           </button>
         </div>
 
-        {/* Primary action */}
-        <button
-          onClick={() => setReportModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer self-start sm:self-auto shrink-0"
-        >
-          <Plus size={15} />
-          <span>Report New Incident</span>
-        </button>
+        {/* Primary actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setReportModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer self-start sm:self-auto shrink-0"
+          >
+            <Plus size={15} />
+            <span>Report New Incident</span>
+          </button>
+        </div>
       </motion.div>
 
-      {/* ── VIEW 1: NATIONAL EOC INCIDENTS ── */}
+      {/* VIEW 1: NATIONAL EOC INCIDENTS */}
       {viewScope === 'national' && (
         <>
-          {/* ── Filter Bar ── */}
+          {/* Emerging Hazard Predictions Review Section */}
+          <HazardPredictionsPanel onPromoteToIncident={handlePromotePrediction} />
+
+          {/* Filter Bar */}
           <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
@@ -607,9 +741,26 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
           </motion.div>
 
           {/* Incidents List Grid */}
-          {isLoading ? (
+          {lastCreated && (
+            <div className="flex items-center justify-between gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-xs text-blue-900">
+              <span className="flex items-center gap-2">
+                <BrainCircuit size={14} /> {lastCreated.display_id} saved” AI analysis runs in the background.
+              </span>
+              <span className="flex items-center gap-2">
+                <button type="button" onClick={() => navigate(`/situational/intelligence?incidentId=${lastCreated.id}`)} className="font-bold underline cursor-pointer">
+                  View in Disaster Intelligence
+                </button>
+                <button type="button" aria-label="Dismiss" onClick={() => setLastCreated(null)} className="cursor-pointer"><X size={13} /></button>
+              </span>
+            </div>
+          )}
+          {isLoading || (incidentPage.isLoading && !incidentPage.data) ? (
             <SkeletonList count={4} />
-          ) : filteredIncidents.length === 0 ? (
+          ) : incidentPage.isError ? (
+            <div className="bg-white border border-red-200 rounded-xl p-8 text-center text-red-700 text-sm">
+              Incidents could not be loaded. <button className="underline cursor-pointer" onClick={() => incidentPage.refetch()}>Retry</button>
+            </div>
+          ) : displayedIncidents.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
               <p className="text-sm font-semibold">No incidents found matching criteria.</p>
             </div>
@@ -661,9 +812,30 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
                           <MapPin size={13} className="shrink-0 text-slate-400" />
                           <span className="truncate">
-                            {incident.location}, {incident.district}, {incident.state}
+                            {formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district)}
                           </span>
                         </div>
+
+                        {/* Citizen photo submissions thumbnail gallery */}
+                        {incident.media_urls && incident.media_urls.length > 0 && (
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="flex -space-x-2 overflow-hidden">
+                              {incident.media_urls.filter((u) => u.startsWith('http')).slice(0, 3).map((url, idx) => (
+                                <img
+                                  key={idx}
+                                  src={url}
+                                  alt={`Evidence ${idx + 1}`}
+                                  className="inline-block h-10 w-14 rounded-md object-cover ring-2 ring-white border border-slate-200 shadow-2xs"
+                                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                              <ImageIcon size={10} />
+                              {incident.media_urls.length} attachment{incident.media_urls.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Source & Reporter attribution */}
                         <div className="flex items-center gap-2 mb-3">
@@ -722,35 +894,24 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 })}
               </motion.div>
 
-              {/* Pagination / Load More */}
-              {filteredIncidents.length > 6 && (
-                <motion.div variants={itemAnim} className="flex justify-center pt-2">
-                  <button
-                    onClick={() => setVisibleCount((prev) => (prev >= filteredIncidents.length ? 6 : prev + 6))}
-                    className="px-6 py-2.5 bg-white border border-slate-200 hover:border-slate-900 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
-                  >
-                    <span>
-                      {visibleCount >= filteredIncidents.length
-                        ? 'Show Less Reports'
-                        : `Load More Reports (${filteredIncidents.length - visibleCount} remaining)`}
-                    </span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${visibleCount >= filteredIncidents.length ? 'rotate-180' : ''
-                        }`}
-                    />
-                  </button>
-                </motion.div>
-              )}
+              <PaginationBar
+                pageIndex={incidentPage.pageIndex}
+                pageCount={incidentPage.pageCount}
+                total={incidentPage.total}
+                pageSize={incidentPage.pageSize}
+                onPageChange={incidentPage.setPageIndex}
+                isFetching={incidentPage.isFetching}
+                label="incidents"
+              />
             </div>
           )}
         </>
       )}
 
-      {/* ── VIEW 2: GLOBAL GDACS LIVE DISASTERS FEED ── */}
+      {/* VIEW 2: GLOBAL GDACS LIVE DISASTERS FEED */}
       {viewScope === 'global' && (
         <div className="space-y-4">
-          {/* ── Global Filter & Telemetry HUD ── */}
+          {/* Global Filter & Telemetry HUD */}
           <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
             {/* Unified search + alert filter row */}
             <div className="flex flex-col sm:flex-row gap-2 items-center">
@@ -820,12 +981,12 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
             <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
               <span className="flex items-center gap-1.5 font-medium">
                 <Globe size={13} className="text-blue-600" />
-                Live GDACS Network — {filteredGlobalDisasters.length} Monitored Events
+                Live GDACS Network” {filteredGlobalDisasters.length} Monitored Events
               </span>
             </div>
           </motion.div>
 
-          {/* ── Global Disaster Cards Grid ── */}
+          {/* Global Disaster Cards Grid */}
           {isGlobalLoading ? (
             <SkeletonList count={4} />
           ) : filteredGlobalDisasters.length === 0 ? (
@@ -926,34 +1087,24 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 })}
               </motion.div>
 
-              {/* Global Load More */}
-              {filteredGlobalDisasters.length > 6 && (
-                <motion.div variants={itemAnim} className="flex justify-center pt-2">
-                  <button
-                    onClick={() =>
-                      setGlobalVisibleCount((prev) => (prev >= filteredGlobalDisasters.length ? 6 : prev + 6))
-                    }
-                    className="px-6 py-2.5 bg-white border border-slate-200 hover:border-slate-900 rounded-xl text-xs font-bold text-slate-700 hover:text-slate-900 transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
-                  >
-                    <span>
-                      {globalVisibleCount >= filteredGlobalDisasters.length
-                        ? 'Show Less Global Events'
-                        : `Load More Global Events (${filteredGlobalDisasters.length - globalVisibleCount} remaining)`}
-                    </span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${globalVisibleCount >= filteredGlobalDisasters.length ? 'rotate-180' : ''
-                        }`}
-                    />
-                  </button>
-                </motion.div>
+              {/* Global pagination */}
+              {filteredGlobalDisasters.length > GLOBAL_PAGE_SIZE && (
+                <PaginationBar
+                  pageIndex={safeGlobalPage}
+                  pageCount={globalPageCount}
+                  total={filteredGlobalDisasters.length}
+                  pageSize={GLOBAL_PAGE_SIZE}
+                  onPageChange={setGlobalPage}
+                  isFetching={false}
+                  label="global events"
+                />
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Report Incident Modal ── */}
+      {/* Report Incident Modal */}
       <AnimatePresence>
         {reportModalOpen && (
           <div
@@ -1026,16 +1177,16 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Source Origin<span className="text-red-500">*</span></label>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">Information channel<span className="text-red-500">*</span></label>
                     <select
                       value={newSourceType}
                       onChange={(e) => setNewSourceType(e.target.value as any)}
                       className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
                     >
-                      <option value="Citizen Reported">Citizen Reported</option>
-                      <option value="Metrological / Sensor">Metrological / Sensor (JPS / MET)</option>
-                      <option value="Agency Patrol">Agency Patrol (APM / SMART / Bomba)</option>
-                      <option value="Emergency 999">Emergency 999 Dispatch</option>
+                      <option value="Agency Patrol">Agency patrol / field team</option>
+                      <option value="Emergency 999">Emergency 999 call</option>
+                      <option value="Citizen Reported">Citizen (phone / walk-in)</option>
+                      <option value="Metrological / Sensor">Sensor alert (JPS / MET)</option>
                     </select>
                   </div>
                 </div>
@@ -1071,6 +1222,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 {/* Integrated Malaysia Location & Interactive Map Picker */}
                 <div className="pt-2 border-t border-slate-100">
                   <MalaysiaLocationPicker
+                    key={pickerKey}
+                    onResolutionChange={setLocationResolution}
                     state={newState}
                     onStateChange={setNewState}
                     district={newDistrict}
@@ -1105,23 +1258,63 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <PhoneInput
                     value={newReporterContact}
                     onChange={setNewReporterContact}
-                    label="Reporter Contact (Optional)"
+                    label="Reporter Contact"
                     placeholder="+60-12-3456 7890"
                   />
                   <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">
-                      Weather Condition (Optional)
-                      {isWeatherLoading && <span className="ml-1 text-[10px] font-medium text-blue-600">Syncing…</span>}
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-800">
+                        Observed Weather
+                      </label>
+                      {weatherAutoLoaded && (
+                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          Auto-Detected
+                        </span>
+                      )}
+                      {fetchingWeather && (
+                        <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1">
+                          <Loader2 size={10} className="animate-spin" /> Fetching weather
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={newWeatherCondition}
-                      onChange={(e) => setNewWeatherCondition(e.target.value)}
-                      placeholder='e.g. Heavy Rain / Thunderstorm / Clear'
-                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
+                      onChange={(e) => {
+                        setNewWeatherCondition(e.target.value);
+                        setWeatherAutoLoaded(false); 
+                      }}
+                      placeholder="e.g. Heavy Rain· 28°C· Wind 22 km/h"
+                      className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
                     />
                   </div>
                 </div>
+
+                <div className="rounded-lg border border-slate-200 p-3 space-y-2">
+                  <p className="text-xs font-bold text-slate-800">
+                    Reported impact facts <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <label className="text-[11px] text-slate-600">Affected people
+                      <input type="number" min={0} value={newAffected} onChange={(e) => setNewAffected(e.target.value)} placeholder="Unknown" className="mt-0.5 w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md" />
+                    </label>
+                    <label className="text-[11px] text-slate-600">Casualties
+                      <input type="number" min={0} value={newCasualties} onChange={(e) => setNewCasualties(e.target.value)} placeholder="Unknown" className="mt-0.5 w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md" />
+                    </label>
+                    <label className="text-[11px] text-slate-600">Infrastructure damage
+                      <select value={newInfra} onChange={(e) => setNewInfra(e.target.value as typeof newInfra)} className="mt-0.5 w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md">
+                        <option value="">Unknown</option><option>None</option><option>Minor</option><option>Moderate</option><option>Severe</option>
+                      </select>
+                    </label>
+                    <label className="text-[11px] text-slate-600">Road accessibility 0-100
+                      <input type="number" min={0} max={100} value={newAccess} onChange={(e) => setNewAccess(e.target.value)} placeholder="Unknown" className="mt-0.5 w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md" />
+                    </label>
+                  </div>
+                  {formErrors.facts && <span className="text-red-500 text-xs block">{formErrors.facts}</span>}
+                </div>
+
+                <MediaUploader items={newMedia} onChange={setNewMedia} disabled={createIncidentMutation.isPending} />
+                {formErrors.media && <span className="text-red-500 text-xs block">{formErrors.media}</span>}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">
@@ -1165,7 +1358,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL 2: DUPLICATE INCIDENT DETECTED REVIEW MODAL (Specification Flows 1.1 -> 3.2) ── */}
+      {/* MODAL 2: DUPLICATE INCIDENT DETECTED REVIEW MODAL (Specification Flows 1.1 -> 3.2) */}
       <AnimatePresence>
         {showDuplicateModal && duplicateMatch && (
           <div
@@ -1263,14 +1456,14 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                       <h4 className="text-sm font-bold text-slate-900">{newTitle}</h4>
                       <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
                         <MapPin size={12} className="text-blue-500 shrink-0" />
-                        <span>{newLocation}, {newDistrict}, {newState}</span>
+                        <span>{[newLocation, newDistrict, newState].filter(Boolean).join(', ')}</span>
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2 pt-2 border-t border-blue-100 text-xs">
                       <DisasterBadge type="severity" value={newSeverity} />
-                      <span className="text-[11px] font-semibold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
-                        Unverified
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                        Verified on submit
                       </span>
                       <span className="text-[11px] text-slate-500 font-mono ml-auto">
                         Level: {newDisasterLevel.replace('Level ', 'L')}
@@ -1323,7 +1516,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL 3: QUICK EDIT INCIDENT MODAL ── */}
+      {/* MODAL 3: QUICK EDIT INCIDENT MODAL */}
       <AnimatePresence>
         {editModalOpen && editingIncident && (
           <div
@@ -1343,7 +1536,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <div>
                     <h3 className="text-sm font-bold text-white">Update Incident Record</h3>
                     <p className="text-[10px] text-slate-400 font-mono">
-                      {editingIncident.display_id || editingIncident.id} · {editingIncident.type}
+                      {editingIncident.display_id || editingIncident.id}· {editingIncident.type}
                     </p>
                   </div>
                 </div>
@@ -1383,9 +1576,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         setEditSeverity(e.target.value as SeverityLevel);
                         if (editErrors.severity) setEditErrors((p) => ({ ...p, severity: '' }));
                       }}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white cursor-pointer ${
-                        editErrors.severity ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
-                      }`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white cursor-pointer ${editErrors.severity ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                        }`}
                     >
                       <option value="Critical">Critical</option>
                       <option value="High">High</option>
@@ -1405,9 +1597,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         setEditDisasterLevel(e.target.value as DisasterLevel);
                         if (editErrors.disasterLevel) setEditErrors((p) => ({ ...p, disasterLevel: '' }));
                       }}
-                      className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white cursor-pointer ${
-                        editErrors.disasterLevel ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
-                      }`}
+                      className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white cursor-pointer ${editErrors.disasterLevel ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                        }`}
                     >
                       <option value="Level 1: District">Level 1: District</option>
                       <option value="Level 2: State">Level 2: State</option>
@@ -1484,14 +1675,22 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                       setEditDescription(e.target.value);
                       if (editErrors.description) setEditErrors((p) => ({ ...p, description: '' }));
                     }}
-                    className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white ${
-                      editErrors.description ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
-                    }`}
+                    className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:bg-white ${editErrors.description ? 'border-red-500' : 'border-slate-200 focus:border-blue-600'
+                      }`}
                   />
                   {editErrors.description && (
                     <span className="text-red-500 text-xs mt-1 block">{editErrors.description}</span>
                   )}
                 </div>
+
+                <MediaUploader
+                  items={editMedia}
+                  onChange={setEditMedia}
+                  existingRefs={editExistingMedia}
+                  onRemoveExisting={(ref) => setEditExistingMedia((prev) => prev.filter((r) => r !== ref))}
+                  disabled={updateIncidentMutation.isPending}
+                />
+                {editErrors.media && <span className="text-red-500 text-xs block">{editErrors.media}</span>}
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
                   <button
@@ -1515,7 +1714,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         )}
       </AnimatePresence>
 
-      {/* ── MODAL 4: DELETE / ARCHIVE CONFIRMATION MODAL ── */}
+      {/* MODAL 4: DELETE / ARCHIVE CONFIRMATION MODAL */}
       <AnimatePresence>
         {deleteModalOpen && incidentToDelete && (
           <div

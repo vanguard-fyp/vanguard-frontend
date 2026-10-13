@@ -22,6 +22,7 @@ import { severityHex, statusConfig, activityTypeStyle, TABS } from '../../../con
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
+import { fmtScore, isNum } from '../../../utils/display';
 
 interface SitrepPanelProps {
   incident: Incident | null;
@@ -72,14 +73,14 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-bold text-slate-500">AI Priority:</span>
             <span className="text-sm font-extrabold text-blue-700">
-              {incident.ai_priority_score}/100
+              {fmtScore(incident.ai_priority_score, 100, 'Not yet scored')}
             </span>
           </div>
         </div>
         <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700 bg-blue-600"
-            style={{ width: `${incident.ai_priority_score}%` }}
+            style={{ width: `${isNum(incident.ai_priority_score) ? Math.min(100, Math.max(0, incident.ai_priority_score)) : 0}%` }}
           />
         </div>
       </div>

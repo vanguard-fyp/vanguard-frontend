@@ -1,390 +1,301 @@
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse as WarehouseIcon, Search, ChevronDown, ChevronUp, Plus, History, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  History,
+  PackagePlus,
+  Search,
+  Send,
+  Trash2,
+  Warehouse as WarehouseIcon,
+} from 'lucide-react';
 
-import type { ResourceItem, ResourceRequest, AIStockAdvisory, Warehouse } from '../../../../types';
-import { useDeleteInventoryItem, useWarehouses } from '../../../../hooks';
+import type { ResourceItem, ResourceRequest, Warehouse } from '../../../../types';
+import { useDeleteInventoryItem, useInventory, useStockAdvisory, useWarehouses } from '../../../../hooks';
 import { useToast } from '../../../../context/ToastContext';
+import { StockAdvisoryCard } from './ResourceAdvisory';
+import { requestFlow } from '../../../../utils/resourceFlow';
 
-interface InventoryStageProps {
-  inventory: ResourceItem[];
-  requests: ResourceRequest[];
-  onCreateRequisition: (item: ResourceItem) => void;
-}
+/** resource_types.category values allowed by the schema (refine-schema.sql). */
+const RESOURCE_CATEGORIES = ['Food', 'Medical supplies', 'Rescue equipment', 'Vehicles', 'Emergency supplies', 'Other'];
 
-const categoryColors: Record<string, string> = {
-  Food: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  'Medical supplies': 'bg-pink-50 text-pink-800 border-pink-200',
-  'Rescue equipment': 'bg-blue-50 text-blue-800 border-blue-200',
-  Vehicles: 'bg-amber-50 text-amber-800 border-amber-200',
-  'Emergency supplies': 'bg-purple-50 text-purple-800 border-purple-200',
+/** One colour language for stock everywhere: red = critical, amber = low, green = sufficient. */
+const STOCK_TONE: Record<string, { bar: string; text: string; dot: string }> = {
+  Critical: { bar: 'bg-red-500', text: 'text-red-700', dot: 'bg-red-500' },
+  'Low Stock': { bar: 'bg-amber-500', text: 'text-amber-700', dot: 'bg-amber-500' },
+  Sufficient: { bar: 'bg-emerald-500', text: 'text-slate-900', dot: 'bg-emerald-500' },
 };
 
-function getAIStockAdvisory(item: ResourceItem, warehouseLabel: string): AIStockAdvisory {
-  if (item.status === 'Critical') {
-    return {
-      suggested_qty: item.min_threshold * 3,
-      urgency: 'Critical',
-      confidence: 96,
-      forecast_rationale: `Critical stock depletion detected at ${warehouseLabel}. High evacuation influx in Kelantan requires immediate regional allocation.`,
-      depletion_trend: 'Depletion rate: 15% per hour (Projected zero-stock in ~3.2 hours).',
-    };
-  }
-  if (item.status === 'Low Stock') {
-    return {
-      suggested_qty: item.min_threshold * 2,
-      urgency: 'High',
-      confidence: 88,
-      forecast_rationale: `Stock below safety reserve at ${warehouseLabel}. Proactive replenishment recommended.`,
-      depletion_trend: 'Depletion rate: 6% per hour (Projected zero-stock in ~14 hours).',
-    };
-  }
-  return {
-    suggested_qty: item.min_threshold,
-    urgency: 'Medium',
-    confidence: 75,
-    forecast_rationale: `Stock level optimal at ${warehouseLabel}. Standard replenishment scheduled.`,
-    depletion_trend: 'Nominal consumption rate.',
-  };
+const REQUEST_TONE: Record<string, string> = {
+  'Pending Approval': 'text-amber-700',
+  Approved: 'text-blue-700',
+  Dispatched: 'text-blue-700',
+  Delivered: 'text-emerald-700',
+  Rejected: 'text-red-700',
+};
+
+interface InventoryStageProps {
+  requests: ResourceRequest[];
+  onCreateRequisition: (item: ResourceItem, type: 'requisition' | 'replenishment') => void;
+  /** inventory id to open and scroll to (header search deep link) */
+  focusItemId?: string | null;
 }
 
-export const InventoryStage: React.FC<InventoryStageProps> = ({
-  inventory,
-  requests,
-  onCreateRequisition,
-}) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCreateRequisition, focusItemId }) => {
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('All');
+  const [openDepots, setOpenDepots] = useState<Record<string, boolean>>({});
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  const { data: inventory = [], isLoading, isError, refetch } = useInventory();
   const { data: warehouses = [] } = useWarehouses();
-  const deleteItemMutation = useDeleteInventoryItem();
+  const advisory = useStockAdvisory();
+  const deleteItem = useDeleteInventoryItem();
   const toast = useToast();
 
-  const warehouseMap = useMemo(() => {
-    const map: Record<string, Warehouse> = {};
-    warehouses.forEach((w) => {
-      map[w.id] = w;
+  const advisoryById = useMemo(() => {
+    const map: Record<string, NonNullable<typeof advisory.data>['items'][number]> = {};
+    advisory.data?.items.forEach((a) => {
+      map[a.inventory_id] = a;
     });
     return map;
-  }, [warehouses]);
+  }, [advisory.data]);
 
-  const resolveWarehouseInfo = (item: ResourceItem) => {
-    const w = item.warehouse_id ? warehouseMap[item.warehouse_id] : undefined;
-    return {
-      label: w
-        ? `${w.name} (${w.district}, ${w.state})`
-        : 'Strategic National Depot',
-      fullAddress: w?.full_address || 'Central Logistics Depot',
-      district: w?.district || 'Central Logistics Sector',
-      contactNumber: w?.contact_number || '+603-8888-0000',
-    };
-  };
+  // Warehouse → its items (filtered). Depots needing attention come first.
+  const depots = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const match = (i: ResourceItem) =>
+      (category === 'All' || i.category === category) && (!q || i.name.toLowerCase().includes(q));
+    const byId: Record<string, ResourceItem[]> = {};
+    inventory.filter(match).forEach((i) => {
+      (byId[i.warehouse_id ?? 'none'] ??= []).push(i);
+    });
+    const rank = (s: string) => (s === 'Critical' ? 0 : s === 'Low Stock' ? 1 : 2);
+    const rows: { key: string; warehouse?: Warehouse; items: ResourceItem[]; critical: number; low: number }[] = [
+      ...warehouses.map((w) => ({ key: w.id, warehouse: w, items: byId[w.id] ?? [] })),
+      ...(byId.none ? [{ key: 'none', warehouse: undefined, items: byId.none }] : []),
+    ]
+      .filter((d) => d.items.length > 0 || (!q && category === 'All'))
+      .map((d) => ({
+        ...d,
+        items: [...d.items].sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name)),
+        critical: d.items.filter((i) => i.status === 'Critical').length,
+        low: d.items.filter((i) => i.status === 'Low Stock').length,
+      }));
+    return rows.sort((a, b) => b.critical - a.critical || b.low - a.low || (a.warehouse?.name ?? '~').localeCompare(b.warehouse?.name ?? '~'));
+  }, [inventory, warehouses, search, category]);
 
-  const filteredInventory = inventory.filter((item) => {
-    const wInfo = resolveWarehouseInfo(item);
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      wInfo.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      wInfo.district.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      wInfo.fullAddress.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  useEffect(() => {
+    if (!focusItemId) return;
+    const item = inventory.find((i) => i.id === focusItemId);
+    if (!item) return;
+    setOpenDepots((s) => ({ ...s, [item.warehouse_id ?? 'none']: true }));
+    setExpandedItemId(item.id);
+    requestAnimationFrame(() =>
+      document.getElementById(`stock-${item.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    );
+  }, [focusItemId, inventory]);
 
-  const categories = ['All', ...Array.from(new Set(inventory.map((i) => i.category)))];
+  const filtering = search.trim() !== '' || category !== 'All';
+  const isDepotOpen = (key: string) => openDepots[key] ?? (filtering || depots.length === 1);
 
-  const handleDeleteItem = async (item: ResourceItem) => {
+  const handleDelete = async (item: ResourceItem) => {
     try {
-      await deleteItemMutation.mutateAsync(item.id);
-      toast.success(`"${item.name}" removed from active stock tracking. Resource type catalog entry preserved.`);
+      await deleteItem.mutateAsync(item.id);
+      toast.success(`"${item.name}" removed from this depot's stock. The catalog entry is kept.`);
       setConfirmDeleteId(null);
-      if (expandedItemId === item.id) setExpandedItemId(null);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to remove inventory item');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove inventory item');
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner / Metrics */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-              <WarehouseIcon size={16} className="text-blue-600" />
-            </div>
-            <h3 className="text-sm font-bold text-slate-800">
-              Warehouse Inventory Stock & HIL Analytics
-            </h3>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Real-time supply depot tracking mapped directly to active disaster zones and evacuation sectors.
-          </p>
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <WarehouseIcon size={16} className="text-blue-600" />
+          <h3 className="text-sm font-bold text-slate-800">Depots &amp; stock</h3>
+          <span className="text-[11px] text-slate-400">{warehouses.length} depots · {inventory.length} stock lines</span>
         </div>
-
-        {/* Filter Bar */}
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="relative flex-1 md:w-60">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search items, depots, sectors..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Search item…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
-
           <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
           >
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+            {['All', ...RESOURCE_CATEGORIES].map((c) => (
+              <option key={c} value={c}>{c === 'All' ? 'All categories' : c}</option>
             ))}
           </select>
         </div>
       </div>
 
-      {/* Inventory List */}
-      <div className="space-y-3">
-        {filteredInventory.map((item) => {
-          const isExpanded = expandedItemId === item.id;
-          const itemRequests = requests.filter((r) => r.resource_type_id === item.resource_type_id);
-          const pct = Math.min(100, Math.round((item.stock_level / (item.min_threshold * 2)) * 100));
-          const locCtx = resolveWarehouseInfo(item);
-          const aiAdvisory = getAIStockAdvisory(item, locCtx.label);
+      {isLoading && <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-xs text-slate-400">Loading inventory…</div>}
+      {isError && (
+        <div className="bg-white border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-sm font-bold text-red-700">Inventory could not be loaded</p>
+          <button onClick={() => refetch()} className="text-xs font-bold text-blue-700 underline mt-1 cursor-pointer">Retry</button>
+        </div>
+      )}
+      {!isLoading && !isError && depots.length === 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-xs text-slate-500">No stock matches these filters.</div>
+      )}
 
-          return (
-            <motion.div
-              key={item.id}
-              layout
-              className={`bg-white border rounded-xl overflow-hidden transition-all shadow-2xs ${
-                isExpanded ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200 hover:border-slate-300'
-              }`}
+      {/* Depot → items */}
+      {depots.map((d) => {
+        const open = isDepotOpen(d.key);
+        return (
+          <div key={d.key} className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setOpenDepots((s) => ({ ...s, [d.key]: !open }))}
+              className="w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 cursor-pointer text-left"
             >
-              {/* Main Card Row */}
-              <div
-                onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                className="p-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                      {item.display_id}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${categoryColors[item.category]}`}>
-                      {item.category}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                        item.status === 'Critical'
-                          ? 'bg-red-50 text-red-700 border-red-200'
-                          : item.status === 'Low Stock'
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                    {item.status !== 'Sufficient' && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-1">
-                        <Sparkles size={10} /> AI Advisory Available
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 truncate">{item.name}</h4>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium mt-0.5 flex-wrap">
-                    <span className="text-slate-700 font-semibold">{locCtx.label}</span>
-                    <span className="text-slate-300">·</span>
-                    <span className="text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 text-[10px]">
-                      📍 {locCtx.district}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6 shrink-0">
-                  {/* Stock Bar */}
-                  <div className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-xs font-bold text-slate-900">{item.stock_level.toLocaleString()}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">{item.unit}</span>
-                    </div>
-                    <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          item.status === 'Critical'
-                            ? 'bg-red-500'
-                            : item.status === 'Low Stock'
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCreateRequisition(item);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-lg transition-colors shadow-2xs"
-                  >
-                    <Plus size={13} />
-                    Create Requisition
-                  </button>
-
-                  {confirmDeleteId === item.id ? (
-                    <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg p-1.5" onClick={(e) => e.stopPropagation()}>
-                      <AlertTriangle size={12} className="text-red-500 shrink-0" />
-                      <span className="text-[10px] text-red-700 font-bold whitespace-nowrap">Remove from stock?</span>
-                      <button
-                        onClick={() => handleDeleteItem(item)}
-                        disabled={deleteItemMutation.isPending}
-                        className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold rounded cursor-pointer"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(null)}
-                        className="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded cursor-pointer"
-                      >
-                        No
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDeleteId(item.id);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      title="Remove catalog item"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-
-                  <div className="text-slate-400">
-                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                  </div>
+              <div className="flex items-center gap-3 min-w-0">
+                {open ? <ChevronDown size={16} className="text-slate-400 shrink-0" /> : <ChevronRight size={16} className="text-slate-400 shrink-0" />}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900 truncate">{d.warehouse?.name ?? 'Not linked to a depot'}</p>
+                  {d.warehouse && <p className="text-[11px] text-slate-500 truncate">{d.warehouse.district}, {d.warehouse.state}</p>}
                 </div>
               </div>
+              <div className="flex items-center gap-3 shrink-0 text-[11px] font-semibold">
+                <span className="text-slate-500">{d.items.length} items</span>
+                {d.critical > 0 && <span className="flex items-center gap-1 text-red-700"><span className="w-2 h-2 rounded-full bg-red-500" />{d.critical} critical</span>}
+                {d.low > 0 && <span className="flex items-center gap-1 text-amber-700"><span className="w-2 h-2 rounded-full bg-amber-500" />{d.low} low</span>}
+              </div>
+            </button>
 
-              {/* Expanded details & history & HIL Advisory */}
-              <AnimatePresence>
-                {isExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden bg-slate-50/80 border-t border-slate-100 px-5 py-4 space-y-4"
-                  >
-                    {/* Item Stats Detail */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white border border-slate-200 rounded-lg p-3 shadow-2xs">
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Available Stock</p>
-                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.stock_level.toLocaleString()} {item.unit}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Min Safety Threshold</p>
-                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.min_threshold.toLocaleString()} {item.unit}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Depot Location & Sector</p>
-                        <p className="text-xs font-bold text-slate-800 mt-0.5">{locCtx.label}</p>
-                        <p className="text-[10px] text-blue-600 font-medium mt-0.5">{locCtx.district}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Active Requests</p>
-                        <p className="text-xs font-bold text-blue-700 mt-0.5">{itemRequests.length} pending/issued</p>
-                      </div>
-                    </div>
-
-                    {/* HIL AI Analytics Card */}
-                    <div className="bg-gradient-to-br from-violet-50 to-indigo-50/60 border border-violet-200 rounded-xl p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-white">
-                            <Sparkles size={11} />
+            {open && (
+              <div className="border-t border-slate-100 divide-y divide-slate-100">
+                {d.items.length === 0 && <p className="px-4 py-4 text-xs text-slate-400 italic">No stock recorded at this depot.</p>}
+                {d.items.map((item) => {
+                  const tone = STOCK_TONE[item.status] ?? STOCK_TONE.Sufficient;
+                  const pct = item.min_threshold > 0
+                    ? Math.min(100, Math.round((item.stock_level / (item.min_threshold * 2)) * 100))
+                    : item.stock_level > 0 ? 100 : 0;
+                  const isExpanded = expandedItemId === item.id;
+                  const history = requests.filter(
+                    (r) => r.resource_type_id === item.resource_type_id && (!r.warehouse_id || r.warehouse_id === item.warehouse_id)
+                  );
+                  return (
+                    <div key={item.id} id={`stock-${item.id}`} className={focusItemId === item.id ? 'ring-2 ring-blue-400 ring-inset' : ''}>
+                      <div
+                        onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                        className="px-4 py-2.5 grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,1fr)_180px_auto] items-center gap-3 cursor-pointer hover:bg-slate-50/70"
+                      >
+                        <div className="min-w-0 flex items-center gap-2.5">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${tone.dot}`} title={item.status} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                            <p className="text-[10px] text-slate-400">{item.category}</p>
                           </div>
-                          <span className="text-xs font-bold text-violet-900">HIL AI Inventory Analytics</span>
                         </div>
-                        <span className="text-[11px] font-bold text-violet-700 font-mono">{aiAdvisory.confidence}% confidence</span>
-                      </div>
-
-                      <p className="text-xs text-slate-700 leading-relaxed font-normal">{aiAdvisory.forecast_rationale}</p>
-                      <p className="text-[11px] font-semibold text-violet-800 italic">{aiAdvisory.depletion_trend}</p>
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/80 text-violet-900 border border-violet-200 text-xs font-semibold rounded-lg shadow-2xs">
-                          <Sparkles size={12} className="text-violet-600" />
-                          <span>AI Target Buffer: <strong>+{aiAdvisory.suggested_qty} {item.unit}</strong></span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Related Requests History */}
-                    <div>
-                      <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                        <History size={12} />
-                        Request Lifecycle History ({itemRequests.length})
-                      </h5>
-                      {itemRequests.length > 0 ? (
-                        <div className="space-y-2">
-                          {itemRequests.map((req) => (
-                            <div
-                              key={req.id}
-                              className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between text-xs"
+                        <div className="hidden md:block">
+                          <div className="flex items-baseline justify-between text-[11px]">
+                            <span className={`font-bold ${tone.text}`}>{item.stock_level.toLocaleString()} <span className="font-medium text-slate-400">{item.unit}</span></span>
+                            <span className="text-[10px] text-slate-400">min {item.min_threshold.toLocaleString()}</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
+                            <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => onCreateRequisition(item, 'requisition')}
+                            disabled={item.stock_level <= 0}
+                            title={item.stock_level <= 0 ? 'Nothing in stock to send' : 'Send this item to an incident'}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-50 rounded-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Send size={12} /> Send
+                          </button>
+                          <button
+                            onClick={() => onCreateRequisition(item, 'replenishment')}
+                            title="Order a restock for this depot"
+                            className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-md cursor-pointer ${
+                              item.status === 'Sufficient' ? 'text-slate-600 hover:bg-slate-100' : 'text-white bg-amber-600 hover:bg-amber-700'
+                            }`}
+                          >
+                            <PackagePlus size={12} /> Restock
+                          </button>
+                          {confirmDeleteId === item.id ? (
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-red-700 pl-1">
+                              <AlertTriangle size={11} /> Remove?
+                              <button onClick={() => handleDelete(item)} disabled={deleteItem.isPending} className="px-1.5 py-0.5 bg-red-600 text-white rounded cursor-pointer">Yes</button>
+                              <button onClick={() => setConfirmDeleteId(null)} className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded cursor-pointer">No</button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(item.id)}
+                              title="Remove from this depot"
+                              className="p-1.5 text-slate-300 hover:text-red-600 rounded-md cursor-pointer"
                             >
-                              <div>
-                                <span className="font-mono font-bold text-slate-400 mr-2">{req.display_id}</span>
-                                <span className="font-bold text-slate-800">{req.quantity_requested} {req.unit}</span>
-                                <span className="text-slate-500 ml-2">by {req.agency} ({req.district})</span>
-                              </div>
-                              <span
-                                className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
-                                  req.status === 'Approved' || req.status === 'Dispatched'
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                    : req.status === 'Pending Approval'
-                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
-                                    : 'bg-red-50 text-red-700 border border-red-200'
-                                }`}
-                              >
-                                {req.status}
-                              </span>
-                            </div>
-                          ))}
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-xs text-slate-400 font-medium italic">No prior request history recorded for this inventory item.</p>
-                      )}
+                      </div>
+
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.18 }}
+                            className="overflow-hidden bg-slate-50/70 px-4 py-3 space-y-3"
+                          >
+                            <StockAdvisoryCard
+                              item={advisoryById[item.id]}
+                              unit={item.unit}
+                              isLoading={advisory.isLoading}
+                              isError={advisory.isError}
+                              onRetry={() => advisory.refetch()}
+                            />
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                                <History size={11} /> Requests ({history.length})
+                              </p>
+                              {history.length === 0 ? (
+                                <p className="text-[11px] text-slate-400 italic">No requests for this item yet.</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  {history.slice(0, 6).map((r) => (
+                                    <div key={r.id} className="flex items-center justify-between text-[11px] bg-white border border-slate-200 rounded-md px-2.5 py-1.5">
+                                      <span className="text-slate-700">
+                                        <span className="font-mono text-slate-400 mr-2">{r.display_id}</span>
+                                        {requestFlow(r) === 'replenishment' ? 'Restock' : 'To incident'} · {r.quantity_requested.toLocaleString()} {r.unit}
+                                      </span>
+                                      <span className={`font-bold ${REQUEST_TONE[r.status] ?? 'text-slate-600'}`}>{r.status}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          );
-        })}
-
-        {filteredInventory.length === 0 && (
-          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-xs">
-            <Search size={32} className="mx-auto mb-2 text-slate-300" />
-            <p className="text-sm font-bold text-slate-700">No related searching criteria found</p>
-            <p className="text-xs text-slate-400 mt-1">
-              No warehouse inventory items match your search &ldquo;{searchQuery}&rdquo; or category filter.
-            </p>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-
+        );
+      })}
     </div>
   );
 };

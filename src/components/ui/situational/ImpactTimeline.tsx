@@ -25,12 +25,9 @@ const TimelineTooltip = ({ active, payload, label }: any) => {
         <p className={`font-black text-sm ${isPred ? 'text-purple-700' : 'text-blue-700'}`}>
           {point.affected_population.toLocaleString()} affected
         </p>
-        <p className="text-slate-600 text-[11px] font-medium">
-          {point.casualties_count ?? 0} confirmed casualties
-        </p>
-        <p className="text-slate-600 text-[11px] font-medium">
-          {point.impact_radius_km != null ? `${point.impact_radius_km} km radius` : 'Impact radius not recorded'} · {point.severity ?? 'Unclassified'} Severity
-        </p>
+        {!isPred && point.casualties_count != null && (
+          <p className="text-slate-600 text-[11px] font-medium">{point.casualties_count} casualties reported</p>
+        )}
         {point.stage && (
           <p className="text-[10px] font-mono text-slate-400">
             Stage: {point.stage}
@@ -47,6 +44,8 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
   timeline,
   size = 'compact',
   mode = 'predictive',
+  joinPrediction = true,
+  title,
 }) => {
   if (!timeline || timeline.length === 0) return null;
 
@@ -63,10 +62,15 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
     ? Math.round(((latest.affected_population - first.affected_population) / Math.max(first.affected_population, 1)) * 100)
     : 0;
 
-  const lastConfirmedIdx = displayTimeline.findIndex((p, idx) => {
-    const next = displayTimeline[idx + 1];
-    return !p.is_predicted && next && next.is_predicted;
-  });
+  const lastConfirmedIdx = joinPrediction
+    ? displayTimeline.findIndex((p, idx) => {
+        const next = displayTimeline[idx + 1];
+        return !p.is_predicted && next && next.is_predicted;
+      })
+    : -1;
+  const firstConfirmed = displayTimeline.find((p) => !p.is_predicted);
+  const lastConfirmed = [...displayTimeline].reverse().find((p) => !p.is_predicted);
+  const lastPredicted = [...displayTimeline].reverse().find((p) => p.is_predicted);
 
   const chartData = displayTimeline.map((p, idx) => {
     const isPred = !!p.is_predicted;
@@ -88,13 +92,8 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
           <div>
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <TrendingUp size={17} className={hasPredictions ? 'text-purple-600' : 'text-blue-600'} />
-              {mode === 'confirmed-only' ? 'Confirmed Ground Impact Progression' : 'AI Impact Trajectory & Forecast Model'}
+              {title ?? (mode === 'confirmed-only' ? 'Confirmed Ground Impact Progression' : 'Impact Progression & AI Forecast')}
             </h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {mode === 'confirmed-only'
-                ? 'Chronological ground-truth logs from emergency responders and verification teams.'
-                : 'Historical ground sensor verification combined with AI 24h predictive flood/disaster propagation.'}
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -104,7 +103,7 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
                   <span className="size-2 rounded-full bg-blue-600 inline-block" /> Confirmed History
                 </span>
                 <span className="flex items-center gap-1 text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
-                  <Sparkles size={10} className="text-purple-600" /> AI Forecast (+24h)
+                  <Sparkles size={10} className="text-purple-600" /> AI projection (dotted)
                 </span>
               </div>
             )}
@@ -159,16 +158,18 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
                 dot={{ r: 4, fill: '#8b5cf6', stroke: '#ffffff', strokeWidth: 1.5 }}
               />
             )}
-            <Area
-              type="monotone"
-              dataKey="casualties"
-              stroke="#dc2626"
-              fill="none"
-              strokeWidth={2}
-              name="Confirmed Casualties"
-              connectNulls={false}
-              dot={{ r: 3, fill: '#dc2626', stroke: '#ffffff', strokeWidth: 1.5 }}
-            />
+            {mode === 'confirmed-only' && (
+              <Area
+                type="monotone"
+                dataKey="casualties"
+                stroke="#dc2626"
+                fill="none"
+                strokeWidth={2}
+                name="Confirmed Casualties"
+                connectNulls={false}
+                dot={{ r: 3, fill: '#dc2626', stroke: '#ffffff', strokeWidth: 1.5 }}
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -176,14 +177,22 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
       {size === 'full' && (
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <p>
-            Current baseline: <span className="font-bold text-slate-800">{first.affected_population.toLocaleString()} affected</span> (logged at {formatDateTime(first.timestamp, 'Just Now')}).
+            {lastConfirmed ? (
+              <>
+                Latest confirmed: <span className="font-bold text-slate-800">{lastConfirmed.affected_population.toLocaleString()} affected</span>{' '}
+                ({formatDateTime(lastConfirmed.timestamp)})
+                {firstConfirmed && firstConfirmed !== lastConfirmed && <> · first {firstConfirmed.affected_population.toLocaleString()}</>}
+              </>
+            ) : (
+              'No confirmed figures reported yet'
+            )}
           </p>
-          <p>
-            {latest.is_predicted ? 'Projected peak' : 'Latest verified reading'}:{' '}
-            <span className={`font-bold ${latest.is_predicted ? 'text-purple-700' : 'text-slate-800'}`}>
-              {latest.affected_population.toLocaleString()} affected{latest.impact_radius_km != null ? ` (${latest.impact_radius_km}km radius)` : ''}
-            </span>
-          </p>
+          {lastPredicted && (
+            <p>
+              Projected by {formatDateTime(lastPredicted.timestamp)}:{' '}
+              <span className="font-bold text-purple-700">{lastPredicted.affected_population.toLocaleString()}</span>
+            </p>
+          )}
         </div>
       )}
     </div>

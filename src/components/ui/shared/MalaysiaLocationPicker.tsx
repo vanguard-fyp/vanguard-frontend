@@ -1,58 +1,34 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MapPin, Search, Navigation, AlertCircle, Loader2 } from 'lucide-react';
-import { findPostcode } from 'malaysia-postcodes';
+import { MapPin, Search, Navigation, AlertCircle, Loader2, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { useAdministrativeAreas } from '../../../hooks';
+import { geoService } from '../../../services/geoService';
+import {
+  canonicalState,
+  districtsForState,
+  initialLocation,
+  isSubmittable,
+  locationReducer,
+  pendingLookup,
+  stateCentroid,
+  statesOf,
+  type LocationState,
+} from '../../../utils/locationSync';
 
-export const MALAYSIA_STATES = [
-  'Johor',
-  'Kedah',
-  'Kelantan',
-  'Melaka',
-  'Negeri Sembilan',
-  'Pahang',
-  'Perak',
-  'Perlis',
-  'Pulau Pinang',
-  'Sabah',
-  'Sarawak',
-  'Selangor',
-  'Terengganu',
-  'WP Kuala Lumpur',
-  'WP Putrajaya',
-  'WP Labuan',
-  'Regional / Transboundary',
-] as const;
-
-// The `malaysia-postcodes` package returns states in title-case (e.g. "Wp Kuala Lumpur").
-// Map those to the app's canonical state names so the State dropdown + coordinate lookup stay in sync.
-const PACKAGE_STATE_TO_APP_STATE: Record<string, string> = {
-  'wp kuala lumpur': 'WP Kuala Lumpur',
-  'kuala lumpur': 'WP Kuala Lumpur',
-  'wp putrajaya': 'WP Putrajaya',
-  'putrajaya': 'WP Putrajaya',
-  'wp labuan': 'WP Labuan',
-  'labuan': 'WP Labuan',
-  johor: 'Johor',
-  kedah: 'Kedah',
-  kelantan: 'Kelantan',
-  melaka: 'Melaka',
-  malacca: 'Melaka',
-  'negeri sembilan': 'Negeri Sembilan',
-  pahang: 'Pahang',
-  perak: 'Perak',
-  perlis: 'Perlis',
-  'pulau pinang': 'Pulau Pinang',
-  'penang': 'Pulau Pinang',
-  sabah: 'Sabah',
-  sarawak: 'Sarawak',
-  selangor: 'Selangor',
-  terengganu: 'Terengganu',
-};
-
-function normalizePackageState(pkgState?: string): string | null {
-  if (!pkgState) return null;
-  return PACKAGE_STATE_TO_APP_STATE[pkgState.trim().toLowerCase()] ?? null;
+export interface LocationResolution {
+  state: string;
+  /** precise place name (e.g. Mentakab) */
+  district: string;
+  /** canonical administrative district the pin lies in (e.g. Temerloh) */
+  adminDistrict: string;
+  postcode: string;
+  zone: string | null;
+  administrativeAreaId: string | null;
+  lat: number | null;
+  lng: number | null;
+  status: LocationState['status'];
+  submittable: boolean;
 }
 
 interface MalaysiaLocationPickerProps {
@@ -68,8 +44,38 @@ interface MalaysiaLocationPickerProps {
   onLngChange: (lng: string) => void;
   postcode?: string;
   onPostcodeChange?: (postcode: string) => void;
+  /** Full canonical resolution (zone, admin-area id, status) for the parent form. */
+  onResolutionChange?: (r: LocationResolution) => void;
 }
 
+const STATUS_UI: Record<string, { text: string; cls: string; icon: 'ok' | 'warn' | 'spin' }> = {
+  resolved: { text: 'Location resolved', cls: 'text-emerald-700', icon: 'ok' },
+  partial: { text: 'Partially resolved', cls: 'text-amber-700', icon: 'warn' },
+  ambiguous: { text: 'Ambiguous — choose the correct district', cls: 'text-amber-700', icon: 'warn' },
+  unresolved: { text: 'Unresolved location', cls: 'text-red-700', icon: 'warn' },
+  unavailable: { text: 'Location service unavailable', cls: 'text-red-700', icon: 'warn' },
+  pending: { text: 'Resolving the pin…', cls: 'text-slate-500', icon: 'spin' },
+  idle: { text: 'Search an address or click the map to place the pin', cls: 'text-slate-500', icon: 'warn' },
+};
+
+const MALAYSIA_VIEW: [number, number] = [4.2105, 108.9758];
+
+const num = (v: string): number | null => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const inputCls =
+  'w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white disabled:opacity-60';
+
+/**
+ * Incident location picker. The map pin is the source of truth: searching an
+ * address, clicking/dragging the map or entering a postcode moves the pin, and
+ * the backend's reverse lookup of the pin fills the canonical state/district,
+ * postcode and town. The address text follows the pin unless the officer
+ * picked it from the search list. Unresolved input is kept and flagged — never
+ * replaced with a default location.
+ */
 export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
   state,
   onStateChange,
@@ -81,445 +87,336 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
   onLatChange,
   lng,
   onLngChange,
-  postcode: propPostcode,
+  postcode,
   onPostcodeChange,
+  onResolutionChange,
 }) => {
-  const [internalPostcode, setInternalPostcode] = useState(propPostcode || '');
-  const [isSearchingGeocode, setIsSearchingGeocode] = useState(false);
-  const [lookupFeedback, setLookupFeedback] = useState<string | null>(null);
-  const [locationSuggestions, setLocationSuggestions] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const { data: areas = [], isLoading: areasLoading, isError: areasError, refetch: refetchAreas } = useAdministrativeAreas();
+  const [s, dispatch] = useReducer(locationReducer, undefined, () =>
+    initialLocation({ state, district, postcode: postcode ?? '', lat: num(lat), lng: num(lng) })
+  );
+  const [suggestions, setSuggestions] = useState<{ display_name: string; lat: string; lon: string }[]>([]);
+  const [searching, setSearching] = useState(false);
 
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<L.Map | null>(null);
+  const mapEl = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
-  const locationDebounceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
+  // 'search' = the address text was chosen from the search list and is kept as is;
+  // 'map' = the address follows the pin's reverse lookup.
+  const addressMode = useRef<'search' | 'map'>('map');
 
-  const parsedLat = parseFloat(lat) || 4.2105;
-  const parsedLng = parseFloat(lng) || 101.9758;
+  const states = useMemo(() => statesOf(areas), [areas]);
+  const districts = useMemo(() => (s.state ? districtsForState(areas, s.state) : []), [areas, s.state]);
+  const selectedState = canonicalState(s.state, states);
 
-  // Sync prop postcode when passed
+  // ── Lookups: run the one the latest user action requires ─────────────────
   useEffect(() => {
-    if (propPostcode !== undefined && propPostcode !== internalPostcode) {
-      setInternalPostcode(propPostcode);
-    }
-  }, [propPostcode]);
-
-  // Dynamic Reverse Geocoding when pin moves / map is clicked
-  const reverseGeocodeCoordinates = useCallback(async (targetLat: number, targetLng: number) => {
-    setIsSearchingGeocode(true);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&zoom=18&addressdetails=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      const data = await res.json();
-      if (data && data.address) {
-        const addr = data.address;
-        const road = addr.road || addr.street || addr.neighbourhood || addr.suburb || addr.quarter || addr.amenity || '';
-        const city = addr.city || addr.town || addr.municipality || addr.district || addr.county || '';
-        const rawState = addr.state || '';
-        const stateName = normalizePackageState(rawState) || (MALAYSIA_STATES.includes(rawState as any) ? rawState : null);
-        const postCodeFound = (addr.postcode || '').replace(/\D/g, '').slice(0, 5);
-
-        if (road || city) {
-          const conciseLoc = [road, city].filter(Boolean).join(', ');
-          onLocationChange(conciseLoc || data.display_name.split(',').slice(0, 3).join(',').trim());
-        }
-        if (city) {
-          onDistrictChange(city);
-        }
-        if (stateName && MALAYSIA_STATES.includes(stateName as any)) {
-          onStateChange(stateName);
-        }
-        if (postCodeFound && postCodeFound.length === 5) {
-          setInternalPostcode(postCodeFound);
-          onPostcodeChange?.(postCodeFound);
-        }
-        const summary = [road, city, stateName].filter(Boolean).join(', ');
-        setLookupFeedback(`Pin location updated: ${summary || 'Selected point'}`);
+    const kind = pendingLookup(s);
+    if (!kind) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    const seq = s.seq;
+    const timer = setTimeout(async () => {
+      try {
+        const result =
+          kind === 'reverse'
+            ? await geoService.reverse(s.lat as number, s.lng as number, ctrl.signal)
+            : await geoService.forward({ state: s.state || undefined, district: s.district || undefined, postcode: s.postcode }, ctrl.signal);
+        dispatch({ type: 'RESOLVED', seq, result });
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') return;
+        dispatch({ type: 'FAILED', seq, message: 'Location service is unavailable. Your selection was kept; adjust the pin manually.' });
       }
-    } catch {
-      // Graceful fallback
-    } finally {
-      setIsSearchingGeocode(false);
-    }
-  }, [onLocationChange, onDistrictChange, onStateChange, onPostcodeChange]);
-
-  // Initialize Leaflet Map
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-
-    if (leafletMapRef.current) {
-      leafletMapRef.current.remove();
-      leafletMapRef.current = null;
-    }
-
-    const map = L.map(mapContainerRef.current, {
-      center: [parsedLat, parsedLng],
-      zoom: 12,
-      zoomControl: false,
-      attributionControl: false,
-    });
-
-    leafletMapRef.current = map;
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
-
-    L.control.zoom({ position: 'topright' }).addTo(map);
-
-    // Custom pulse marker icon
-    const customIcon = L.divIcon({
-      className: 'custom-pin-marker',
-      html: `
-        <div style="position:relative; width:32px; height:32px; display:flex; align-items:center; justify-content:center;">
-          <div style="position:absolute; width:24px; height:24px; border-radius:50%; background:#2563eb; opacity:0.3; animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
-          <div style="position:relative; width:26px; height:26px; background:#2563eb; border:2.5px solid #ffffff; border-radius:50%; box-shadow:0 4px 6px -1px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:white;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-    });
-
-    const marker = L.marker([parsedLat, parsedLng], {
-      icon: customIcon,
-      draggable: true,
-    }).addTo(map);
-
-    markerRef.current = marker;
-
-    // Handle marker drag
-    marker.on('dragend', (event) => {
-      const position = event.target.getLatLng();
-      const newLatStr = position.lat.toFixed(6);
-      const newLngStr = position.lng.toFixed(6);
-      onLatChange(newLatStr);
-      onLngChange(newLngStr);
-
-      clearTimeout(reverseGeocodeTimer.current);
-      reverseGeocodeTimer.current = setTimeout(() => {
-        reverseGeocodeCoordinates(position.lat, position.lng);
-      }, 300);
-    });
-
-    // Handle map click
-    map.on('click', (e) => {
-      marker.setLatLng(e.latlng);
-      const newLatStr = e.latlng.lat.toFixed(6);
-      const newLngStr = e.latlng.lng.toFixed(6);
-      onLatChange(newLatStr);
-      onLngChange(newLngStr);
-
-      clearTimeout(reverseGeocodeTimer.current);
-      reverseGeocodeTimer.current = setTimeout(() => {
-        reverseGeocodeCoordinates(e.latlng.lat, e.latlng.lng);
-      }, 300);
-    });
-
+    }, kind === 'reverse' ? 300 : 500);
     return () => {
-      map.remove();
-      leafletMapRef.current = null;
+      clearTimeout(timer);
+      ctrl.abort();
     };
+    // Only the sequence number decides when a lookup is needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.seq, s.status]);
+
+  // The address follows the pin after a map click/drag (not after a search pick).
+  useEffect(() => {
+    if (s.origin !== 'pin' || !s.displayName) return;
+    if (addressMode.current === 'map') onLocationChange(s.displayName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.displayName, s.seq]);
+
+  // ── Propagate resolved values to the parent form ─────────────────────────
+  useEffect(() => {
+    if (s.state !== state) onStateChange(s.state);
+    if (s.district !== district) onDistrictChange(s.district);
+    if (onPostcodeChange && s.postcode !== (postcode ?? '')) onPostcodeChange(s.postcode);
+    if (s.lat != null && s.lat.toFixed(6) !== lat) onLatChange(s.lat.toFixed(6));
+    if (s.lng != null && s.lng.toFixed(6) !== lng) onLngChange(s.lng.toFixed(6));
+    if (s.lat == null && lat !== '') onLatChange('');
+    if (s.lng == null && lng !== '') onLngChange('');
+    onResolutionChange?.({
+      state: s.state,
+      district: s.district,
+      adminDistrict: s.adminDistrict,
+      postcode: s.postcode,
+      zone: s.zone,
+      administrativeAreaId: s.administrativeAreaId,
+      lat: s.lat,
+      lng: s.lng,
+      status: s.status,
+      submittable: isSubmittable(s),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s]);
+
+  // ── Map ──────────────────────────────────────────────────────────────────
+  const movePin = useCallback((latV: number, lngV: number, mode: 'search' | 'map') => {
+    addressMode.current = mode;
+    dispatch({ type: 'PIN_MOVED', lat: latV, lng: lngV });
   }, []);
 
-  // Sync marker and map center when lat/lng change externally
   useEffect(() => {
-    if (leafletMapRef.current && markerRef.current) {
-      const currentPos = markerRef.current.getLatLng();
-      if (Math.abs(currentPos.lat - parsedLat) > 0.0001 || Math.abs(currentPos.lng - parsedLng) > 0.0001) {
-        markerRef.current.setLatLng([parsedLat, parsedLng]);
-        leafletMapRef.current.flyTo([parsedLat, parsedLng], Math.max(leafletMapRef.current.getZoom(), 12), {
-          duration: 0.8,
-        });
-      }
-    }
-  }, [parsedLat, parsedLng]);
+    if (!mapEl.current) return;
+    const start: [number, number] = s.lat != null && s.lng != null ? [s.lat, s.lng] : MALAYSIA_VIEW;
+    const map = L.map(mapEl.current, { center: start, zoom: s.lat != null ? 13 : 5, zoomControl: false });
+    mapRef.current = map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors',
+    }).addTo(map);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    map.on('click', (e: L.LeafletMouseEvent) => movePin(e.latlng.lat, e.latlng.lng, 'map'));
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Handle Postcode Lookup — backed by the `malaysia-postcodes` dataset and dynamic geocoding
-  const handlePostcodeLookup = async (inputCode: string) => {
-    const clean = inputCode.replace(/\D/g, '').slice(0, 5);
-    setInternalPostcode(clean);
-    onPostcodeChange?.(clean);
-    setLookupFeedback(null);
-
-    if (clean.length < 5) return;
-
-    const result = findPostcode(clean);
-    if (result.found && result.city) {
-      const appState = normalizePackageState(result.state) ?? state;
-      onStateChange(appState);
-      onDistrictChange(result.city);
-      setLookupFeedback(`Postcode resolved: ${result.city}, ${appState}. Pinning coordinates...`);
-
-      // Dynamically geocode exact postcode + district for high accuracy
-      try {
-        const query = `${clean} ${result.city} ${appState} Malaysia`;
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=my&limit=1`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        const data = await res.json();
-        if (data && data.length > 0) {
-          const foundLat = parseFloat(data[0].lat);
-          const foundLng = parseFloat(data[0].lon);
-          onLatChange(foundLat.toFixed(6));
-          onLngChange(foundLng.toFixed(6));
-          setLookupFeedback(`Found & Pinned: ${result.city}, ${appState} (${clean})`);
-          return;
-        }
-      } catch {
-        // Fallback
-      }
-      setLookupFeedback(`Found: ${result.city}, ${appState}. You can adjust the pin on the map.`);
-    } else {
-      setLookupFeedback('Postcode not recognised. Select the state manually or click on the map.');
-    }
-  };
-
-  // Handle State Change
-  const handleStateSelect = async (selectedState: string) => {
-    onStateChange(selectedState);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(selectedState + ', Malaysia')}&countrycodes=my&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      const data = await res.json();
-      if (data && data.length > 0) {
-        onLatChange(parseFloat(data[0].lat).toFixed(6));
-        onLngChange(parseFloat(data[0].lon).toFixed(6));
-        return;
-      }
-    } catch {
-      // Fallback
-    }
-  };
-
-  // Search online places based on query scoped to Malaysia, Postcode, District & State
-  const fetchLocationSuggestions = async (searchQuery: string) => {
-    if (!searchQuery || searchQuery.trim().length < 2) {
-      setLocationSuggestions([]);
-      setShowSuggestions(false);
+  // Keep the marker on the pin, whatever moved it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (s.lat == null || s.lng == null) {
+      markerRef.current?.remove();
+      markerRef.current = null;
       return;
     }
-    setIsSearchingGeocode(true);
-    try {
-      const clean = searchQuery.trim();
-      const scopeParts = [clean];
-      if (district && !clean.toLowerCase().includes(district.toLowerCase())) {
-        scopeParts.push(district);
-      }
-      if (state && state !== 'Regional / Transboundary' && !clean.toLowerCase().includes(state.toLowerCase())) {
-        scopeParts.push(state);
-      }
-      scopeParts.push('Malaysia');
-      const query = scopeParts.join(', ');
+    const ll = L.latLng(s.lat, s.lng);
+    if (!markerRef.current) {
+      const icon = L.divIcon({
+        className: 'custom-pin-marker',
+        html: '<div style="width:26px;height:26px;background:#2563eb;border:2.5px solid #fff;border-radius:50%;box-shadow:0 4px 6px -1px rgba(0,0,0,.3)"></div>',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+      markerRef.current = L.marker(ll, { icon, draggable: true }).addTo(map);
+      markerRef.current.on('dragend', (e) => {
+        const p = (e.target as L.Marker).getLatLng();
+        movePin(p.lat, p.lng, 'map');
+      });
+    } else {
+      markerRef.current.setLatLng(ll);
+    }
+    // Clicks on the visible map do not re-centre; search / district / postcode jumps do.
+    if (s.origin !== 'pin' || !map.getBounds().pad(-0.1).contains(ll)) {
+      map.flyTo(ll, Math.max(map.getZoom(), 13), { duration: 0.6 });
+    }
+  }, [s.lat, s.lng, s.origin, movePin]);
 
-      let response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=my&limit=5`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      let data = await response.json();
-
-      // Fallback to simpler query if scoped search returned 0 items
-      if (!Array.isArray(data) || data.length === 0) {
-        response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(clean + ', Malaysia')}&countrycodes=my&limit=5`,
+  // ── Address / place search (OpenStreetMap Nominatim) ─────────────────────
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchPlaces = (q: string) => {
+    clearTimeout(searchTimer.current);
+    if (q.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=my&limit=6`,
           { headers: { 'Accept-Language': 'en' } }
         );
-        data = await response.json();
+        setSuggestions(res.ok ? await res.json() : []);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearching(false);
       }
-
-      if (Array.isArray(data) && data.length > 0) {
-        setLocationSuggestions(data);
-        setShowSuggestions(true);
-      } else {
-        setLocationSuggestions([]);
-      }
-    } catch {
-      setLocationSuggestions([]);
-    } finally {
-      setIsSearchingGeocode(false);
-    }
+    }, 600);
   };
 
-  const handleLocationInputChange = (val: string) => {
-    onLocationChange(val);
-    clearTimeout(locationDebounceTimer.current);
-    if (val.trim().length >= 2) {
-      locationDebounceTimer.current = setTimeout(() => {
-        fetchLocationSuggestions(val);
-      }, 350);
-    } else {
-      setLocationSuggestions([]);
-      setShowSuggestions(false);
-    }
-  };
-
-  const handleSelectSuggestion = (item: { display_name: string; lat: string; lon: string }) => {
-    const parts = item.display_name.split(',');
-    const conciseName = parts.slice(0, 3).join(',').trim();
-    onLocationChange(conciseName || item.display_name);
-    const newLat = parseFloat(item.lat);
-    const newLng = parseFloat(item.lon);
-    onLatChange(newLat.toFixed(6));
-    onLngChange(newLng.toFixed(6));
-    setShowSuggestions(false);
-    setLocationSuggestions([]);
-    setLookupFeedback(`Pinned location: ${conciseName}`);
-  };
-
-  // Manual pin geocoding search
-  const handleSearchOnlineLocation = async () => {
-    if (!location.trim() && !district.trim()) return;
-    await fetchLocationSuggestions(location || district);
-  };
+  const ui = STATUS_UI[s.status] ?? STATUS_UI.idle;
+  const areasUnavailable = areasError || (!areasLoading && areas.length === 0);
 
   return (
     <div className="space-y-3">
-      {/* ── State & Postcode Fast Selection ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Postcode Search */}
+      {/* 3. Derived fields — filled from the pin, editable */}
+      {areasUnavailable && !areasLoading && (
+        <p className="text-[11px] text-red-700 flex items-center gap-1.5">
+          <AlertTriangle size={12} /> Administrative districts could not be loaded, so the district cannot be validated.
+          <button type="button" onClick={() => refetchAreas()} className="underline font-semibold flex items-center gap-1 cursor-pointer">
+            <RefreshCw size={11} /> Retry
+          </button>
+        </p>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
         <div>
           <label className="block text-xs font-bold text-slate-800 mb-1">
-            Postcode <span className="text-[10px] text-slate-500 font-normal">(Optional - auto-fills)</span>
+            Postcode <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
           </label>
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               inputMode="numeric"
               maxLength={5}
-              value={internalPostcode}
-              onChange={(e) => handlePostcodeLookup(e.target.value)}
-              placeholder="e.g. 50480 / 15000"
-              className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-mono"
+              value={s.postcode}
+              onChange={(e) => dispatch({ type: 'POSTCODE_ENTERED', postcode: e.target.value })}
+              placeholder="e.g. 15000"
+              title="Entering a postcode moves the pin"
+              className={`${inputCls} font-mono pl-8`}
             />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
         </div>
-
-        {/* State Dropdown */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1">State / Territory <span className="text-red-500">*</span></label>
+          <label className="block text-xs font-bold text-slate-800 mb-1 truncate">State / Territory <span className="text-red-500">*</span></label>
           <select
-            value={state}
-            onChange={(e) => handleStateSelect(e.target.value)}
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 cursor-pointer"
+            value={selectedState}
+            disabled={areasUnavailable}
+            onChange={(e) => {
+              const st = e.target.value;
+              dispatch({ type: 'STATE_SELECTED', state: st, areas });
+              const c = stateCentroid(areas, st);
+              if (c && mapRef.current) mapRef.current.flyTo([c.lat, c.lng], 8, { duration: 0.6 });
+            }}
+            className={`${inputCls} cursor-pointer`}
           >
-            {MALAYSIA_STATES.map((st) => (
-              <option key={st} value={st}>
-                {st}
-              </option>
+            <option value="">{areasLoading ? 'Loading…' : 'Select state'}</option>
+            {selectedState && !states.includes(selectedState) && <option value={selectedState}>{selectedState}</option>}
+            {states.map((st) => (
+              <option key={st} value={st}>{st}</option>
             ))}
           </select>
         </div>
-
-        {/* District */}
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1">District / Zone <span className="text-red-500">*</span></label>
+          <label className="block text-xs font-bold text-slate-800 mb-1">
+            District / Zone <span className="text-red-500">*</span>
+          </label>
           <input
             type="text"
-            value={district}
-            onChange={(e) => onDistrictChange(e.target.value)}
-            required
-            placeholder="e.g. Kota Bharu, Petaling"
-            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600"
+            list="vanguard-admin-districts"
+            value={s.district}
+            maxLength={50}
+            disabled={!s.state && s.lat == null}
+            onChange={(e) => {
+              const v = e.target.value;
+              const canonical = districts.find((d) => d.district.toLowerCase() === v.trim().toLowerCase());
+              dispatch(canonical ? { type: 'DISTRICT_SELECTED', district: canonical.district, areas } : { type: 'DISTRICT_TYPED', district: v });
+            }}
+            placeholder={s.state ? 'e.g. Mentakab or Temerloh' : 'Place the pin or choose a state'}
+            className={inputCls}
           />
+          <datalist id="vanguard-admin-districts">
+            {districts.map((d) => (
+              <option key={d.id} value={d.district} />
+            ))}
+          </datalist>
+          <p className={`text-[10px] mt-0.5 ${s.administrativeAreaId ? 'text-emerald-700' : 'text-amber-700'}`}>
+            {s.administrativeAreaId
+              ? `Admin district: ${s.adminDistrict}`
+              : 'Not linked yet — place the pin'}
+          </p>
         </div>
+
       </div>
 
-      {/* ── Specific Location / Landmark ── */}
+      {/* 1. Address search → moves the pin */}
       <div className="relative">
         <label className="block text-xs font-bold text-slate-800 mb-1">
-          Specific Location / Address <span className="text-red-500">*</span>
+          Specific location / address <span className="text-red-500">*</span>
         </label>
-        <div className="flex gap-2">
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={location}
-            onChange={(e) => handleLocationInputChange(e.target.value)}
-            onFocus={() => {
-              if (locationSuggestions.length > 0) setShowSuggestions(true);
+            onChange={(e) => {
+              onLocationChange(e.target.value);
+              searchPlaces(e.target.value);
             }}
             required
-            placeholder="e.g. Kampung Sireh, Seksyen 4 / Jambatan Sultan Yahya Petra"
-            className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white"
+            placeholder="Search a place or address, e.g. Kampung Sireh, Kota Bharu"
+            className={`${inputCls} pl-8 pr-8`}
           />
-          <button
-            type="button"
-            onClick={handleSearchOnlineLocation}
-            disabled={isSearchingGeocode || (!location && !district)}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Search and pin location on map"
-          >
-            {isSearchingGeocode ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
-            <span className="hidden sm:inline">Find</span>
-          </button>
+          {searching && <Loader2 size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />}
         </div>
-
-        {/* Suggestions Dropdown */}
-        {showSuggestions && locationSuggestions.length > 0 && (
-          <div className="absolute top-full left-0 right-0 z-[500] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
-            <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-              <span>Matching Places in Malaysia</span>
+        <p className="text-[10px] text-slate-500 mt-0.5">Pick a result to move the pin, or click the map — the fields below follow the pin.</p>
+        {suggestions.length > 0 && (
+          <div className="absolute top-full left-0 right-0 z-[500] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+            {suggestions.map((p, i) => (
               <button
+                key={i}
                 type="button"
-                onClick={() => setShowSuggestions(false)}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer text-xs"
-              >
-                ✕
-              </button>
-            </div>
-            {locationSuggestions.map((place, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSelectSuggestion(place)}
-                className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-slate-100 last:border-0 flex items-start gap-2 text-slate-800 transition-colors cursor-pointer"
+                onClick={() => {
+                  setSuggestions([]);
+                  const la = parseFloat(p.lat);
+                  const lo = parseFloat(p.lon);
+                  onLocationChange(p.display_name);
+                  if (Number.isFinite(la) && Number.isFinite(lo)) movePin(la, lo, 'search');
+                }}
+                className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-slate-100 last:border-0 flex items-start gap-2 cursor-pointer"
               >
                 <MapPin size={13} className="text-blue-600 shrink-0 mt-0.5" />
-                <span className="line-clamp-2 leading-relaxed">{place.display_name}</span>
+                <span className="line-clamp-2">{p.display_name}</span>
               </button>
             ))}
           </div>
         )}
-
-        {lookupFeedback && (
-          <p className="text-[11px] text-blue-600 font-medium mt-1 flex items-center gap-1">
-            <AlertCircle size={12} /> {lookupFeedback}
-          </p>
-        )}
       </div>
 
-      {/* ── Interactive Leaflet Map with Marker ── */}
+      {/* 2. Map — the source of truth */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-            <MapPin size={13} className="text-blue-600" />
-            <span>Interactive Map & Pinpoint</span>
+            <MapPin size={13} className="text-blue-600" /> Incident pin <span className="text-red-500">*</span>
           </label>
-          <span className="text-[10px] text-slate-500 font-medium">Click or drag pin to auto-fill address</span>
+          <span className="text-[10px] text-slate-500">Click or drag to adjust</span>
         </div>
-
-        <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-xs h-44">
-          <div ref={mapContainerRef} className="w-full h-full" />
-
-          {/* Coordinates HUD Tag */}
-          <div className="absolute bottom-2 left-2 z-[400] bg-slate-900/85 backdrop-blur-xs text-white px-2.5 py-1 rounded-md text-[10px] font-mono flex items-center gap-2 border border-slate-700/50">
-            <Navigation size={10} className="text-blue-400 animate-pulse" />
-            <span>
-              Lat: {parsedLat.toFixed(4)}, Lng: {parsedLng.toFixed(4)}
-            </span>
+        <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-xs h-56">
+          <div ref={mapEl} className="w-full h-full" />
+          <div className="absolute bottom-2 left-2 z-[400] bg-slate-900/85 text-white px-2.5 py-1 rounded-md text-[10px] font-mono flex items-center gap-2">
+            <Navigation size={10} className="text-blue-400" />
+            {s.lat != null && s.lng != null ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : 'No pin placed'}
           </div>
         </div>
+      </div>
+
+
+
+      {s.status === 'ambiguous' && s.candidates.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 space-y-1">
+          <p className="text-[11px] font-semibold text-amber-900">This postcode spans several districts — choose one:</p>
+          {s.candidates.map((c, i) => (
+            <button key={i} type="button" onClick={() => dispatch({ type: 'CANDIDATE_CHOSEN', candidate: c })} className="block text-left text-xs text-amber-900 hover:underline cursor-pointer">
+              {c.district}, {c.state}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={`text-[11px] font-medium flex items-start gap-1.5 ${ui.cls}`}>
+        {ui.icon === 'spin' ? <Loader2 size={12} className="animate-spin mt-0.5" /> : ui.icon === 'ok' ? <CheckCircle2 size={12} className="mt-0.5" /> : <AlertCircle size={12} className="mt-0.5" />}
+        <span>
+          {ui.text}
+          {(s.status === 'resolved' || s.status === 'partial') && (s.district || s.state)
+            ? ` — ${[s.district, s.adminDistrict && s.adminDistrict !== s.district ? `${s.adminDistrict} district` : null, s.state].filter(Boolean).join(', ')}`
+            : ''}
+          {s.message ? ` · ${s.message}` : ''}
+        </span>
       </div>
     </div>
   );

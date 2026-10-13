@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Map, Search, Layers, X, MapPin, AlertTriangle, Navigation, Box, Square } from 'lucide-react';
 import type { Incident, MapPOI, GISLayerState, FlyToTarget, DisasterIntelligenceProps } from '../../../types';
 import { IntelligenceOverview } from './IntelligenceOverview';
-import { LayerPanel } from '../../../components/ui/situational/LayerPanel';
+import { LayerPanel, type LayerCount } from '../../../components/ui/situational/LayerPanel';
 import { AIInsightDetailView } from './AIInsightDetailView';
 import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
 import { Gis3DLayerExplorer } from '../../../components/ui/situational/Gis3DLayerExplorer';
@@ -15,12 +16,21 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   const [activeTab, setActiveTab] = useState<typeof tabs[number]>('Map');
   const [layers, setLayers] = useState<GISLayerState>(defaultLayers);
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
+  const [layerCounts, setLayerCounts] = useState<Partial<Record<keyof GISLayerState, LayerCount>>>({});
   const [mapMode, setMapMode] = useState<'3d-layers' | '3d' | '2d'>('3d-layers');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [flyToTarget, setFlyToTarget] = useState<FlyToTarget | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [activeInsight, setActiveInsight] = useState<Incident | null>(focusIncident ?? null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The open detail view is driven by ?incidentId= so it can be deep-linked and survives reloads.
+  const activeInsightId = searchParams.get('incidentId') ?? focusIncident?.id ?? null;
+  const setActiveInsightId = (id: string | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set('incidentId', id);
+    else next.delete('incidentId');
+    setSearchParams(next);
+  };
   const [sitrepOpen, setSitrepOpen] = useState(false);
 
   const { data: incidents = [] } = useIncidents();
@@ -36,8 +46,9 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   const combinedPOIs = useMemo(() => {
     const list: MapPOI[] = [];
     warehouses.forEach((w) => {
-      const lat = typeof w.lat === 'number' && !isNaN(w.lat) ? w.lat : 4.5;
-      const lng = typeof w.lng === 'number' && !isNaN(w.lng) ? w.lng : 102.0;
+      // Warehouses without stored coordinates are not plotted (no invented position).
+      if (typeof w.lat !== 'number' || !Number.isFinite(w.lat) || typeof w.lng !== 'number' || !Number.isFinite(w.lng)) return;
+      const { lat, lng } = w;
       list.push({
         id: `wh-${w.id}`,
         name: `${w.name} (Logistics Depot)`,
@@ -72,10 +83,6 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       policeStations: true,
       evacuationSchools: true,
       rescueTeamLocations: true,
-      utilityElectricity: true,
-      utilityWater: true,
-      utilityTelecom: true,
-      roadAccessibility: true,
     });
   };
 
@@ -174,19 +181,20 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   React.useEffect(() => {
     if (focusIncident) {
       setActiveTab('Intelligence Overview');
-      setActiveInsight(focusIncident);
+      setActiveInsightId(focusIncident.id);
       onFocusHandled?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusIncident]);
 
-  if (activeInsight) {
+  if (activeInsightId) {
     return (
       <AIInsightDetailView
-        incident={activeInsight}
-        onBack={() => setActiveInsight(null)}
-        onSelectPeer={setActiveInsight}
-        allIncidents={incidents}
+        incidentId={activeInsightId}
+        onBack={() => {
+          setActiveTab('Intelligence Overview');
+          setActiveInsightId(null);
+        }}
       />
     );
   }
@@ -353,6 +361,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
               {mapMode !== '3d-layers' && (
                 <LayerPanel
                   layers={layers}
+                  counts={layerCounts}
                   isOpen={layerPanelOpen}
                   onClose={() => setLayerPanelOpen(false)}
                   onToggleLayer={toggleLayer}
@@ -379,6 +388,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                   onToggleLayer={toggleLayer}
                   incidents={activeIncidents}
                   pois={combinedPOIs}
+                  onLayerCounts={setLayerCounts}
                 />
               )}
             </div>
@@ -387,7 +397,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
         {/* ── INTELLIGENCE OVERVIEW TAB ── */}
         {activeTab === 'Intelligence Overview' && (
-          <IntelligenceOverview onSelectInsight={setActiveInsight} incidents={incidents} />
+          <IntelligenceOverview onSelectInsight={setActiveInsightId} />
         )}
       </motion.div>
 
@@ -397,7 +407,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
         onClose={handleCloseSitrep}
         onViewFullAnalysis={incident => {
           handleCloseSitrep();
-          setActiveInsight(incident);
+          setActiveInsightId(incident.id);
         }}
       />
     </>

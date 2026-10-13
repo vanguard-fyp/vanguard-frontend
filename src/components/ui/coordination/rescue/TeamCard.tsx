@@ -35,10 +35,23 @@ const statusConfig: Record<string, { dot: string; badge: string }> = {
 export const TeamCard: React.FC<TeamCardProps> = ({
   team, missions, incidents, isExpanded, onToggle, onViewOperations, onEdit, onDelete
 }) => {
-  const teamMissions = missions.filter((m) => m.incident_id != null);
-  const assignedIncident = team.status === 'Deployed' || team.status === 'En Route'
-    ? incidents.find((i) => i.status === 'Responding')
+  // Missions this team is ACTUALLY assigned to (its own mission_assignments rows).
+  const teamMissions = missions.filter(
+    (m) => m.team_ids?.includes(team.id) || m.teams?.some((t) => t.id === team.id)
+  );
+  // Authoritative active count from the backend (capacity_service); fall back to
+  // counting this team's own open assignments when the field is absent.
+  const activeMissionIds = new Set(team.active_mission_ids ?? []);
+  const activeMissions = activeMissionIds.size
+    ? teamMissions.filter((m) => activeMissionIds.has(m.id))
+    : teamMissions.filter((m) => m.status !== 'Completed' && m.status !== 'Aborted');
+  const activeCount = team.active_mission_count ?? activeMissions.length;
+  const activeMission = activeMissions[0];
+  // No guessing: an incident is shown only when the team has an assignment to it.
+  const assignedIncident = activeMission?.incident_id
+    ? incidents.find((i) => i.id === activeMission.incident_id || i.display_id === activeMission.incident_id)
     : undefined;
+  const myAssignment = activeMission?.teams?.find((t) => t.id === team.id);
   const sc = statusConfig[team.status] || statusConfig['Off Duty'];
   const ac = agencyColors[team.agency] || '';
 
@@ -59,7 +72,9 @@ export const TeamCard: React.FC<TeamCardProps> = ({
           <div className="flex items-center gap-3 mt-0.5 flex-wrap">
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <Users size={11} className="text-slate-400" />
-              {team.personnel_count} personnel
+              {team.available_personnel != null
+                ? `${team.available_personnel}/${team.personnel_count} available`
+                : `${team.personnel_count} personnel`}
             </span>
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <MapPin size={11} className="text-slate-400" />
@@ -67,7 +82,8 @@ export const TeamCard: React.FC<TeamCardProps> = ({
             </span>
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <Target size={11} className="text-slate-400" />
-              {teamMissions.length} mission{teamMissions.length !== 1 ? 's' : ''}
+              {activeCount} active mission{activeCount !== 1 ? 's' : ''}
+              {teamMissions.length > activeCount ? ` · ${teamMissions.length} total` : ''}
             </span>
           </div>
         </div>
@@ -188,6 +204,14 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                   <p className="text-[11px] text-orange-700 font-medium">
                     {assignedIncident.location}, {assignedIncident.state} · Severity: {assignedIncident.severity}
                   </p>
+                  {myAssignment && (
+                    <p className="text-[11px] text-orange-800 mt-1">
+                      {myAssignment.assigned_personnel != null
+                        ? `${myAssignment.assigned_personnel} personnel committed`
+                        : 'Personnel count not recorded (legacy assignment — whole team counted)'}
+                      {myAssignment.selection_source ? ` · ${myAssignment.selection_source === 'ai' ? 'AI-recommended' : 'Officer-selected'}` : ''}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -195,7 +219,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
               <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between flex-wrap gap-2">
                 <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
                   <Sparkles size={13} className="text-violet-600" />
-                  {teamMissions.length} active/queued mission(s) for this squad
+                  {activeCount} active mission(s) for this squad
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">

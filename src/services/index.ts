@@ -8,3 +8,5 @@ export * from './analyticsService';
 export * from './userService';
 export * from './notificationService';
 export * from './copilotService';
+export * from './intelligenceService';
+export * from './geoService';

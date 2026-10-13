@@ -8,4 +8,4 @@ export const riskColors: Record<string, string> = {
 
 export const milestones = ['Mobilised', 'En Route', 'On Site', 'Executing', 'Completed'];
 
-export const steps = ['Select Incident', 'AI Recommendation', 'Mission Brief', 'Confirm & Dispatch'] as const;
+export const steps = ['Select Incident', 'Select Teams', 'Mission Brief', 'Review & Approve'] as const;

@@ -1,15 +1,25 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Megaphone, AlertTriangle, Shield, CheckCircle2 } from 'lucide-react';
-import { useAnnouncements, useCreateAnnouncement, useUpdateAnnouncement, useDeleteAnnouncement } from '../../hooks';
+import {
+  useCreateAnnouncement,
+  useUpdateAnnouncement,
+  useDeleteAnnouncement,
+  usePaginatedQuery,
+  usePageTotal,
+  useDebouncedValue,
+  filterValue,
+} from '../../hooks';
+import { announcementService } from '../../services/announcementService';
+import { PaginationBar } from '../../components/ui/shared/PaginationBar';
 import { CommunicationFilters } from '../../components/ui/communication/CommunicationFilters';
 import { CommunicationCard } from '../../components/ui/communication/CommunicationCard';
 import { ComposeBroadcastModal } from '../../components/ui/communication/ComposeBroadcastModal';
 import type { PublicAnnouncement, CommunicationCategoryFilter, CommunicationSortBy } from '../../types';
+import { useToast } from '../../context/ToastContext';
 import { containerAnim, itemAnim } from '../../constants';
 
 const PublicCommunication: React.FC = () => {
-  const { data: announcements = [] } = useAnnouncements();
   const createMutation = useCreateAnnouncement();
   const updateMutation = useUpdateAnnouncement();
   const deleteMutation = useDeleteAnnouncement();
@@ -22,48 +32,32 @@ const PublicCommunication: React.FC = () => {
   const [severityFilter, setSeverityFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<CommunicationSortBy>('latest');
 
-  // Stats calculation
-  const totalCount = announcements.length;
-  const activeCount = announcements.filter((a) => a.active).length;
-  const evacuationCount = announcements.filter((a) => a.category === 'Evacuation Order').length;
-  const emergencyCount = announcements.filter((a) => a.category === 'Emergency Alert').length;
+  // Server-side list: search, filters and sort are applied by the backend, so
+  // the page and its total stay exact however many broadcasts exist.
+  const debouncedSearch = useDebouncedValue(searchQuery.trim());
+  const listFilters = useMemo(
+    () => ({
+      search: debouncedSearch || undefined,
+      category: filterValue(categoryFilter),
+      severity: filterValue(severityFilter),
+      sort: sortBy,
+    }),
+    [debouncedSearch, categoryFilter, severityFilter, sortBy]
+  );
+  const annPage = usePaginatedQuery(
+    ['announcements'],
+    (args) => announcementService.getAnnouncementsPage(args),
+    listFilters,
+    10
+  );
+  const announcements = annPage.items;
 
-  // Filter & Sort Logic
-  const filteredAnnouncements = useMemo(() => {
-    let result = [...announcements];
-
-    // Search query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (a) =>
-          a.title.toLowerCase().includes(q) ||
-          a.content.toLowerCase().includes(q) ||
-          (a.target_state ?? '').toLowerCase().includes(q) ||
-          a.target_districts.some((d) => d.toLowerCase().includes(q))
-      );
-    }
-
-    // Category filter
-    if (categoryFilter !== 'All') {
-      result = result.filter((a) => a.category === categoryFilter);
-    }
-
-    // Severity filter
-    if (severityFilter !== 'All') {
-      result = result.filter((a) => a.severity === severityFilter);
-    }
-
-    // Sort
-    if (sortBy === 'severity') {
-      const severityOrder: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-      result.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
-    } else if (sortBy === 'active') {
-      result.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0));
-    }
-
-    return result;
-  }, [announcements, searchQuery, categoryFilter, severityFilter, sortBy]);
+  // Header counts: exact totals from the backend (one row fetched each).
+  const fetchPage = announcementService.getAnnouncementsPage;
+  const { data: totalCount } = usePageTotal(['announcements'], fetchPage, {});
+  const { data: activeCount } = usePageTotal(['announcements'], fetchPage, { active: true });
+  const { data: evacuationCount } = usePageTotal(['announcements'], fetchPage, { category: 'Evacuation Order' });
+  const { data: emergencyCount } = usePageTotal(['announcements'], fetchPage, { category: 'Emergency Alert' });
 
   const handleToggleActive = (id: string) => {
     const ann = announcements.find((a) => a.id === id);
@@ -76,9 +70,12 @@ const PublicCommunication: React.FC = () => {
     deleteMutation.mutate(id);
   };
 
-  const handlePublish = (data: Partial<PublicAnnouncement>) => {
-    createMutation.mutate(data);
+  const toast = useToast();
+  // Errors propagate to the modal, which stays open with the officer's text.
+  const handlePublish = async (data: Partial<PublicAnnouncement>) => {
+    await createMutation.mutateAsync(data);
     setShowComposeModal(false);
+    toast.success('Broadcast published', data.title ?? undefined);
   };
 
   return (
@@ -109,10 +106,10 @@ const PublicCommunication: React.FC = () => {
       {/* Top Quick Stats Bar */}
       <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { icon: Megaphone, label: 'Total Broadcasts', value: totalCount, sub: 'Unified registry', color: 'text-slate-700', bg: 'bg-slate-50' },
-          { icon: CheckCircle2, label: 'Active Notices', value: activeCount, sub: 'Currently live', color: 'text-emerald-700', bg: 'bg-emerald-50' },
-          { icon: Shield, label: 'Evacuation Orders', value: evacuationCount, sub: 'Mandatory sector moves', color: 'text-orange-700', bg: 'bg-orange-50' },
-          { icon: AlertTriangle, label: 'Emergency Alerts', value: emergencyCount, sub: 'Red & Amber alerts', color: 'text-red-700', bg: 'bg-red-50' },
+          { icon: Megaphone, label: 'Total Broadcasts', value: totalCount ?? '–', sub: 'Unified registry', color: 'text-slate-700', bg: 'bg-slate-50' },
+          { icon: CheckCircle2, label: 'Active Notices', value: activeCount ?? '–', sub: 'Currently live', color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { icon: Shield, label: 'Evacuation Orders', value: evacuationCount ?? '–', sub: 'Mandatory sector moves', color: 'text-orange-700', bg: 'bg-orange-50' },
+          { icon: AlertTriangle, label: 'Emergency Alerts', value: emergencyCount ?? '–', sub: 'Red & Amber alerts', color: 'text-red-700', bg: 'bg-red-50' },
         ].map(({ icon: Icon, label, value, sub, color, bg }) => (
           <div key={label} className={`${bg} border border-slate-200 rounded-xl p-4 shadow-xs flex items-center gap-3`}>
             <Icon size={20} className={color} />
@@ -136,22 +133,33 @@ const PublicCommunication: React.FC = () => {
           onSeverityChange={setSeverityFilter}
           sortBy={sortBy}
           onSortChange={setSortBy}
-          totalCount={announcements.length}
-          filteredCount={filteredAnnouncements.length}
+          totalCount={totalCount ?? 0}
+          filteredCount={annPage.total}
         />
       </motion.div>
 
       {/* Unified Public Communication Master List */}
       <motion.div variants={itemAnim} className="space-y-2.5">
         <AnimatePresence>
-          {filteredAnnouncements.length === 0 ? (
+          {annPage.isLoading ? (
+            <div className="bg-white border border-slate-200 rounded-xl px-5 py-10 text-center text-xs text-slate-400 shadow-xs">
+              Loading broadcasts…
+            </div>
+          ) : annPage.isError ? (
+            <div className="bg-white border border-red-200 rounded-xl px-5 py-8 text-center shadow-xs">
+              <p className="text-sm font-bold text-red-700">Broadcasts could not be loaded</p>
+              <button onClick={() => annPage.refetch()} className="text-xs font-bold text-blue-700 underline mt-1 cursor-pointer">
+                Retry
+              </button>
+            </div>
+          ) : announcements.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl px-5 py-10 text-center shadow-xs">
               <Megaphone size={28} className="text-slate-300 mx-auto mb-2" />
               <p className="text-sm font-bold text-slate-500">No public communications match your search filters</p>
               <p className="text-xs text-slate-400 mt-1">Try clearing your search query or selecting 'All' categories</p>
             </div>
           ) : (
-            filteredAnnouncements.map((ann) => (
+            announcements.map((ann) => (
               <motion.div
                 key={ann.id}
                 initial={{ opacity: 0, y: 8 }}
@@ -172,6 +180,17 @@ const PublicCommunication: React.FC = () => {
             ))
           )}
         </AnimatePresence>
+        {annPage.total > 0 && (
+          <PaginationBar
+            pageIndex={annPage.pageIndex}
+            pageCount={annPage.pageCount}
+            total={annPage.total}
+            pageSize={annPage.pageSize}
+            onPageChange={annPage.setPageIndex}
+            isFetching={annPage.isFetching}
+            label="broadcasts"
+          />
+        )}
       </motion.div>
 
       {/* Compose Broadcast Modal */}

@@ -7,3 +7,6 @@ export * from './useAnalytics';
 export * from './useUsers';
 export * from './useNotifications';
 export * from './useWarehouses';
+export * from './useIntelligence';
+export * from './usePagination';
+export * from './useGeo';

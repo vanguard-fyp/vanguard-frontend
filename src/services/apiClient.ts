@@ -54,8 +54,9 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
 
   const token = localStorage.getItem('vanguard_token');
 
+  const isFormData = typeof FormData !== 'undefined' && customConfig.body instanceof FormData;
   const defaultHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...headers,
   };
@@ -119,7 +120,16 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
       } catch {
         errorData = { message: response.statusText };
       }
-      throw new ApiError(errorData.detail || errorData.message || 'API Request Failed', response.status, errorData);
+      const detail = errorData.detail;
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : detail && typeof detail === 'object' && 'message' in detail
+            ? String((detail as { message: unknown }).message)
+            : Array.isArray(detail)
+              ? detail.map((d: { msg?: string }) => d?.msg).filter(Boolean).join('; ')
+              : errorData.message || 'API Request Failed';
+      throw new ApiError(message, response.status, errorData);
     }
 
     // Return empty object for 204 No Content
@@ -132,13 +142,16 @@ export async function request<T>(endpoint: string, options: RequestOptions = {})
     if (error instanceof ApiError) {
       throw error;
     }
+    if ((error as Error)?.name === 'AbortError') {
+      throw error;
+    }
     throw new ApiError((error as Error).message || 'Network connection failed', 0);
   }
 }
 
 export const apiClient = {
-  get: <T>(endpoint: string, params?: Record<string, any>, headers?: HeadersInit) =>
-    request<T>(endpoint, { method: 'GET', params, headers }),
+  get: <T>(endpoint: string, params?: Record<string, any>, headers?: HeadersInit, signal?: AbortSignal) =>
+    request<T>(endpoint, { method: 'GET', params, headers, signal }),
   post: <T>(endpoint: string, body?: any, headers?: HeadersInit) =>
     request<T>(endpoint, { method: 'POST', body: body ? JSON.stringify(body) : undefined, headers }),
   put: <T>(endpoint: string, body?: any, headers?: HeadersInit) =>
@@ -148,3 +161,7 @@ export const apiClient = {
   delete: <T>(endpoint: string, headers?: HeadersInit) =>
     request<T>(endpoint, { method: 'DELETE', headers }),
 };
+
+/** POST multipart/form-data through the same auth + refresh pipeline. */
+export const postForm = <T>(endpoint: string, form: FormData) =>
+  request<T>(endpoint, { method: 'POST', body: form });

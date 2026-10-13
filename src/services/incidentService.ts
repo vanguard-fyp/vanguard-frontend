@@ -1,5 +1,5 @@
-import { apiClient } from './apiClient';
-import type { Incident, MapPOI } from '../types';
+import { apiClient, postForm } from './apiClient';
+import type { Incident, MapPOI, MediaUploadResult, Page, ResolvedMedia } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
@@ -9,6 +9,35 @@ export const incidentService = {
    */
   getIncidents: async (filters?: { severity?: string; status?: string; district?: string }): Promise<Incident[]> => {
     return apiClient.get<Incident[]>('/incidents', filters);
+  },
+
+  /**
+   * Server-side page of incidents (occurred_at desc). Filters are applied on the server.
+   */
+  getIncidentsPage: async (params: {
+    limit: number;
+    offset: number;
+    severity?: string;
+    status?: string;
+    district?: string;
+    search?: string;
+  }): Promise<Page<Incident>> => {
+    return apiClient.get<Page<Incident>>('/incidents', { ...params, paginated: true });
+  },
+
+  /**
+   * Upload ONE photo/video to private incident storage. Returns a storage reference
+   * for media_urls. Throws ApiError (415 type, 413 size, 502 storage down).
+   */
+  uploadMedia: async (file: File): Promise<MediaUploadResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    return postForm<MediaUploadResult>('/incidents/media', form);
+  },
+
+  /** Short-lived signed URLs for an incident's media. */
+  getMedia: async (incidentId: string): Promise<ResolvedMedia[]> => {
+    return apiClient.get<ResolvedMedia[]>(`/incidents/${incidentId}/media`);
   },
 
   /**

@@ -32,10 +32,8 @@ export interface LayerGroup {
 export type SitrepTab = 'dashboard' | 'operations';
 
 export interface AIInsightDetailViewProps {
-  incident: Incident;
+  incidentId: string;
   onBack: () => void;
-  onSelectPeer?: (incident: Incident) => void;
-  allIncidents?: Incident[];
 }
 
 export interface DisasterIntelligenceProps {
@@ -44,8 +42,7 @@ export interface DisasterIntelligenceProps {
 }
 
 export interface IntelligenceOverviewProps {
-  onSelectInsight: (incident: Incident) => void;
-  incidents: Incident[];
+  onSelectInsight: (incidentId: string) => void;
 }
 
 export interface IncidentDetailViewProps {
@@ -66,13 +63,6 @@ export interface GdacsHazardDef {
 
 export interface IncidentManagementProps {
   onTrackInIntelligence?: (incident: Incident) => void;
-}
-
-export interface AIImpactPanelProps {
-  incident: Incident;
-  rank?: number;
-  size?: 'compact' | 'full';
-  hideBrief?: boolean;
 }
 
 export interface TriggerAlertPanelProps {
@@ -106,4 +96,8 @@ export interface ImpactTimelineProps {
   timeline: ImpactSnapshot[];
   size?: 'compact' | 'full';
   mode?: 'confirmed-only' | 'predictive';
+  /** join the dotted projection to the last confirmed point (only when it starts from that figure) */
+  joinPrediction?: boolean;
+  /** optional card title override */
+  title?: string;
 }

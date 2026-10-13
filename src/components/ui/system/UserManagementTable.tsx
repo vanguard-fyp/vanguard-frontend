@@ -1,37 +1,31 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Users, Search, Edit2, Trash2, SlidersHorizontal } from 'lucide-react';
 import type { UserAccount, UserManagementTableProps } from '../../../types';
 import { userRolesFilterList as roles } from '../../../constants';
-import { useAuth } from '../../../context/AuthContext';
 import { ConfirmationDialog } from '../shared/ConfirmationDialog';
 import { formatDateTime } from '../../../utils/dateFormatter';
+import { filterValue, useDebouncedValue, usePaginatedQuery } from '../../../hooks';
+import { userService } from '../../../services/userService';
+import { PaginationBar } from '../shared/PaginationBar';
 
 export const UserManagementTable: React.FC<UserManagementTableProps> = ({
-  users,
   onEditUser,
   onDeleteUser,
   onToggleUserStatus,
 }) => {
-  const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All');
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
 
-  // Exclude current logged in user from management list
-  const managedUsers = users.filter((u) => {
-    if (!currentUser) return true;
-    return u.id !== currentUser.id && u.email !== currentUser.email;
-  });
-
-  const filteredUsers = managedUsers.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.agency.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesRole = roleFilter === 'All' || u.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  // Server-side page. The signed-in admin is excluded by the backend (exclude_self)
+  // so they cannot deactivate or delete their own account from this list.
+  const debouncedSearch = useDebouncedValue(searchQuery.trim());
+  const filters = useMemo(
+    () => ({ search: debouncedSearch || undefined, role: filterValue(roleFilter), exclude_self: true }),
+    [debouncedSearch, roleFilter]
+  );
+  const userPage = usePaginatedQuery(['users'], (args) => userService.getUsersPage(args), filters, 15);
+  const filteredUsers = userPage.items;
 
   const handleConfirmDelete = () => {
     if (userToDelete) {
@@ -48,7 +42,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
           <Users size={16} className="text-blue-600" />
           <h3 className="text-sm font-bold text-slate-800">System User Accounts Directory</h3>
           <span className="text-xs font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
-            {filteredUsers.length} Users
+            {userPage.total} Users
           </span>
         </div>
 
@@ -99,7 +93,18 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredUsers.length > 0 ? (
+            {userPage.isLoading ? (
+              <tr>
+                <td colSpan={7} className="px-5 py-8 text-center text-xs text-slate-400 font-medium">Loading user accounts…</td>
+              </tr>
+            ) : userPage.isError ? (
+              <tr>
+                <td colSpan={7} className="px-5 py-8 text-center text-xs text-red-700 font-medium">
+                  User accounts could not be loaded.{' '}
+                  <button onClick={() => userPage.refetch()} className="underline font-bold cursor-pointer">Retry</button>
+                </td>
+              </tr>
+            ) : filteredUsers.length > 0 ? (
               filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="px-5 py-3.5">
@@ -128,7 +133,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                   </td>
                   <td className="px-4 py-3.5">
                     <button
-                      onClick={() => onToggleUserStatus(user.id)}
+                      onClick={() => onToggleUserStatus(user)}
                       className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 cursor-pointer transition-colors ${user.status === 'Active'
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                         : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
@@ -181,6 +186,19 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
           </tbody>
         </table>
       </div>
+      {userPage.total > 0 && (
+        <div className="px-4 border-t border-slate-100">
+          <PaginationBar
+            pageIndex={userPage.pageIndex}
+            pageCount={userPage.pageCount}
+            total={userPage.total}
+            pageSize={userPage.pageSize}
+            onPageChange={userPage.setPageIndex}
+            isFetching={userPage.isFetching}
+            label="accounts"
+          />
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <ConfirmationDialog

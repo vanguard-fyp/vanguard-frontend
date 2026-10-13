@@ -13,9 +13,6 @@ import {
   Stethoscope,
   Shield,
   GraduationCap,
-  Zap,
-  Wifi,
-  RouteOff,
   ShieldCheck,
   RotateCcw,
   CheckSquare,
@@ -44,22 +41,18 @@ const groups: LayerGroup[] = [
       { key: 'fireStations', label: 'Fire Stations (Bomba)', icon: <Flame size={15} />, iconColor: 'text-red-500', activeBg: 'bg-red-50/80', activeBorder: 'border-red-200', activeDot: 'bg-red-500' },
       { key: 'policeStations', label: 'Police Stations (PDRM)', icon: <Shield size={15} />, iconColor: 'text-sky-700', activeBg: 'bg-sky-50/80', activeBorder: 'border-sky-200', activeDot: 'bg-sky-600' },
       { key: 'evacuationSchools', label: 'Schools & Halls', icon: <GraduationCap size={15} />, iconColor: 'text-purple-600', activeBg: 'bg-purple-50/80', activeBorder: 'border-purple-200', activeDot: 'bg-purple-500' },
-      { key: 'rescueTeamLocations', label: 'Rescue Squads & Hubs', icon: <ShieldCheck size={15} />, iconColor: 'text-blue-700', activeBg: 'bg-blue-50/80', activeBorder: 'border-blue-200', activeDot: 'bg-blue-600' },
-    ],
-  },
-  {
-    title: 'Critical Infrastructure & Utilities',
-    items: [
-      { key: 'utilityElectricity', label: 'Electricity Grid', icon: <Zap size={15} />, iconColor: 'text-amber-500', activeBg: 'bg-amber-50/80', activeBorder: 'border-amber-200', activeDot: 'bg-amber-400' },
-      { key: 'utilityWater', label: 'Water Network', icon: <Droplets size={15} />, iconColor: 'text-cyan-600', activeBg: 'bg-cyan-50/80', activeBorder: 'border-cyan-200', activeDot: 'bg-cyan-500' },
-      { key: 'utilityTelecom', label: 'Telecom Towers', icon: <Wifi size={15} />, iconColor: 'text-violet-600', activeBg: 'bg-violet-50/80', activeBorder: 'border-violet-200', activeDot: 'bg-violet-500' },
-      { key: 'roadAccessibility', label: 'Road Closures / Access', icon: <RouteOff size={15} />, iconColor: 'text-slate-600', activeBg: 'bg-slate-100', activeBorder: 'border-slate-300', activeDot: 'bg-slate-600' },
+      { key: 'rescueTeamLocations', label: 'Logistics Depots', icon: <ShieldCheck size={15} />, iconColor: 'text-blue-700', activeBg: 'bg-blue-50/80', activeBorder: 'border-blue-200', activeDot: 'bg-blue-600' },
     ],
   },
 ];
 
+/** Features currently loaded for a layer; 'loading' / 'unavailable' while a source is not ready. */
+export type LayerCount = number | 'loading' | 'unavailable';
+
 interface LayerPanelProps {
   layers: GISLayerState;
+  /** Feature count per layer, from the map's loaded data */
+  counts?: Partial<Record<keyof GISLayerState, LayerCount>>;
   isOpen: boolean;
   onClose: () => void;
   onToggleLayer: (key: keyof GISLayerState) => void;
@@ -69,6 +62,7 @@ interface LayerPanelProps {
 
 export const LayerPanel: React.FC<LayerPanelProps> = ({
   layers,
+  counts = {},
   isOpen,
   onClose,
   onToggleLayer,
@@ -106,7 +100,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
             <div className="flex items-center gap-2">
               <Layers size={16} className="text-blue-600" />
               <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                GIS Layer Matrix
+                Map Layers
               </h3>
               <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
                 {activeCount}/{totalCount} active
@@ -175,6 +169,14 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                         >
                           {layer.label}
                         </span>
+                        {counts[layer.key] !== undefined && (
+                          <span
+                            className={`text-[10px] font-mono shrink-0 ${counts[layer.key] === 'unavailable' ? 'text-red-600' : 'text-slate-400'}`}
+                            title="Features currently loaded on the map"
+                          >
+                            {counts[layer.key] === 'loading' ? '…' : counts[layer.key] === 'unavailable' ? 'n/a' : `(${counts[layer.key]})`}
+                          </span>
+                        )}
                         <span
                           className={`size-2 rounded-full shrink-0 ${
                             active ? layer.activeDot : 'bg-slate-200'

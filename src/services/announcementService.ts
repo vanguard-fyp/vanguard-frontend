@@ -1,12 +1,49 @@
 import { apiClient } from './apiClient';
-import type { PublicAnnouncement } from '../types';
+import type { Page, PublicAnnouncement } from '../types';
+
+export interface AnnouncementPageParams {
+  limit: number;
+  offset: number;
+  search?: string;
+  category?: string;
+  severity?: string;
+  active?: boolean;
+  sort?: 'latest' | 'active';
+}
+
+export interface BroadcastDraftInput {
+  title: string;
+  category: PublicAnnouncement['category'];
+  severity: string;
+  target_state?: string;
+  target_districts?: string[];
+}
+
+export interface BroadcastDraft {
+  content: string;
+  /** llm = written by the AI; template = standard hazard template (AI unavailable) */
+  source: 'llm' | 'template';
+  reason?: string;
+  unsupported_numbers?: string[];
+  cached?: boolean;
+}
 
 export const announcementService = {
+  /** Suggested message content for a broadcast being composed (publishes nothing). */
+  draftContent: async (input: BroadcastDraftInput): Promise<BroadcastDraft> => {
+    return apiClient.post<BroadcastDraft>('/announcements/draft', input);
+  },
+
   /**
    * Fetch all broadcast announcements & evacuation orders
    */
   getAnnouncements: async (): Promise<PublicAnnouncement[]> => {
     return apiClient.get<PublicAnnouncement[]>('/announcements');
+  },
+
+  /** Server-side page; filters and sort are applied by the backend so totals are exact. */
+  getAnnouncementsPage: async (params: AnnouncementPageParams): Promise<Page<PublicAnnouncement>> => {
+    return apiClient.get<Page<PublicAnnouncement>>('/announcements', { ...params, paginated: true });
   },
 
   /**

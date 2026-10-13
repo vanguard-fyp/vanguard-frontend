@@ -1,42 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, Sparkles, ThumbsUp, Package } from 'lucide-react';
+import { X, Send, ThumbsUp, Package } from 'lucide-react';
 
-import type { ResourceItem, ResourceRequest, AIStockAdvisory, Warehouse } from '../../../../types';
-import { useWarehouses } from '../../../../hooks';
+import type { ResourceItem, ResourceRequest, Warehouse } from '../../../../types';
+import { useStockAdvisory, useWarehouses } from '../../../../hooks';
+import { useAuth } from '../../../../context/AuthContext';
+import { RISK_TO_URGENCY, StockAdvisoryCard } from './ResourceAdvisory';
 
 interface ResupplyRequestModalProps {
   item: ResourceItem | null;
   onClose: () => void;
   onSubmit: (newReq: Partial<ResourceRequest>) => void;
-}
-
-function getAIStockAdvisory(item: ResourceItem, warehouseLabel: string): AIStockAdvisory {
-  if (item.status === 'Critical') {
-    return {
-      suggested_qty: item.min_threshold * 3,
-      urgency: 'Critical',
-      confidence: 96,
-      forecast_rationale: `Critical stock depletion detected at ${warehouseLabel}. High evacuation influx requires immediate regional allocation.`,
-      depletion_trend: 'Depletion rate: 15% per hour (Projected zero-stock in ~3.2 hours).',
-    };
-  }
-  if (item.status === 'Low Stock') {
-    return {
-      suggested_qty: item.min_threshold * 2,
-      urgency: 'High',
-      confidence: 88,
-      forecast_rationale: `Stock level approaching minimum threshold. Preemptive resupply recommended prior to next rain surge.`,
-      depletion_trend: 'Depletion rate: 6% per hour (Projected threshold breach in ~8 hours).',
-    };
-  }
-  return {
-    suggested_qty: item.min_threshold,
-    urgency: 'Medium',
-    confidence: 82,
-    forecast_rationale: `Current stock buffer is sufficient. Routine restock scheduled to maintain optimal emergency buffer.`,
-    depletion_trend: 'Depletion rate: <2% per hour (Buffer stable).',
-  };
 }
 
 export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
@@ -45,10 +19,12 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
   onSubmit,
 }) => {
   const { data: warehouses = [] } = useWarehouses();
-  const [reqQty, setReqQty] = useState<number>(100);
-  const [reqDistrict, setReqDistrict] = useState<string>('Kota Bharu');
-  const [reqAgency, setReqAgency] = useState<string>('JKM Kelantan');
-  const [reqUrgency, setReqUrgency] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
+  const { user } = useAuth();
+  const advisory = useStockAdvisory();
+  const [reqQty, setReqQty] = useState<number>(1);
+  const [reqDistrict, setReqDistrict] = useState<string>('');
+  const [reqAgency, setReqAgency] = useState<string>('');
+  const [reqUrgency, setReqUrgency] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('Medium');
   const [reqJustification, setReqJustification] = useState<string>('');
   const [aiApplied, setAiApplied] = useState(false);
 
@@ -58,21 +34,23 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
     return map;
   }, [warehouses]);
 
-  const warehouseLabel = useMemo(() => {
-    if (!item) return 'Strategic National Depot';
-    const w = item.warehouse_id ? warehouseMap[item.warehouse_id] : undefined;
-    return w ? `${w.name} (${w.district}, ${w.state})` : 'Strategic National Depot';
-  }, [item, warehouseMap]);
+  const warehouse = item?.warehouse_id ? warehouseMap[item.warehouse_id] : undefined;
+  const warehouseLabel = warehouse ? `${warehouse.name} (${warehouse.district}, ${warehouse.state})` : 'Warehouse not linked';
+  const itemAdvisory = item ? advisory.data?.items.find((a) => a.inventory_id === item.id) : undefined;
 
+  // Reset the form for each item. Defaults come from the record and the signed-in
+  // officer; the AI suggestion is only applied when the officer clicks "Apply".
   useEffect(() => {
     if (item) {
-      const adv = getAIStockAdvisory(item, warehouseLabel);
-      setReqQty(adv.suggested_qty);
-      setReqUrgency(adv.urgency);
-      setReqJustification(`[HIL AI Advisory] Emergency resupply request for ${item.name} at ${warehouseLabel}. ${adv.forecast_rationale}`);
+      setReqQty(1);
+      setReqUrgency('Medium');
+      setReqDistrict(warehouse?.district ?? '');
+      setReqAgency(user?.agency ?? '');
+      setReqJustification('');
       setAiApplied(false);
     }
-  }, [item, warehouseLabel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -84,11 +62,18 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
 
   if (!item) return null;
 
-  const advisory = getAIStockAdvisory(item, warehouseLabel);
+  const canApply = !!itemAdvisory && itemAdvisory.reorder_quantity > 0;
 
   const handleApplyAISuggestion = () => {
-    setReqQty(advisory.suggested_qty);
-    setReqUrgency(advisory.urgency);
+    if (!itemAdvisory || !canApply) return;
+    setReqQty(itemAdvisory.reorder_quantity);
+    setReqUrgency(RISK_TO_URGENCY[itemAdvisory.risk]);
+    if (!reqJustification.trim()) {
+      setReqJustification(
+        `Resupply for ${item.name} at ${warehouseLabel}: stock ${itemAdvisory.stock_level} ${item.unit}, ` +
+          `pending demand ${itemAdvisory.pending_demand}, minimum threshold ${itemAdvisory.min_threshold}.`
+      );
+    }
     setAiApplied(true);
   };
 
@@ -142,46 +127,28 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
 
         {/* Modal Form */}
         <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          {/* AI Stock Advisory Box */}
-          <div className="bg-gradient-to-br from-violet-50 to-indigo-50/60 border border-violet-200 rounded-xl p-4 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center text-white">
-                  <Sparkles size={11} />
-                </div>
-                <span className="text-xs font-bold text-violet-900">AI Stock Forecaster (HIL)</span>
-              </div>
-              <span className="text-[11px] font-bold text-violet-700 font-mono">
-                {advisory.confidence}% confidence
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-700 leading-relaxed font-medium">
-              {advisory.forecast_rationale}
-            </p>
-
-            <div className="text-[11px] text-slate-500 font-mono">
-              ⚡ {advisory.depletion_trend}
-            </div>
-
-            <div className="pt-2 border-t border-violet-100 flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-600">
-                Recommended Qty: <span className="text-violet-900 font-extrabold">{advisory.suggested_qty} {item.unit}</span> ({advisory.urgency})
-              </span>
+          {/* Backend stock advisory (deterministic; advisory only) */}
+          <StockAdvisoryCard
+            item={itemAdvisory}
+            unit={item.unit}
+            isLoading={advisory.isLoading}
+            isError={advisory.isError}
+            onRetry={() => advisory.refetch()}
+          />
+          {canApply && (
+            <div className="flex justify-end -mt-2">
               <button
                 type="button"
                 onClick={handleApplyAISuggestion}
                 className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                  aiApplied
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-violet-600 hover:bg-violet-700 text-white shadow-2xs'
+                  aiApplied ? 'bg-emerald-600 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white shadow-2xs'
                 }`}
               >
                 <ThumbsUp size={12} />
-                {aiApplied ? 'Applied ✓' : 'Apply AI Suggestion'}
+                {aiApplied ? 'Applied ✓ (you can still edit)' : `Use suggested ${itemAdvisory!.reorder_quantity} ${item.unit}`}
               </button>
             </div>
-          </div>
+          )}
 
           {/* Form Fields */}
           <div className="grid grid-cols-2 gap-3">

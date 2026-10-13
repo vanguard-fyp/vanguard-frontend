@@ -92,18 +92,18 @@ export function useMonthlyTrends(params?: { year?: string }) {
   });
 }
 
-export function useDisasterTypeDistribution() {
+export function useDisasterTypeDistribution(params?: { year?: string }) {
   return useQuery({
-    queryKey: ANALYTICS_KEYS.disasterTypes,
-    queryFn: () => analyticsService.getDisasterTypeDistribution(),
+    queryKey: [...ANALYTICS_KEYS.disasterTypes, params?.year ?? 'all'],
+    queryFn: () => analyticsService.getDisasterTypeDistribution(params?.year),
     staleTime: 60_000,
   });
 }
 
-export function useAgencyResponseTimes() {
+export function useAgencyResponseTimes(params?: { year?: string }) {
   return useQuery({
-    queryKey: ANALYTICS_KEYS.agencyResponseTimes,
-    queryFn: () => analyticsService.getAgencyResponseTimes(),
+    queryKey: [...ANALYTICS_KEYS.agencyResponseTimes, params?.year ?? 'all'],
+    queryFn: () => analyticsService.getAgencyResponseTimes(params?.year),
     staleTime: 60_000,
   });
 }

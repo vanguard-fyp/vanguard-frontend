@@ -56,6 +56,17 @@ export function useCities() {
   });
 }
 
+export function useAdministrativeAreas() {
+  return useQuery({
+    queryKey: ['administrative_areas'],
+    queryFn: async () => {
+      const { agentService } = await import('../services/agentService');
+      return agentService.getAdministrativeAreas();
+    },
+    staleTime: 10 * 60_000, // 10 minutes cache
+  });
+}
+
 export function useUpdateIncident() {
   const qc = useQueryClient();
   return useMutation({
@@ -98,6 +109,17 @@ export function useResolveIncident() {
   });
 }
 
+
+/** Signed media URLs for an incident. Signed URLs expire after 15 min, so refresh well before that. */
+export function useIncidentMedia(incidentId: string | null | undefined, hasMedia: boolean) {
+  return useQuery({
+    queryKey: ['incidents', 'media', incidentId ?? ''],
+    queryFn: () => incidentService.getMedia(incidentId!),
+    enabled: !!incidentId && hasMedia,
+    staleTime: 10 * 60_000,
+    refetchInterval: 12 * 60_000,
+  });
+}
 
 export function useIncidentLogs(incidentId: string | null | undefined) {
   return useQuery({

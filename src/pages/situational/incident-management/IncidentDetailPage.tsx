@@ -1,6 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useIncident, useUpdateIncident } from '../../../hooks';
+import { useIncident } from '../../../hooks';
 import { IncidentDetailView } from './IncidentDetailView';
 import { SkeletonKPICard } from '../../../components/ui/shared/SkeletonLoader';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
@@ -9,22 +9,17 @@ const IncidentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: incident, isLoading, isError } = useIncident(id || null);
-  const updateIncident = useUpdateIncident();
 
-  // TODO: change to update by real user ID
-  const handleVerify = (incidentId: string) => {
-    updateIncident.mutate({
-      id: incidentId,
-      updates: { status: 'Verified', verified_by: 'Officer Rosli (NADMA)' },
-    });
-  };
+  // IncidentDetailView already persists the verification (verifier taken from the
+  // signed-in user); a second update here would overwrite it.
+  const handleVerify = () => {};
 
   const handleBack = () => {
     navigate('/situational/incidents');
   };
 
-  const handleTrackInIntelligence = () => {
-    navigate('/situational/intelligence');
+  const handleTrackInIntelligence = (inc: { id: string }) => {
+    navigate(`/situational/intelligence?incidentId=${inc.id}`);
   };
 
   if (isLoading) {

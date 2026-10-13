@@ -5,8 +5,6 @@ import {
   FileText,
   Download,
   Clock,
-  TrendingUp,
-  TrendingDown,
   Activity,
   Users,
   Package,
@@ -16,6 +14,9 @@ import {
   ChevronDown,
   ChevronRight,
   Layers,
+  TrendingUp,
+  TrendingDown,
+  Minus,
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -57,19 +58,62 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [CURRENT_YEAR, CURRENT_YEAR - 1].map(String);
+
+const SEVERITY_PILL: Record<string, string> = {
+  Critical: 'bg-red-50 text-red-700 border border-red-200',
+  High: 'bg-orange-50 text-orange-700 border border-orange-200',
+  Medium: 'bg-amber-50 text-amber-800 border border-amber-200',
+  Low: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+};
+
+/**
+ * Year-on-year change line (arrow + coloured text): red when the change is bad,
+ * green when good, grey when flat. Says so when there is no prior year to compare.
+ */
+const DeltaPill: React.FC<{ value: number | null | undefined; unit: string; goodWhen: 'up' | 'down'; vs: string }> = ({
+  value, unit, goodWhen, vs,
+}) => {
+  if (value == null) return <p className="text-[11px] font-medium text-slate-400">No {vs} data to compare</p>;
+  const good = value === 0 ? null : (value > 0) === (goodWhen === 'up');
+  const cls = good == null ? 'text-slate-500' : good ? 'text-emerald-700' : 'text-red-700';
+  const Icon = value > 0 ? TrendingUp : value < 0 ? TrendingDown : Minus;
+  return (
+    <p className={`flex items-center gap-1.5 text-[11px] font-semibold ${cls}`}>
+      <Icon size={13} />
+      {value > 0 ? '+' : ''}{value}{unit} vs {vs}
+    </p>
+  );
+};
+
+const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string; valueCls: string; children?: React.ReactNode }> = ({
+  icon, label, value, valueCls, children,
+}) => (
+  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+    <div className="flex items-center gap-2 mb-1.5">
+      {icon}
+      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">{label}</p>
+    </div>
+    <p className={`text-2xl font-bold ${valueCls}`}>{value}</p>
+    <div className="mt-1.5 min-h-[22px]">{children}</div>
+  </div>
+);
+
 const ReportsAnalytics: React.FC = () => {
-  const [dateRange, setDateRange] = useState('2026');
+  const [dateRange, setDateRange] = useState(String(CURRENT_YEAR));
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   const { data: summaryData, isLoading: isSummaryLoading } = useAnalyticsSummary({ year: dateRange });
   const { data: monthlyIncidentTrend = [], isLoading: isTrendsLoading } = useMonthlyTrends({ year: dateRange });
-  const { data: disasterTypeDistribution = [], isLoading: isTypesLoading } = useDisasterTypeDistribution();
-  const { data: responseTimeData = [], isLoading: isRespLoading } = useAgencyResponseTimes();
+  const { data: disasterTypeDistribution = [], isLoading: isTypesLoading } = useDisasterTypeDistribution({ year: dateRange });
+  const { data: responseTimeData = [], isLoading: isRespLoading } = useAgencyResponseTimes({ year: dateRange });
   const { data: rawResourceUtilization = [], isLoading: isResLoading } = useResourceUtilization();
   const { data: stateIncidentHeatmap = [] } = useStateHeatmap({ year: dateRange });
 
   const [expandedStates, setExpandedStates] = useState<Record<string, boolean>>({});
+  const [showAllStates, setShowAllStates] = useState(false);
 
   const toggleStateExpand = (stateName: string) => {
     setExpandedStates((prev) => ({
@@ -103,16 +147,23 @@ const ReportsAnalytics: React.FC = () => {
   const resourceUtilization = rawResourceUtilization.map((r) => ({
     category: r.name,
     used: r.value,
+    allocated: r.allocated,
+    stock: r.stock,
   }));
 
-  const totalIncidents = summaryData?.total_incidents ?? monthlyIncidentTrend.reduce((s, m) => s + m.incidents, 0);
-  const totalResolved = summaryData?.total_resolved ?? monthlyIncidentTrend.reduce((s, m) => s + m.resolved, 0);
-  const resolutionRate = summaryData?.resolution_rate ?? (totalIncidents > 0 ? Math.round((totalResolved / totalIncidents) * 100) : 0);
-  const totalEvacuated = summaryData?.total_evacuated ?? (totalIncidents * 650);
-  const avgResponseTimeMin = summaryData?.avg_response_time_min ?? 26;
-  const incidentTrendPct = summaryData?.incident_trend_pct ?? 12.0;
-  const resolutionRateImprovementPct = summaryData?.resolution_rate_improvement_pct ?? 3.0;
-  const responseTimeDeltaMin = summaryData?.response_time_delta_min ?? -8;
+  // Every figure comes from the backend; missing data is shown as such, never estimated.
+  const totalIncidents = summaryData?.total_incidents ?? 0;
+  const resolutionRate = summaryData?.resolution_rate ?? null;
+  const totalAffected = summaryData?.total_affected_reported ?? 0;
+  const avgResponseTimeMin = summaryData?.avg_response_time_min ?? null;
+  const prior = summaryData?.comparison_year ?? String(Number(dateRange) - 1);
+  // Only disaster types that occurred in the year get a legend row.
+  const occurredTypes = disasterTypeDistribution.filter((d) => d.value > 0);
+  const statesWithIncidents = stateIncidentHeatmap.filter((s) => s.count > 0).length;
+  // States without incidents add 10+ empty rows; they are hidden unless asked for.
+  const visibleStates = showAllStates
+    ? stateIncidentHeatmap
+    : [...stateIncidentHeatmap].filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
 
   const isLoading = isSummaryLoading || isTrendsLoading || isTypesLoading || isRespLoading || isResLoading;
 
@@ -138,9 +189,6 @@ const ReportsAnalytics: React.FC = () => {
       <motion.div variants={itemAnim} className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Reports & Analytics</h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Government Evaluation · Response performance, historical disaster trends, and structured executive reports
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -148,8 +196,9 @@ const ReportsAnalytics: React.FC = () => {
             onChange={(e) => setDateRange(e.target.value)}
             className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-600 shadow-2xs cursor-pointer"
           >
-            <option value="2026">Year: 2026</option>
-            <option value="2025">Year: 2025</option>
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>Year: {y}</option>
+            ))}
           </select>
 
           <button
@@ -174,52 +223,22 @@ const ReportsAnalytics: React.FC = () => {
 
       {/* Summary KPIs */}
       <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center gap-2 mb-1.5">
-            <AlertTriangle size={16} className="text-orange-600" />
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Total Incidents</p>
-          </div>
-          <p className="text-2xl font-bold text-slate-900">{totalIncidents}</p>
-          <div className={`flex items-center gap-1 mt-1 text-xs font-semibold ${incidentTrendPct >= 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-            {incidentTrendPct >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            <span>{incidentTrendPct >= 0 ? `+${incidentTrendPct}%` : `${incidentTrendPct}%`} vs prior period</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Activity size={16} className="text-emerald-600" />
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Resolution Rate</p>
-          </div>
-          <p className="text-2xl font-bold text-emerald-700">{resolutionRate}%</p>
-          <div className={`flex items-center gap-1 mt-1 text-xs font-semibold ${
-            resolutionRateImprovementPct >= 0 ? 'text-emerald-600' : 'text-rose-600'
-          }`}>
-            {resolutionRateImprovementPct >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            <span>{resolutionRateImprovementPct >= 0 ? `+${resolutionRateImprovementPct}%` : `${resolutionRateImprovementPct}%`} resolution performance</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Clock size={16} className="text-blue-600" />
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Avg Response Time</p>
-          </div>
-          <p className="text-2xl font-bold text-blue-700">{avgResponseTimeMin} min</p>
-          <div className="flex items-center gap-1 mt-1 text-xs font-semibold text-emerald-600">
-            <TrendingDown size={12} />
-            <span>{responseTimeDeltaMin} min latency delta</span>
-          </div>
-        </div>
-
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Users size={16} className="text-purple-600" />
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Total Evacuated</p>
-          </div>
-          <p className="text-2xl font-bold text-purple-700">{totalEvacuated.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 font-medium mt-1">Across all districts ({dateRange})</p>
-        </div>
+        <StatCard icon={<AlertTriangle size={16} className="text-orange-600" />} label="Total Incidents"
+          value={String(totalIncidents)} valueCls="text-slate-900">
+          <DeltaPill value={summaryData?.incident_trend_pct} unit="%" goodWhen="down" vs={prior} />
+        </StatCard>
+        <StatCard icon={<Activity size={16} className="text-emerald-600" />} label="Resolution Rate"
+          value={resolutionRate != null ? `${resolutionRate}%` : '—'} valueCls="text-emerald-700">
+          <DeltaPill value={summaryData?.resolution_rate_improvement_pct} unit=" pts" goodWhen="up" vs={prior} />
+        </StatCard>
+        <StatCard icon={<Clock size={16} className="text-blue-600" />} label="Avg Response Time"
+          value={avgResponseTimeMin != null ? `${avgResponseTimeMin} min` : '—'} valueCls="text-blue-700">
+          <DeltaPill value={summaryData?.response_time_delta_min} unit=" min" goodWhen="down" vs={prior} />
+        </StatCard>
+        <StatCard icon={<Users size={16} className="text-purple-600" />} label="People Affected"
+          value={totalAffected.toLocaleString()} valueCls="text-purple-700">
+          <p className="text-[11px] font-medium text-slate-400">Reported, all districts ({dateRange})</p>
+        </StatCard>
       </motion.div>
 
       {/* Charts Row 1 */}
@@ -264,7 +283,7 @@ const ReportsAnalytics: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={disasterTypeDistribution}
+                    data={occurredTypes}
                     cx="50%"
                     cy="50%"
                     innerRadius={50}
@@ -272,7 +291,7 @@ const ReportsAnalytics: React.FC = () => {
                     dataKey="value"
                     strokeWidth={0}
                   >
-                    {disasterTypeDistribution.map((entry, idx) => (
+                    {occurredTypes.map((entry, idx) => (
                       <Cell key={idx} fill={entry.color} />
                     ))}
                   </Pie>
@@ -281,11 +300,13 @@ const ReportsAnalytics: React.FC = () => {
               </ResponsiveContainer>
             </div>
             <div className="space-y-3 flex-1">
-              {disasterTypeDistribution.map((d) => (
+              {occurredTypes.length === 0 && <p className="text-xs text-slate-500 italic">No incidents in {dateRange}.</p>}
+              {occurredTypes.map((d) => (
                 <div key={d.name} className="flex items-center gap-3">
                   <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: d.color }} />
                   <span className="text-xs font-semibold text-slate-700 flex-1">{d.name}</span>
-                  <span className="text-sm font-bold text-slate-900">{d.value}%</span>
+                  <span className="text-sm font-bold text-slate-900">{d.percent}%</span>
+                  {/* <span className="text-[11px] font-semibold text-slate-500 w-12 text-right">{d.percent}%</span> */}
                 </div>
               ))}
             </div>
@@ -299,10 +320,10 @@ const ReportsAnalytics: React.FC = () => {
         <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={16} className="text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-800">Average Response Time by Agency (Minutes)</h3>
+            <h3 className="text-sm font-bold text-slate-800">Avg Response Time by Agency (min)</h3>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={responseTimeData.map((d: any) => ({ agency: d.agency, avgMins: Number(d.avgMins ?? d.avg_mins ?? 0) }))}>
+            <BarChart data={responseTimeData.map((d) => ({ agency: d.agency, avgMins: d.avg_mins, samples: d.samples }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="agency" axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 11, fontWeight: 700 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} />
@@ -310,6 +331,17 @@ const ReportsAnalytics: React.FC = () => {
               <Bar dataKey="avgMins" name="Avg Minutes" fill="#2563eb" radius={[6, 6, 0, 0]} barSize={36} />
             </BarChart>
           </ResponsiveContainer>
+          {responseTimeData.some((d) => d.avg_mins == null) && (
+            <p className="text-[11px] text-slate-400 mt-1">
+              No measurable dispatches ({dateRange}): {responseTimeData.filter((d) => d.avg_mins == null).map((d) => d.agency).join(', ')}
+            </p>
+          )}
+          {responseTimeData.some((d) => (d.excluded ?? 0) > 0) && (
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              Not counted (assigned before the incident time or more than 7 days after it):{' '}
+              {responseTimeData.filter((d) => (d.excluded ?? 0) > 0).map((d) => `${d.agency} ×${d.excluded}`).join(', ')}
+            </p>
+          )}
         </motion.div>
 
         {/* Resource Utilization */}
@@ -317,7 +349,9 @@ const ReportsAnalytics: React.FC = () => {
           <div className="flex items-center gap-2 mb-4">
             <Package size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">Resource Utilization Rate (%)</h3>
+            
           </div>
+          {resourceUtilization.length === 0 && <p className="text-xs text-slate-500 italic">No stock or approved requisitions recorded.</p>}
           <div className="space-y-4">
             {resourceUtilization.map((res) => (
               <div key={res.category}>
@@ -326,7 +360,7 @@ const ReportsAnalytics: React.FC = () => {
                   <span className={`text-xs font-bold ${
                     res.used > 80 ? 'text-red-600' : res.used > 50 ? 'text-amber-600' : 'text-emerald-600'
                   }`}>
-                    {res.used}% Allocated
+                    {res.used}% allocated
                   </span>
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -350,31 +384,38 @@ const ReportsAnalytics: React.FC = () => {
             <FileText size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">State Disaster Impact & Performance Summary ({dateRange})</h3>
           </div>
-          <span className="text-xs font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md">
-            13 States & Federal Territories
-          </span>
+          {stateIncidentHeatmap.length > statesWithIncidents && (
+            <button
+              type="button"
+              onClick={() => setShowAllStates((v) => !v)}
+              className="text-xs font-semibold text-blue-700 hover:text-blue-900 bg-white border border-slate-200 px-2.5 py-1 rounded-md cursor-pointer"
+            >
+              {showAllStates
+                ? `Only states with incidents (${statesWithIncidents})`
+                : `Show all ${stateIncidentHeatmap.length} states`}
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                {['State / Territory', 'Total Incidents', 'Highest Severity', 'Response Rate', 'Avg Resolution (hrs)', 'Affected Population', 'Districts'].map((h) => (
+                {['State / Territory', 'Incidents', 'Highest Severity', 'Resolved', 'Avg Time to Resolve', 'Affected (reported)', 'Districts'].map((h) => (
                   <th key={h} className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-left">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {stateIncidentHeatmap.map((state: any) => {
+              {statesWithIncidents === 0 && !showAllStates && (
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-xs text-slate-400 italic">No incidents in {dateRange}.</td></tr>
+              )}
+              {visibleStates.map((state) => {
                 const hasIncidents = state.count > 0;
                 const isExpanded = !!expandedStates[state.state];
                 const districts = state.districts || [];
-                const respRate = state.responseRate || state.response_rate || (hasIncidents ? (state.severity === 'Critical' ? '94.5%' : state.severity === 'High' ? '96.2%' : '98.0%') : '-');
-                const avgRes = state.avgResolutionHours || state.avg_resolution_hours || (hasIncidents ? `${(4.5 + state.count * 0.5).toFixed(1)} hrs` : '-');
-                const popAffected = typeof state.affectedPopulation === 'number'
-                  ? state.affectedPopulation.toLocaleString()
-                  : typeof state.affected_population === 'number'
-                    ? state.affected_population.toLocaleString()
-                    : hasIncidents ? (state.count * 2500).toLocaleString() : '0';
+                const respRate = state.resolved_pct != null ? `${state.resolved_pct}%` : '—';
+                const avgRes = state.avg_resolution_hours != null ? `${state.avg_resolution_hours} h` : hasIncidents ? 'none resolved' : '—';
+                const popAffected = state.affected_population.toLocaleString();
                 return (
                   <React.Fragment key={state.state}>
                     <tr
@@ -398,13 +439,9 @@ const ReportsAnalytics: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          !hasIncidents ? 'bg-slate-100 text-slate-500 border border-slate-200' :
-                          state.severity === 'Critical' ? 'bg-red-50 text-red-700 border border-red-200' :
-                          state.severity === 'High' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                          state.severity === 'Medium' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
-                          'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          state.severity ? SEVERITY_PILL[state.severity] : 'bg-slate-100 text-slate-500 border border-slate-200'
                         }`}>
-                          {hasIncidents ? state.severity : 'Low / None'}
+                          {state.severity ?? (hasIncidents ? 'Not set' : '—')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs font-bold text-emerald-700">{respRate}</td>
@@ -438,12 +475,9 @@ const ReportsAnalytics: React.FC = () => {
                                 <Layers size={13} className="text-blue-600" />
                                 {state.state} · District Incident Breakdown & Frequency
                               </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                Total {state.count} incidents across {districts.length} districts
-                              </span>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {districts.map((d: any) => (
+                              {districts.map((d) => (
                                 <div
                                   key={d.district}
                                   className="flex items-center justify-between p-2 rounded-md bg-slate-50 border border-slate-200 text-xs"
@@ -451,7 +485,7 @@ const ReportsAnalytics: React.FC = () => {
                                   <div>
                                     <p className="font-bold text-slate-800">{d.district}</p>
                                     <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                      Pop. ~{(d.affectedPopulation || d.affected_population || 0).toLocaleString()}
+                                      {d.affected_population.toLocaleString()} affected (reported)
                                     </p>
                                   </div>
                                   <div className="text-right flex flex-col items-end gap-1">
@@ -459,12 +493,9 @@ const ReportsAnalytics: React.FC = () => {
                                       {d.count} {d.count === 1 ? 'incident' : 'incidents'}
                                     </span>
                                     <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                                      d.severity === 'Critical' ? 'bg-red-100 text-red-700' :
-                                      d.severity === 'High' ? 'bg-orange-100 text-orange-700' :
-                                      d.severity === 'Medium' ? 'bg-amber-100 text-amber-700' :
-                                      'bg-emerald-100 text-emerald-700'
+                                      d.severity ? SEVERITY_PILL[d.severity] : 'bg-slate-100 text-slate-500'
                                     }`}>
-                                      {d.severity}
+                                      {d.severity ?? 'Not set'}
                                     </span>
                                   </div>
                                 </div>

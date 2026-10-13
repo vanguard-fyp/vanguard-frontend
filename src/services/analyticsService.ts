@@ -1,6 +1,19 @@
 import { apiClient } from './apiClient';
 import type { ActivityEvent, AnalyticsSummary, KpiTrends } from '../types';
 
+type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
+
+/** One state row of the yearly summary; null = no data (never estimated). */
+export interface StateSummaryRow {
+  state: string;
+  count: number;
+  severity: Severity | null;
+  affected_population: number;
+  resolved_pct: number | null;
+  avg_resolution_hours: number | null;
+  districts: { district: string; count: number; severity: Severity | null; affected_population: number }[];
+}
+
 export const analyticsService = {
   /**
    * Fetch aggregate summary metrics, response times, and YoY trends
@@ -47,7 +60,7 @@ export const analyticsService = {
   /**
    * Fetch emergency resource utilization
    */
-  getResourceUtilization: async (): Promise<Array<{ name: string; value: number; fill: string }>> => {
+  getResourceUtilization: async (): Promise<Array<{ name: string; value: number; allocated?: number; stock?: number; fill: string }>> => {
     return apiClient.get('/analytics/resource-utilization');
   },
 
@@ -68,21 +81,21 @@ export const analyticsService = {
   /**
    * Fetch disaster type breakdown distribution
    */
-  getDisasterTypeDistribution: async (): Promise<Array<{ name: string; value: number; color: string }>> => {
-    return apiClient.get('/analytics/disaster-types');
+  getDisasterTypeDistribution: async (year?: string): Promise<Array<{ name: string; value: number; percent: number; color: string }>> => {
+    return apiClient.get('/analytics/disaster-types', year ? { year } : undefined);
   },
 
   /**
    * Fetch agency response times breakdown
    */
-  getAgencyResponseTimes: async (): Promise<Array<{ agency: string; avgMins: number }>> => {
-    return apiClient.get('/analytics/agency-response-times');
+  getAgencyResponseTimes: async (year?: string): Promise<Array<{ agency: string; avg_mins: number | null; samples: number; excluded?: number }>> => {
+    return apiClient.get('/analytics/agency-response-times', year ? { year } : undefined);
   },
 
   /**
    * Fetch state incident heatmap breakdown
    */
-  getStateHeatmap: async (year: string = '2026'): Promise<Array<{ state: string; count: number; severity: 'Critical' | 'High' | 'Medium' | 'Low' }>> => {
+  getStateHeatmap: async (year: string = '2026'): Promise<StateSummaryRow[]> => {
     return apiClient.get('/analytics/state-heatmap', { year });
   },
 

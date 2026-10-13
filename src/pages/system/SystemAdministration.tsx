@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
-import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks';
+import { useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks';
 import { UserManagementTable } from '../../components/ui/system/UserManagementTable';
 import { UserEditModal } from '../../components/ui/system/UserEditModal';
 import { SystemSettingsPanel } from '../../components/ui/system/SystemSettingsPanel';
@@ -10,7 +10,6 @@ import { adminTabs, containerAnim, itemAnim } from '../../constants';
 
 const SystemAdministration: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminSection>('users');
-  const { data: users = [] } = useUsers();
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
@@ -47,14 +46,11 @@ const SystemAdministration: React.FC = () => {
     deleteUserMutation.mutate(id);
   };
 
-  const handleToggleUserStatus = (id: string) => {
-    const user = users.find((u) => u.id === id);
-    if (user) {
-      updateUserMutation.mutate({
-        id,
-        updates: { status: user.status === 'Active' ? 'Inactive' : 'Active' },
-      });
-    }
+  const handleToggleUserStatus = (user: UserAccount) => {
+    updateUserMutation.mutate({
+      id: user.id,
+      updates: { status: user.status === 'Active' ? 'Inactive' : 'Active' },
+    });
   };
 
   return (
@@ -126,7 +122,6 @@ const SystemAdministration: React.FC = () => {
             transition={{ duration: 0.15 }}
           >
             <UserManagementTable
-              users={users}
               onEditUser={handleOpenEditUser}
               onDeleteUser={handleDeleteUser}
               onToggleUserStatus={handleToggleUserStatus}

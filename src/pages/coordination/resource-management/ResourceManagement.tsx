@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, ClipboardCheck, Send, GitFork, PackagePlus, Plus } from 'lucide-react';
+import { Warehouse, ClipboardCheck, Send, GitFork, Plus } from 'lucide-react';
 import {
   useInventory,
   useResourceRequests,
@@ -34,18 +35,40 @@ const ResourceManagement: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
   const [requisitionItem, setRequisitionItem] = useState<ResourceItem | null>(null);
+  const [requisitionType, setRequisitionType] = useState<'requisition' | 'replenishment'>('replenishment');
+
+  // Deep links from the header search: ?request=<id> opens that request's record
+  // on its stage; ?item=<inventory id> opens the stock tab on that item.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkRequest = searchParams.get('request');
+  const linkItem = searchParams.get('item');
+  useEffect(() => {
+    if (!linkRequest || requests.length === 0) return;
+    const req = requests.find((r) => r.id === linkRequest || r.display_id === linkRequest);
+    if (req) {
+      setActiveStep(req.status === 'Approved' || req.status === 'Dispatched' ? 3 : 2);
+      setSelectedRequestForModal(req);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('request');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkRequest, requests]);
+  useEffect(() => {
+    if (linkItem) setActiveStep(1);
+  }, [linkItem]);
 
   // Dynamic approver linked to current logged-in user
   const currentApprover = user?.name ? `${user.name} (${user.role} - ${user.agency || 'NADMA'})` : 'NADMA Incident Commander';
   const currentUserId = user?.id;
 
-  const handleApprove = (id: string) => {
+  const handleApprove = (id: string, warehouseId?: string) => {
     approveMutation.mutate(
-      { id, approver: currentApprover, approverUserId: currentUserId },
+      { id, approver: currentApprover, approverUserId: currentUserId, warehouseId },
       {
         onSuccess: () =>
           toastSuccess('Request Approved', `Resource request has been approved by ${user?.name || 'Officer'} and enqueued for dispatch.`),
-        onError: () => toastError('Approval Failed', 'Could not approve request. Please try again.'),
+        onError: (e) => toastError('Approval Failed', e instanceof Error && e.message ? e.message : 'Could not approve request. Please try again.'),
       }
     );
   };
@@ -75,19 +98,19 @@ const ResourceManagement: React.FC = () => {
     {
       id: 1 as const,
       num: '1',
-      title: 'Inventory & HIL Analytics',
-      sub: 'Stock & Depletion Forecast',
+      title: 'Depots & stock',
+      sub: 'What each depot holds',
       icon: Warehouse,
-      badge: `${inventory.length} Items`,
+      badge: `${inventory.length} items`,
       badgeStyle: 'bg-blue-50 text-blue-700 border-blue-200',
     },
     {
       id: 2 as const,
       num: '2',
-      title: 'Request Review & HIL Approval',
-      sub: 'AI Decision Advisory',
+      title: 'Review',
+      sub: 'Approve or reject requests',
       icon: ClipboardCheck,
-      badge: `${pendingRequestsCount} Pending`,
+      badge: `${pendingRequestsCount} waiting`,
       badgeStyle:
         pendingRequestsCount > 0
           ? 'bg-amber-50 text-amber-700 border-amber-200 font-bold'
@@ -96,10 +119,10 @@ const ResourceManagement: React.FC = () => {
     {
       id: 3 as const,
       num: '3',
-      title: 'Allocation Tracker',
-      sub: 'End-to-End Delivery',
+      title: 'Delivery',
+      sub: 'Approved requests on the way',
       icon: Send,
-      badge: `${activeAllocationsCount} Active`,
+      badge: `${activeAllocationsCount} moving`,
       badgeStyle: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     },
   ];
@@ -121,7 +144,7 @@ const ResourceManagement: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Resource Management</h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Response Coordination · Visual logistics pipeline with Human-in-the-Loop decision analytics across all stages
+            Stock, approvals and deliveries for every depot
           </p>
         </div>
 
@@ -155,7 +178,7 @@ const ResourceManagement: React.FC = () => {
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
               }`}
             >
-              Stage View
+              Stages
             </button>
             <button
               onClick={() => setActiveStep('all')}
@@ -166,7 +189,7 @@ const ResourceManagement: React.FC = () => {
               }`}
             >
               <GitFork size={13} className={activeStep === 'all' ? 'text-blue-600' : 'text-slate-500'} />
-              <span>Pipeline Flow</span>
+              <span>Pipeline</span>
             </button>
           </div>
         </div>
@@ -177,7 +200,7 @@ const ResourceManagement: React.FC = () => {
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Total Items Tracked</p>
           <p className="text-2xl font-bold text-slate-900 mt-1">{inventory.length}</p>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">5 Depot Categories</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Across all depots</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
           <p className="text-[11px] font-bold text-red-700 uppercase tracking-wide">Critical Stock</p>
@@ -258,10 +281,11 @@ const ResourceManagement: React.FC = () => {
             exit={{ opacity: 0, y: -6 }}
           >
             <InventoryStage
-              inventory={inventory}
               requests={requests}
-              onCreateRequisition={(item) => {
+              focusItemId={linkItem}
+              onCreateRequisition={(item, type) => {
                 setRequisitionItem(item);
+                setRequisitionType(type);
                 setShowCreateModal(true);
               }}
             />
@@ -276,7 +300,6 @@ const ResourceManagement: React.FC = () => {
             exit={{ opacity: 0, y: -6 }}
           >
             <RequestApprovalStage
-              requests={requests}
               onApprove={handleApprove}
               onReject={handleReject}
               onSelectRequest={(req) => setSelectedRequestForModal(req)}
@@ -291,7 +314,7 @@ const ResourceManagement: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
           >
-            <AllocationTrackerStage requests={requests} />
+            <AllocationTrackerStage requests={requests} onSelectRequest={(req) => setSelectedRequestForModal(req)} />
           </motion.div>
         )}
 
@@ -305,6 +328,8 @@ const ResourceManagement: React.FC = () => {
             <PipelineFlowDiagram
               inventory={inventory}
               requests={requests}
+              onSelectRequest={(req) => setSelectedRequestForModal(req)}
+              onNavigateStage={(stage) => setActiveStep(stage)}
             />
           </motion.div>
         )}
@@ -322,6 +347,7 @@ const ResourceManagement: React.FC = () => {
       <CreateResourceRequestModal
         isOpen={showCreateModal}
         initialItem={requisitionItem}
+        initialType={requisitionType}
         onClose={() => {
           setShowCreateModal(false);
           setRequisitionItem(null);

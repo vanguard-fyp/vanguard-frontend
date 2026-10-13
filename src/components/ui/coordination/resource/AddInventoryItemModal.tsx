@@ -127,22 +127,21 @@ export const AddInventoryItemModal: React.FC<AddInventoryItemModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+          className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-blue-200 overflow-hidden"
         >
-          {/* Header */}
-          <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+          {/* Header (blue = create, same as every create dialog) */}
+          <div className="px-6 py-3.5 bg-blue-600 text-white flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold shadow-xs">
-                <Warehouse size={16} />
-              </div>
+              <Warehouse size={18} />
               <div>
-                <h3 className="text-sm font-bold text-white">Add Warehouse Catalog Item</h3>
-                <p className="text-[10px] text-slate-400">Register new supply stock into central logistics depot</p>
+                <h3 className="text-sm font-bold">Add stock item</h3>
+                <p className="text-xs text-blue-100">Adds an item to a depot's stock list</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Close"
+              className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X size={18} />
             </button>
