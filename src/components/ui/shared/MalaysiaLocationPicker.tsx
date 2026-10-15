@@ -46,6 +46,9 @@ interface MalaysiaLocationPickerProps {
   onPostcodeChange?: (postcode: string) => void;
   /** Full canonical resolution (zone, admin-area id, status) for the parent form. */
   onResolutionChange?: (r: LocationResolution) => void;
+  /** Look up the given lat/lng straight away (pre-filled from a prediction / alert),
+   *  so the location is resolved without the officer re-dropping the pin. */
+  resolveOnMount?: boolean;
 }
 
 const STATUS_UI: Record<string, { text: string; cls: string; icon: 'ok' | 'warn' | 'spin' }> = {
@@ -90,11 +93,15 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
   postcode,
   onPostcodeChange,
   onResolutionChange,
+  resolveOnMount,
 }) => {
   const { data: areas = [], isLoading: areasLoading, isError: areasError, refetch: refetchAreas } = useAdministrativeAreas();
-  const [s, dispatch] = useReducer(locationReducer, undefined, () =>
-    initialLocation({ state, district, postcode: postcode ?? '', lat: num(lat), lng: num(lng) })
-  );
+  const [s, dispatch] = useReducer(locationReducer, undefined, () => {
+    const start = initialLocation({ state, district, postcode: postcode ?? '', lat: num(lat), lng: num(lng) });
+    return resolveOnMount && start.lat != null && start.lng != null
+      ? { ...start, status: 'pending' as const, origin: 'pin' as const }
+      : start;
+  });
   const [suggestions, setSuggestions] = useState<{ display_name: string; lat: string; lon: string }[]>([]);
   const [searching, setSearching] = useState(false);
 

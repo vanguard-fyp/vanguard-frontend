@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FLOW_STEPS, nextAction, requestFlow, stepIndex } from '../utils/resourceFlow';
+import { FLOW_STEPS, nextAction, requestFlow, stepIndex } from '../../utils/resourceFlow';
 
 const req = (over: Record<string, unknown>) => ({ status: 'Approved', justification: '', ...over }) as never;
 

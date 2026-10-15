@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AdministrativeArea, GeoResolution } from '../types';
+import type { AdministrativeArea, GeoResolution } from '../../types';
 import {
   canonicalState,
   districtsForState,
@@ -10,7 +10,7 @@ import {
   stateCentroid,
   stateKey,
   statesOf,
-} from '../utils/locationSync';
+} from '../../utils/locationSync';
 
 const areas: AdministrativeArea[] = [
   { id: 'kb', state: 'Kelantan', district: 'Kota Bharu', district_code: 'KB', centroid_lat: 6.1, centroid_lng: 102.2 },

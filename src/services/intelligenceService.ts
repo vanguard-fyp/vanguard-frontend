@@ -4,6 +4,7 @@ import type {
   HazardPrediction,
   IncidentAssessment,
   IntelligenceOverview,
+  WiderEvent,
 } from '../types';
 
 /**
@@ -11,7 +12,19 @@ import type {
  * canonical pipeline (persisted incident assessments). The console never
  * orchestrates or merges agent calls itself.
  */
+/** Last / current prediction scan (backend prediction_service.scan_status). */
+export interface PredictionScanStatus {
+  running: boolean;
+  scanned_at?: string;
+  /** whether each data source answered in the last scan */
+  sources?: Partial<Record<'forecast' | 'river' | 'fire_satellite' | 'air_quality' | 'gdacs', boolean>>;
+  result?: { status: string; candidates?: number; written?: number; expired?: number; reason?: string; scanned_at?: string };
+}
+
 export const intelligenceService = {
+  /** Related active incidents grouped into wider events (advisory). */
+  getWiderEvents: () => apiClient.get<WiderEvent[]>('/intelligence/events'),
+
   getOverview: (params: { status?: 'active' | 'resolved' | 'all'; limit?: number; offset?: number }) =>
     apiClient.get<IntelligenceOverview>('/intelligence/overview', params),
 
@@ -36,7 +49,10 @@ export const intelligenceService = {
   getPredictions: (limit = 50) => apiClient.get<HazardPrediction[]>('/intelligence/predictions', { limit }),
 
   /** Administrative/test control only — the scan normally runs on a server schedule. */
-  runPredictionScan: () => apiClient.post<Record<string, unknown>>('/intelligence/predictions/scan'),
+  /** Starts a background scan: {status: 'started' | 'running'}. */
+  runPredictionScan: () => apiClient.post<{ status: string }>('/intelligence/predictions/scan'),
+
+  getPredictionScanStatus: () => apiClient.get<PredictionScanStatus>('/intelligence/predictions/scan'),
 
   dismissPrediction: (id: string) => apiClient.post<HazardPrediction>(`/intelligence/predictions/${id}/dismiss`),
 

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, CloudFog, CloudLightning, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Activity, ChevronDown, ChevronUp, CloudFog, CloudLightning, CloudRain, Flame, Loader2, Mountain, RefreshCw, ShieldCheck, Sun, Waves, Wind } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDismissPrediction, useHazardPredictions, useRunPredictionScan } from '../../../hooks';
+import { INTEL_KEYS, usePredictionScanStatus } from '../../../hooks/useIntelligence';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { fmtNumber, fmtScore, fmtText, isNum, relativeTime } from '../../../utils/display';
@@ -8,8 +10,9 @@ import type { HazardPrediction } from '../../../types/intelligence';
 import { AiSuggestion } from '../shared/AiSuggestion';
 
 /**
- * Emerging-hazard predictions from the scheduled scan (GDACS alerts + CAMS
- * PM2.5 haze forecast). These are NOT incidents: nothing here has been reported
+ * Emerging-hazard predictions from the scheduled scan: the forecast watch
+ * (flood, flash flood, landslide, storm, fire, drought at every district),
+ * the PM2.5 haze forecast and GDACS alerts near Malaysia. These are NOT incidents: nothing here has been reported
  * or verified, and nothing is dispatched from it. The panel is a single line
  * when nothing is predicted and only opens when there is something to review.
  */
@@ -29,20 +32,59 @@ const tone = (score: number | null) =>
         ? { bar: 'bg-orange-500', chip: 'bg-orange-50 text-orange-700 border-orange-200' }
         : { bar: 'bg-amber-400', chip: 'bg-amber-50 text-amber-800 border-amber-200' };
 
+const HAZARD_ICON: Record<string, React.ReactNode> = {
+  Haze: <CloudFog size={14} className="text-slate-500 shrink-0" />,
+  Flood: <Waves size={14} className="text-blue-600 shrink-0" />,
+  'Flash Flood': <CloudRain size={14} className="text-blue-600 shrink-0" />,
+  Landslide: <Mountain size={14} className="text-amber-700 shrink-0" />,
+  'Severe Storm': <Wind size={14} className="text-purple-600 shrink-0" />,
+  'Tropical Cyclone': <Wind size={14} className="text-purple-600 shrink-0" />,
+  'Forest Fire': <Flame size={14} className="text-orange-600 shrink-0" />,
+  'Forest Fire / Wildfire': <Flame size={14} className="text-orange-600 shrink-0" />,
+  Drought: <Sun size={14} className="text-yellow-600 shrink-0" />,
+  Earthquake: <Activity size={14} className="text-rose-600 shrink-0" />,
+};
+const iconFor = (t?: string | null) => HAZARD_ICON[t ?? ''] ?? <CloudLightning size={14} className="text-slate-500 shrink-0" />;
+
+const SOURCE_LABEL: Record<string, string> = {
+  forecast: 'weather forecast',
+  river: 'river flow',
+  fire_satellite: 'satellite fire detections',
+  air_quality: 'air-quality forecast',
+  gdacs: 'GDACS alerts',
+};
+
 /** One-line headline signal per hazard type, from the scan's own signals. */
 const headline = (p: HazardPrediction): string | null => {
   const s = p.signals ?? {};
+  const n = Array.isArray(s.districts_affected) ? s.districts_affected.length : 0;
+  const more = n > 1 ? ` · ${n} districts` : '';
   if (p.hazard_type === 'Haze' && isNum(s.peak_pm25_24h_ugm3 as number)) {
-    const n = Array.isArray(s.districts_affected) ? s.districts_affected.length : 0;
-    return `PM2.5 ${s.peak_pm25_24h_ugm3} µg/m³ (AQI ${s.peak_aqi}, ${s.aqi_category})${n > 1 ? ` · ${n} districts` : ''}`;
+    return `PM2.5 ${s.peak_pm25_24h_ugm3} µg/m³ (AQI ${s.peak_aqi}, ${s.aqi_category})${more}`;
   }
-  if (!s.alert_level) return null;
-  // The measurement that corroborates this hazard (river for floods, gusts for
-  // storms, fire weather for fires …), only when the scan retrieved it.
+  if (!s.alert_level) {
+    // Forecast watch: the reading that crossed the danger line.
+    const parts: string[] = [];
+    if (isNum(s.rainfall_24h_mm as number)) parts.push(`${s.rainfall_24h_mm} mm rain in 24 h`);
+    if (isNum(s.rainfall_72h_mm as number)) parts.push(`${s.rainfall_72h_mm} mm in 72 h`);
+    if (isNum(s.river_peak_vs_today as number)) parts.push(`river ${s.river_peak_vs_today}× today`);
+    if (isNum(s.heaviest_hour_mm as number)) parts.push(`heaviest hour ${s.heaviest_hour_mm} mm`);
+    if (isNum(s.rain_past_7d_mm as number) && p.hazard_type === 'Landslide') parts.push(`${s.rain_past_7d_mm} mm in past 7 days`);
+    if (isNum(s.max_gust_kmh as number)) parts.push(`gusts to ${Math.round(s.max_gust_kmh as number)} km/h`);
+    if (isNum(s.fire_detections_24h as number) && (s.fire_detections_24h as number) > 0) parts.push(`${s.fire_detections_24h} satellite fire detections / 24 h`);
+    if (isNum(s.hot_dry_hours as number)) parts.push(`${s.hot_dry_hours} hot-dry hours`);
+    if (isNum(s.rain_past_30d_mm as number)) parts.push(`${s.rain_past_30d_mm} mm rain in 30 days`);
+    if (isNum(s.river_vs_usual as number)) parts.push(`river at ${Math.round((s.river_vs_usual as number) * 100)}% of usual`);
+    return parts.length ? `Forecast: ${parts.join(' · ')}${more}` : null;
+  }
+  // GDACS: the measurement that corroborates this hazard (river for floods,
+  // gusts for storms, fire weather for fires …), only when the scan retrieved it.
   const parts = [`GDACS ${String(s.alert_level)} alert`];
   if (isNum(s.river_peak_vs_today as number)) parts.push(`river flow peak ${s.river_peak_vs_today}× today`);
   if (isNum(s.max_gust_kmh as number)) parts.push(`gusts to ${Math.round(s.max_gust_kmh as number)} km/h`);
+  if (isNum(s.fire_detections_24h as number)) parts.push(`${s.fire_detections_24h} satellite fire detections / 24 h`);
   if (isNum(s.hot_dry_hours as number)) parts.push(`${s.hot_dry_hours} hot-dry hours`);
+  if (isNum(s.river_vs_usual as number)) parts.push(`river at ${Math.round((s.river_vs_usual as number) * 100)}% of usual`);
   if (isNum(s.rain_past_7d_plus_forecast_mm as number)) parts.push(`${s.rain_past_7d_plus_forecast_mm} mm rain (7 d + forecast)`);
   if (isNum(s.rainfall_24h_mm as number)) parts.push(`${s.rainfall_24h_mm} mm rain / 24 h`);
   if (s.corroboration === 'none applicable') parts.push('no weather signal applies');
@@ -52,9 +94,31 @@ const headline = (p: HazardPrediction): string | null => {
 export const HazardPredictionsPanel: React.FC<HazardPredictionsPanelProps> = ({ onPromoteToIncident }) => {
   const { data: predictions = [], isLoading, isError, refetch, dataUpdatedAt } = useHazardPredictions();
   const dismiss = useDismissPrediction();
-  const scan = useRunPredictionScan();
   const { hasPermission } = useAuth();
   const toast = useToast();
+  const scan = useRunPredictionScan();
+  const { data: scanStatus } = usePredictionScanStatus();
+  const qc = useQueryClient();
+  const scanning = scan.isPending || !!scanStatus?.running;
+  const downSources = Object.entries(scanStatus?.sources ?? {})
+    .filter(([, ok]) => ok === false)
+    .map(([k]) => SOURCE_LABEL[k] ?? k);
+  // When a scan we started finishes, refresh the list and report the result once.
+  const watching = React.useRef(false);
+  React.useEffect(() => {
+    if (!watching.current || scanStatus?.running !== false) return;
+    watching.current = false;
+    qc.invalidateQueries({ queryKey: INTEL_KEYS.predictions });
+    const r = scanStatus.result;
+    if (!r || r.status !== 'ok') {
+      toast.warning('Scan not completed', r?.reason ?? 'The prediction scan did not finish.');
+      return;
+    }
+    toast.success(
+      'Hazard scan complete',
+      `${r.candidates ?? 0} hazard(s) found · ${r.written ?? 0} new/updated${r.expired ? ` · ${r.expired} cleared` : ''}`
+    );
+  }, [scanStatus, qc, toast]);
   const canManage = hasPermission('MANAGE_INCIDENTS');
   const count = predictions.length;
   const [open, setOpen] = useState(false);
@@ -78,18 +142,8 @@ export const HazardPredictionsPanel: React.FC<HazardPredictionsPanelProps> = ({ 
 
   const runScan = () =>
     scan.mutate(undefined, {
-      onSuccess: (r) => {
-        const res = r as { status?: string; written?: number; candidates?: number; expired?: number; reason?: string; haze_forecast_available?: boolean };
-        if (res.status !== 'ok') {
-          toast.warning('Scan not completed', res.reason ?? 'The prediction scan did not run.');
-          return;
-        }
-        toast.success(
-          'Hazard scan complete',
-          `${res.candidates ?? 0} hazard(s) above threshold · ${res.written ?? 0} new/updated${res.expired ? ` · ${res.expired} cleared` : ''}${
-            res.haze_forecast_available === false ? ' · air-quality forecast unavailable' : ''
-          }`
-        );
+      onSuccess: () => {
+        watching.current = true;
       },
       onError: (e) => toast.error('Scan failed', e instanceof Error ? e.message : 'Prediction scan failed'),
     });
@@ -123,9 +177,10 @@ export const HazardPredictionsPanel: React.FC<HazardPredictionsPanelProps> = ({ 
                 ? 'Loading…'
                 : isError
                   ? 'unavailable'
-                  : count === 0
+                    : count === 0
                     ? `None predicted${dataUpdatedAt ? ` · checked ${relativeTime(new Date(dataUpdatedAt).toISOString())}` : ''}`
                     : `${count} to review · highest: ${fmtText(lead.hazard_type, 'Hazard')}, ${fmtText(lead.state, '')}`}
+              {downSources.length > 0 && <span className="text-amber-700"> · last scan without {downSources.join(', ')}</span>}
             </span>
             {count > 0 && (open ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />)}
           </button>
@@ -137,12 +192,12 @@ export const HazardPredictionsPanel: React.FC<HazardPredictionsPanelProps> = ({ 
               <button
                 type="button"
                 onClick={runScan}
-                disabled={scan.isPending}
-                title="Runs the hazard scan now (GDACS alerts + PM2.5 haze forecast). It also runs automatically every hour."
+                disabled={scanning}
+                title="Checks every district's forecast (rain, river, wind, fire, drought, haze) and GDACS alerts now. It also runs automatically."
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
               >
-                {scan.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                Scan now
+                {scanning ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                {scanning ? 'Scanning…' : 'Scan now'}
               </button>
             )}
           </div>
@@ -193,7 +248,7 @@ export const HazardPredictionsPanel: React.FC<HazardPredictionsPanelProps> = ({ 
                       aria-expanded={isOpen}
                       className="flex-1 min-w-0 text-left flex items-center gap-2 cursor-pointer"
                     >
-                      {p.hazard_type === 'Haze' ? <CloudFog size={14} className="text-slate-500 shrink-0" /> : <CloudLightning size={14} className="text-slate-500 shrink-0" />}
+                      {iconFor(p.hazard_type)}
                       <span className="min-w-0">
                         <span className="block text-xs font-semibold text-slate-900 truncate">
                           {fmtText(p.hazard_type, 'Hazard')} in {fmtText(p.district, 'unknown district')}{p.state ? `, ${p.state}` : ''}

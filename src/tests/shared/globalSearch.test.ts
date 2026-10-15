@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { searchAll } from '../utils/globalSearch';
+import { searchAll } from '../../utils/globalSearch';
 
 const inc = (over: Record<string, unknown>) =>
   ({ id: 'i1', display_id: 'INC-2026-001', title: 'River flooding', district: 'Kota Bharu', state: 'Kelantan', status: 'Responding', severity: 'Critical', location: '', type: 'Flood', ...over }) as never;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { LogDetailBody } from '../../../components/ui/situational/LogDetailBody';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -38,6 +39,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
+import { CredibilityCard } from '../../../components/ui/situational/CredibilityCard';
 import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
@@ -563,7 +565,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     <ImageIcon size={14} className="text-blue-600" />
                     Field Evidence &amp; Attached Media ({incident.media_urls!.length})
                   </span>
-                  <span className="text-[10px] text-slate-400 font-medium">Authenticity not machine-verified · click to enlarge</span>
+                  <span className="text-[10px] text-slate-400 font-medium">AI-screened, see Report Credibility · click to enlarge</span>
                 </div>
                 {isLoadingMedia ? (
                   <p className="text-xs text-slate-400 italic">Loading media…</p>
@@ -615,6 +617,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             )}
           </div>
 
+          <CredibilityCard incidentId={incident.id} />
         </div>
 
         {/* ── Tabbed Command Actions Sidebar ── */}
@@ -941,11 +944,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                             {formatDateTime(log.logged_at, 'Recent')}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-600">
-                          {log.detail || `Action performed by ${log.actor}`}
-                        </p>
-                        <div className="mt-1 text-[10px] font-mono text-slate-400">
-                          Actor: <span className="font-semibold text-slate-600">{log.actor}</span>
+                        <LogDetailBody detail={log.detail} />
+                        <div className="mt-1 text-[10px] text-slate-400">
+                          by <span className="font-semibold text-slate-600">{log.actor}</span>
                         </div>
                       </div>
                     </div>

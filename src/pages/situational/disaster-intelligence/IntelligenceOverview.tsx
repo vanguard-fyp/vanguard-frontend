@@ -15,6 +15,7 @@ import type { IntelligenceOverviewProps } from '../../../types';
 import { itemAnim, MINIMAL_STATUS_FILTERS, SEVERITY_COLORS } from '../../../constants';
 import { CustomChartTooltip } from '../../../components/ui/situational/CustomChartTooltip';
 import { disasterLevelInfo } from '../../../constants/components/disasterLevels';
+import { WiderEventsPanel } from '../../../components/ui/situational/WiderEventsPanel';
 
 const PAGE_SIZE = 30;
 const UNCLASSIFIED = 'Level not declared';
@@ -166,6 +167,8 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
         )}
       </AnimatePresence>
 
+      <WiderEventsPanel onSelectIncident={onSelectInsight} />
+
       {/* Grouped by Disaster Operational Level: Level 3, Level 2, Level 1 */}
       {isLoading ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
@@ -284,6 +287,16 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
                               <span className="text-slate-500 font-medium">
                                 {incident.type || 'Disaster'}
                               </span>
+                              {assessment?.credibility?.verdict === 'Possibly false' && (
+                                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold" title={assessment.credibility.suggestion ?? undefined}>
+                                  Evidence does not support it
+                                </span>
+                              )}
+                              {assessment?.scoring?.wider_event && (
+                                <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">
+                                  Part of {assessment.scoring.wider_event.incident_count}-incident event
+                                </span>
+                              )}
                             </div>
                             <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
                               {incident.title}

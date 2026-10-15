@@ -253,7 +253,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
                 </span>
               )}
               {showingPrevious && <span className="text-amber-300 font-semibold">Showing previous result</span>}
-              {a?.is_stale && <span className="text-amber-300 font-semibold">Older than 6 h — re-assess</span>}
+              {a?.is_stale && <span className="text-amber-300 font-semibold">Out of date — re-assess</span>}
               {current?.status === 'failed' && current.error && <span className="text-red-300">Latest run failed: {current.error}</span>}
             </>
           )}
@@ -262,6 +262,24 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
 
       {a && (
         <>
+          {/* Fact checks that apply whatever the declared level or who reported it */}
+          {a.credibility?.verdict === 'Possibly false' && (
+            <div className="border border-red-200 bg-red-50 rounded-xl px-4 py-3 text-xs text-red-900">
+              <strong>Possible false alarm.</strong> Independent evidence does not support this report.{' '}
+              {a.credibility.suggestion}
+            </div>
+          )}
+          {a.scoring?.wider_event && (
+            <div className={`border rounded-xl px-4 py-3 text-xs ${a.scoring.wider_event.under_declared ? 'border-red-200 bg-red-50 text-red-900' : 'border-indigo-200 bg-indigo-50 text-indigo-900'}`}>
+              <strong>Part of a wider event:</strong> {a.scoring.wider_event.title}, {a.scoring.wider_event.incident_count} incidents
+              {a.scoring.wider_event.combined_priority != null && <> · combined priority {Math.round(a.scoring.wider_event.combined_priority)}</>}
+              {a.scoring.wider_event.under_declared && (
+                <> · declared {a.scoring.wider_event.declared_level ?? 'no level'}, spread suggests {a.scoring.wider_event.suggested_level}</>
+              )}
+              .
+            </div>
+          )}
+
           {/* 2. Impact progression with the AI projection (dotted) */}
           {timeline.length > 0 ? (
             <div>

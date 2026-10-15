@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UNAVAILABLE, fmtDecimal, fmtNumber, fmtScore, fmtText, isNum, newIdempotencyKey, relativeTime } from '../utils/display';
+import { UNAVAILABLE, fmtDecimal, fmtNumber, fmtScore, fmtText, isNum, newIdempotencyKey, relativeTime } from '../../utils/display';
 
 const BAD = [undefined, null, NaN, Infinity, -Infinity, '12', {}, []];
 const leaks = (s: string) => /undefined|null|NaN|Infinity|\[object/.test(s);

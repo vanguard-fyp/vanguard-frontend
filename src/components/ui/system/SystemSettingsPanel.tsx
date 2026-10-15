@@ -1,215 +1,175 @@
-import React, { useState } from 'react';
-import { CheckCircle2, Sliders, RefreshCw, Sparkles, Droplets, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, Loader2, RotateCcw, Sliders } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
+import { useAuth } from '../../../context/AuthContext';
+import { useResetSystemSetting, useSystemSettings, useUpdateSystemSetting } from '../../../hooks/useSystemSettings';
+import type { SettingGroup, SystemSetting } from '../../../services/systemSettingsService';
+import { relativeTime } from '../../../utils/display';
 
+const GROUPS: { key: SettingGroup; title: string }[] = [
+  { key: 'early_warning', title: 'Early warning' },
+  { key: 'hazard', title: 'Danger levels' },
+  { key: 'workflow', title: 'Timing' },
+];
+
+const fmt = (s: SystemSetting, v: number) =>
+  s.kind === 'choice' ? s.options.find((o) => o.value === v)?.label ?? String(v) : `${v} ${s.unit}`;
+
+/**
+ * Operational thresholds read by the backend at runtime
+ * (app/services/system/settings_service.py). Admins edit; others read.
+ */
 export const SystemSettingsPanel: React.FC = () => {
-  const toast = useToast();
-  const [aiPriorityThreshold, setAiPriorityThreshold] = useState(75);
-  const [rainfallThreshold, setRainfallThreshold] = useState(60);
-  const [waterSurgeLevel, setWaterSurgeLevel] = useState(3.5);
-  const [autoSmsEnabled, setAutoSmsEnabled] = useState(true);
-  const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(true);
-  const [telemetrySyncInterval, setTelemetrySyncInterval] = useState('30');
-  const [showAdvancedGateway, setShowAdvancedGateway] = useState(false);
-  const [saveNotice, setSaveNotice] = useState(false);
-
-  const handleSaveParameters = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaveNotice(true);
-    toast.success('System settings & AI Operational Thresholds updated successfully!');
-    setTimeout(() => setSaveNotice(false), 3000);
-  };
+  const { data, isLoading, isError, refetch } = useSystemSettings();
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission('SYSTEM_ADMIN') && !!data?.storage_available;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Sliders size={18} className="text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-900">
-              Disaster Intelligence & AI Operational Thresholds
-            </h3>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure automated risk classification, rainfall alerts, and multi-agency escalation triggers
-          </p>
-        </div>
-
-        {saveNotice && (
-          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1">
-            <CheckCircle2 size={13} /> Thresholds Saved
-          </span>
-        )}
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-5">
+      <div className="flex items-center gap-2">
+        <Sliders size={16} className="text-blue-600" />
+        <h3 className="text-sm font-bold text-slate-900">Operational thresholds</h3>
+        {data && !canEdit && data.storage_available && <span className="text-[11px] text-slate-400">· read-only</span>}
       </div>
 
-      <form onSubmit={handleSaveParameters} className="space-y-6">
-        {/* Section 1: AI Risk Index Sliders */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Priority Index Slider */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Sparkles size={13} className="text-blue-600" />
-                AI Priority Escalation
-              </span>
-              <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
-                {aiPriorityThreshold} / 100
-              </span>
-            </div>
-            <input
-              type="range"
-              min="50"
-              max="95"
-              value={aiPriorityThreshold}
-              onChange={(e) => setAiPriorityThreshold(Number(e.target.value))}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-            />
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Incidents scoring above <strong>{aiPriorityThreshold}</strong> trigger automated Directive 20 Federal escalation.
-            </p>
-          </div>
+      {isLoading && <Loader2 size={14} className="animate-spin text-slate-400" />}
+      {isError && (
+        <p className="text-xs text-red-700">
+          Could not load. <button onClick={() => refetch()} className="font-bold underline cursor-pointer">Retry</button>
+        </p>
+      )}
+      {data && !data.storage_available && (
+        <p className="text-xs text-amber-800 flex items-center gap-1.5">
+          <AlertTriangle size={13} /> Defaults in use. Apply migration 20261018 to edit.
+        </p>
+      )}
 
-          {/* Rainfall Threshold */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Droplets size={13} className="text-cyan-600" />
-                Heavy Rainfall Warning
-              </span>
-              <span className="text-xs font-mono font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded-lg">
-                {rainfallThreshold} mm/hr
-              </span>
-            </div>
-            <input
-              type="range"
-              min="30"
-              max="120"
-              value={rainfallThreshold}
-              onChange={(e) => setRainfallThreshold(Number(e.target.value))}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-600"
-            />
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Doppler radar readings exceeding <strong>{rainfallThreshold} mm/hr</strong> activate flash flood warnings.
-            </p>
-          </div>
-
-          {/* River Danger Water Level */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Activity size={13} className="text-amber-600" />
-                River Danger Level
-              </span>
-              <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-                {waterSurgeLevel.toFixed(1)} meters
-              </span>
-            </div>
-            <input
-              type="range"
-              min="2.0"
-              max="6.0"
-              step="0.1"
-              value={waterSurgeLevel}
-              onChange={(e) => setWaterSurgeLevel(Number(e.target.value))}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
-            />
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              JPS river sensors reaching <strong>{waterSurgeLevel}m</strong> auto-flag surrounding evacuation centers.
-            </p>
-          </div>
-        </div>
-
-        {/* Section 2: Automated Public & Officer Dispatch Toggles */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-slate-800">Public Siren & SMS Gateway</p>
-              <p className="text-[11px] text-slate-500">Dispatch cell-broadcast sirens upon verified Level 3 hazards</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAutoSmsEnabled(!autoSmsEnabled)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                autoSmsEnabled
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-slate-200 text-slate-600 border-slate-300'
-              }`}
-            >
-              {autoSmsEnabled ? 'ACTIVE' : 'PAUSED'}
-            </button>
-          </div>
-
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold text-slate-800">Officer Escalation Summaries</p>
-              <p className="text-[11px] text-slate-500">Broadcast SITREP briefings to field commanders and agency leads</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEmailAlertsEnabled(!emailAlertsEnabled)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
-                emailAlertsEnabled
-                  ? 'bg-blue-50 text-blue-800 border-blue-200'
-                  : 'bg-slate-200 text-slate-600 border-slate-300'
-              }`}
-            >
-              {emailAlertsEnabled ? 'ENABLED' : 'PAUSED'}
-            </button>
-          </div>
-        </div>
-
-        {/* Section 3: Collapsible Advanced Gateway Diagnostics */}
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowAdvancedGateway(!showAdvancedGateway)}
-            className="w-full px-4 py-3 bg-slate-50/80 flex items-center justify-between hover:bg-slate-100 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <RefreshCw size={14} className="text-slate-500" />
-              <span className="text-xs font-bold text-slate-700">Advanced Telemetry Sync & Gateway Diagnostics</span>
-            </div>
-            {showAdvancedGateway ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
-          </button>
-
-          {showAdvancedGateway && (
-            <div className="p-4 bg-white space-y-3 text-xs border-t border-slate-100">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">JPS Hydrological Polling Frequency</label>
-                  <select
-                    value={telemetrySyncInterval}
-                    onChange={(e) => setTelemetrySyncInterval(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600"
-                  >
-                    <option value="15">Every 15 seconds (Real-time)</option>
-                    <option value="30">Every 30 seconds (Recommended)</option>
-                    <option value="60">Every 1 minute</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">GDACS Live Feed Heartbeat</label>
-                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>WebSocket Connected (UN OCHA RSS Multilateral Gateway)</span>
-                  </div>
-                </div>
+      {data && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {GROUPS.map((g) => (
+            <section key={g.key}>
+              <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">{g.title}</h4>
+              <div className="border border-slate-200 rounded-xl divide-y divide-slate-100">
+                {data.items
+                  .filter((i) => i.group === g.key)
+                  .map((s) => (
+                    <SettingRow key={s.key} setting={s} canEdit={canEdit} />
+                  ))}
               </div>
-            </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SettingRow: React.FC<{ setting: SystemSetting; canEdit: boolean }> = ({ setting: s, canEdit }) => {
+  const toast = useToast();
+  const update = useUpdateSystemSetting();
+  const reset = useResetSystemSetting();
+  const [draft, setDraft] = useState(String(s.value));
+  useEffect(() => setDraft(String(s.value)), [s.value]);
+
+  const num = Number(draft);
+  const invalid =
+    draft.trim() === '' ||
+    !Number.isFinite(num) ||
+    (s.kind === 'int' && !Number.isInteger(num)) ||
+    (s.minimum != null && num < s.minimum) ||
+    (s.maximum != null && num > s.maximum);
+  const dirty = !invalid && num !== s.value;
+  const busy = update.isPending || reset.isPending;
+
+  const save = () =>
+    update.mutate(
+      { key: s.key, value: num },
+      {
+        onSuccess: () => toast.success(`${s.label}: ${fmt(s, num)}`),
+        onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not save'),
+      }
+    );
+  const restore = () =>
+    reset.mutate(s.key, {
+      onSuccess: () => toast.success(`${s.label}: back to ${fmt(s, s.default)}`),
+      onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not reset'),
+    });
+
+  const changed = !s.is_default
+    ? `Changed${s.updated_by ? ` by ${s.updated_by}` : ''}${s.updated_at ? ` ${relativeTime(s.updated_at)}` : ''}`
+    : null;
+
+  return (
+    <div className="px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-slate-800" title={s.help}>{s.label}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {s.kind === 'choice' ? (
+            <select
+              value={draft}
+              disabled={!canEdit || busy}
+              onChange={(e) => setDraft(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-md px-1.5 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 disabled:opacity-70"
+            >
+              {s.options.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          ) : (
+            <>
+              <input
+                type="number"
+                value={draft}
+                min={s.minimum ?? undefined}
+                max={s.maximum ?? undefined}
+                step={s.step}
+                disabled={!canEdit || busy}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && dirty && save()}
+                aria-invalid={invalid}
+                aria-label={s.label}
+                className={`w-16 bg-slate-50 border rounded-md px-1.5 py-1 text-xs font-mono font-semibold text-slate-800 text-right focus:outline-none disabled:opacity-70 ${
+                  invalid ? 'border-rose-400' : 'border-slate-200 focus:border-blue-600'
+                }`}
+              />
+              <span className="text-[11px] text-slate-500 w-14">{s.unit}</span>
+            </>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 cursor-pointer"
-          >
-            Save System Settings
-          </button>
+      </div>
+      <p className="text-[11px] text-slate-400 mt-0.5">
+        {invalid && canEdit ? <span className="text-rose-600">Allowed {s.minimum} to {s.maximum}</span> : s.help}
+      </p>
+      {(dirty || changed) && (
+        <div className="flex items-center justify-between gap-2 mt-1.5">
+          <span className="text-[10px] text-slate-400">{changed}</span>
+          {canEdit && (
+            <span className="flex items-center gap-2">
+              {!s.is_default && !dirty && (
+                <button
+                  type="button"
+                  onClick={restore}
+                  disabled={busy}
+                  title={`Back to ${fmt(s, s.default)}`}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer disabled:opacity-40"
+                >
+                  <RotateCcw size={11} /> Default
+                </button>
+              )}
+              {dirty && (
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={busy}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-blue-600 text-white hover:bg-blue-500 cursor-pointer disabled:opacity-40"
+                >
+                  {update.isPending ? 'Saving…' : 'Save'}
+                </button>
+              )}
+            </span>
+          )}
         </div>
-      </form>
+      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPage, filterValue, pageCount, pageOffset } from '../hooks/usePagination';
+import { clampPage, filterValue, pageCount, pageOffset } from '../../hooks/usePagination';
 
 describe('pagination helpers', () => {
   it('computes offsets and guards negative input', () => {

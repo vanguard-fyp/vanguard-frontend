@@ -48,6 +48,38 @@ export interface ScoringBlock {
   substitutions?: string[];
   /** Per-aspect breakdown of the weighted priority model (points add up to the score). */
   factors?: PriorityFactor[];
+  /** The wider event this incident belongs to, if any. */
+  wider_event?: WiderEvent | null;
+}
+
+/** Related incidents scored together (backend intelligence/events.py). Advisory. */
+export interface WiderEvent {
+  id: string;
+  hazard: string;
+  title: string;
+  incident_count: number;
+  incidents: {
+    id: string;
+    display_id?: string | null;
+    title?: string | null;
+    district?: string | null;
+    state?: string | null;
+    severity?: string | null;
+    disaster_level?: string | null;
+    priority_score?: number | null;
+  }[];
+  states: string[];
+  districts: string[];
+  affected_people?: number | null;
+  affected_basis?: { reported: number; modelled: number; unknown: number };
+  casualties?: number;
+  highest_severity?: string | null;
+  combined_priority?: number | null;
+  highest_single_priority?: number | null;
+  declared_level?: string | null;
+  suggested_level: string;
+  under_declared: boolean;
+  rule: string;
 }
 
 export interface PriorityFactor {
@@ -182,6 +214,34 @@ export interface RescueBlock {
   reason?: string | null;
 }
 
+/** One signal behind the report-credibility verdict. */
+export interface CredibilitySignal {
+  key: string;
+  label: string;
+  effect: 'supports' | 'weakens' | 'neutral';
+  points: number;
+  detail: string;
+}
+
+/** Advisory "is this report likely real?" check (backend intelligence/credibility.py). */
+export interface CredibilityBlock {
+  status: 'ok' | 'failed';
+  verdict?: 'Likely genuine' | 'Needs verification' | 'Possibly false';
+  score?: number;
+  suggestion?: string;
+  signals?: CredibilitySignal[];
+  vision?: {
+    status: 'assessed' | 'no_media' | 'media_unreachable' | 'vision_unavailable';
+    images_checked: number;
+    observations: string[];
+    model?: string | null;
+  };
+  is_official_source?: boolean;
+  advisory_only?: boolean;
+  note?: string;
+  reason?: string;
+}
+
 export interface IncidentAssessment {
   id: string;
   incident_id: string;
@@ -204,6 +264,8 @@ export interface IncidentAssessment {
   decision_recommendation: Partial<DecisionRecommendationBlock>;
   rescue_recommendation: Partial<RescueBlock>;
   evidence: EvidenceItem[];
+  /** Empty object until the credibility migration is applied / re-assessed. */
+  credibility?: Partial<CredibilityBlock>;
   assumptions: string[];
   uncertainty: string[];
   validation_flags: string[];

@@ -1,3 +1,6 @@
+import { incidentTypeForHazard } from '../../../utils/hazardType';
+import { predictionToDraft } from '../../../utils/predictionDraft';
+import type { HazardPrediction } from '../../../types/intelligence';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -114,6 +117,8 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [newLng, setNewLng] = useState('');
   const [locationResolution, setLocationResolution] = useState<LocationResolution | null>(null);
   const [pickerKey, setPickerKey] = useState(0);
+  // Pre-filled coordinates (prediction / alert) are resolved as soon as the form opens.
+  const [resolveOnOpen, setResolveOnOpen] = useState(false);
   // Impact facts: '' = unknown (sent with field_verification "unknown").
   const [newAffected, setNewAffected] = useState('');
   const [newCasualties, setNewCasualties] = useState('');
@@ -287,7 +292,10 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   }, {} as Record<string, number>);
 
   const handleEscalateGdacs = (gdacs: GdacsEvent) => {
+    setPromotingPredictionId(null);
     setNewTitle(`[GDACS] ${gdacs.title}`);
+    // Disaster type follows the GDACS hazard (cyclone → Severe Storm, wildfire → Forest Fire, …).
+    setNewType(incidentTypeForHazard(gdacs.hazardType));
     setNewLocation(`${gdacs.country} (Regional Transboundary Monitoring)`);
     setNewState('Regional / Transboundary');
     setNewDistrict(gdacs.country);
@@ -300,6 +308,11 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       `Escalated from live GDACS Event ID: ${gdacs.eventId}\nSeverity metric: ${gdacs.severity}\nAffected population estimate: ${gdacs.affectedPopulation?.toLocaleString() || 'N/A'
       }\nSource portal: ${gdacs.link}\n\nSummary:\n${gdacs.description}`
     );
+    // GDACS population is a regional model estimate, not a reported count.
+    setNewAffected('');
+    setNewCasualties('');
+    setResolveOnOpen(gdacs.lat != null && gdacs.lng != null);
+    setPickerKey((k) => k + 1);
     setReportModalOpen(true);
   };
 
@@ -307,26 +320,30 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     if (!reportModalOpen) setPromotingPredictionId(null);
   }, [reportModalOpen]);
 
-  const handlePromotePrediction = (prediction: any) => {
+  const handlePromotePrediction = (prediction: HazardPrediction) => {
+    // Everything the prediction carries is pre-filled; the officer reviews and submits.
+    const d = predictionToDraft(prediction);
     setPromotingPredictionId(prediction.id ?? null);
-    setNewTitle(`[Predicted] ${prediction.hazard_type || 'Disaster Hazard'} - ${prediction.district || 'Predicted Zone'}`);
-    const matchedType = (['Flood', 'Flash Flood', 'Landslide', 'Severe Storm', 'Forest Fire', 'Haze', 'Earthquake', 'Drought'] as DisasterType[]).find(
-      (t) => t.toLowerCase() === (prediction.hazard_type || '').toLowerCase()
-    ) || 'Flood';
-    setNewType(matchedType);
-    setNewState(prediction.state || '');
-    setNewDistrict(prediction.district || '');
-    setNewLocation(prediction.district ? `${prediction.district}, ${prediction.state || ''}` : '');
-    setNewLat(prediction.lat != null ? String(prediction.lat) : '');
-    setNewLng(prediction.lng != null ? String(prediction.lng) : '');
-    const score = Number(prediction.hazard_score) || 0;
-    setNewSeverity(score >= 80 ? 'Critical' : score >= 60 ? 'High' : 'Medium');
-    setNewDisasterLevel(score >= 80 ? 'Level 3: Federal' : score >= 60 ? 'Level 2: State' : 'Level 1: District');
+    setNewTitle(d.title);
+    setNewType(d.type);
+    setNewState(d.state);
+    setNewDistrict(d.district);
+    setNewPostcode('');
+    setNewLocation(d.location);
+    setNewLat(d.lat);
+    setNewLng(d.lng);
+    setNewSeverity(d.severity);
+    setNewDisasterLevel(d.level);
     setNewSourceType('Metrological / Sensor');
-    setNewDescription(prediction.advisory || `Stage-A automated prediction scan early-warning for ${prediction.district || 'the sector'}.`);
-    // The prediction's exposed population is a model estimate, not a reported
-    // figure, so the affected-population fact is left for the officer to enter.
+    setNewWeatherCondition(d.weather);
+    setNewDescription(d.description);
+    // Modelled figures (exposed population) are in the description, never in the
+    // reported facts; casualties / damage / access are for the officer to confirm.
     setNewAffected('');
+    setNewCasualties('');
+    setNewInfra('');
+    setNewAccess('');
+    setResolveOnOpen(!!d.lat && !!d.lng);
     setPickerKey((k) => k + 1);
     setReportModalOpen(true);
   };
@@ -651,7 +668,10 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         {/* Primary actions */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setReportModalOpen(true)}
+            onClick={() => {
+              setResolveOnOpen(false);
+              setReportModalOpen(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 cursor-pointer self-start sm:self-auto shrink-0"
           >
             <Plus size={15} />
@@ -1223,6 +1243,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 <div className="pt-2 border-t border-slate-100">
                   <MalaysiaLocationPicker
                     key={pickerKey}
+                    resolveOnMount={resolveOnOpen}
                     onResolutionChange={setLocationResolution}
                     state={newState}
                     onStateChange={setNewState}

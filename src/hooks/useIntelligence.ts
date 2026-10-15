@@ -8,7 +8,18 @@ export const INTEL_KEYS = {
   assessment: (incidentId: string) => ['intelligence', 'assessment', incidentId] as const,
   history: (incidentId: string) => ['intelligence', 'history', incidentId] as const,
   predictions: ['intelligence', 'predictions'] as const,
+  events: ['intelligence', 'events'] as const,
+  scan: ['intelligence', 'predictions', 'scan'] as const,
 };
+
+/** Wider events (related incidents scored together). */
+export function useWiderEvents() {
+  return useQuery({
+    queryKey: INTEL_KEYS.events,
+    queryFn: () => intelligenceService.getWiderEvents(),
+    staleTime: 60_000,
+  });
+}
 
 export const IN_FLIGHT: AssessmentStatus[] = ['queued', 'processing'];
 
@@ -88,6 +99,16 @@ export function useRunPredictionScan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => intelligenceService.runPredictionScan(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: INTEL_KEYS.predictions }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: INTEL_KEYS.scan }),
+  });
+}
+
+/** Scan status; polls every 3 s while a scan runs. */
+export function usePredictionScanStatus() {
+  return useQuery({
+    queryKey: INTEL_KEYS.scan,
+    queryFn: () => intelligenceService.getPredictionScanStatus(),
+    refetchInterval: (q) => (q.state.data?.running ? 3000 : false),
+    staleTime: 30_000,
   });
 }

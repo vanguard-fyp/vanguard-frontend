@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Incident } from '../types';
-import { editedFieldVerification, factState } from '../utils/facts';
+import type { Incident } from '../../types';
+import { editedFieldVerification, factState } from '../../utils/facts';
 
 const incident = (over: Partial<Incident> = {}): Incident =>
   ({

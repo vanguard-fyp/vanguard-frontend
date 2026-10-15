@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ForecastBlock, PriorityFactor } from '../types';
-import { buildPredictiveTimeline, factorInputText, rankingDrivers } from '../utils/intelligenceView';
+import type { ForecastBlock, PriorityFactor } from '../../types';
+import { buildPredictiveTimeline, factorInputText, rankingDrivers } from '../../utils/intelligenceView';
 
 const snaps = [
   { timestamp: '2026-08-01T13:22:00Z', affected_population: 4200 },

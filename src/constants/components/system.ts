@@ -41,7 +41,7 @@ export const permOptions = [
 
 export const adminTabs: AdminTab[] = [
   { id: 'users', title: 'User Management', sub: 'Accounts & CRUD', icon: Users },
-  { id: 'settings', title: 'Intelligence Thresholds', sub: 'AI Risk & Alert Triggers', icon: Sliders },
+  { id: 'settings', title: 'Operational Thresholds', sub: 'AI Risk & Alert Triggers', icon: Sliders },
 ];
 
 // TODO: Matrix Row need to change to link db

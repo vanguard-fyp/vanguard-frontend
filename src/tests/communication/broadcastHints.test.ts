@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { broadcastHints } from '../utils/broadcastHints';
+import { broadcastHints } from '../../utils/broadcastHints';
 
 describe('broadcast title hints', () => {
   it('reads hazard, category and severity from the title', () => {

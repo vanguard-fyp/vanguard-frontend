@@ -17,6 +17,7 @@ import {
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Circle } from 'react-leaflet';
 import { DisasterBadge } from '../dashboard/DisasterBadge';
 import { useRescueTeams, useMissions, useIncidentLogs } from '../../../hooks';
+import { LogDetailBody } from './LogDetailBody';
 import type { Incident, SitrepTab } from '../../../types';
 import { severityHex, statusConfig, activityTypeStyle, TABS } from '../../../constants';
 import { formatDateTime } from '../../../utils/dateFormatter';
@@ -308,9 +309,7 @@ const OperationsTab: React.FC<{ incident: Incident }> = ({ incident }) => {
                       {formatDateTime(log.logged_at)}
                     </span>
                   </div>
-                  {log.detail && (
-                    <p className="text-xs font-medium text-slate-800 leading-snug">{log.detail}</p>
-                  )}
+                  <LogDetailBody detail={log.detail} />
                 </div>
               </div>
             );

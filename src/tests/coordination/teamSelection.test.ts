@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RescueTeam } from '../types';
+import type { RescueTeam } from '../../types';
 import {
   addTeam,
   availabilityOf,
@@ -8,7 +8,7 @@ import {
   setPersonnel,
   toDispatchTeams,
   validateSelection,
-} from '../utils/teamSelection';
+} from '../../utils/teamSelection';
 
 const team = (id: string, over: Partial<RescueTeam> = {}): RescueTeam =>
   ({ id, name: id, personnel_count: 10, status: 'Available', available_personnel: 10, eligible: true, ...over }) as RescueTeam;

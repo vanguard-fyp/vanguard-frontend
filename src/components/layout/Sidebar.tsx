@@ -43,8 +43,9 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
   const toggle = (label: string) =>
     setOpenSections((p) => ({ ...p, [label]: !p[label] }));
 
-  const isChildActive = (children?: NavChild[]) =>
-    children?.some((c) => location.pathname === c.path) ?? false;
+  // A child stays highlighted on its detail pages too (e.g. /situational/incidents/:id).
+  const onPath = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`);
+  const isChildActive = (children?: NavChild[]) => children?.some((c) => onPath(c.path)) ?? false;
 
   const handleNavClick = () => {
     if (setMobileOpen) setMobileOpen(false);
@@ -266,7 +267,7 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                             >
                               <div className="pl-8 pr-1 py-1 space-y-0.5">
                                 {item.children?.map((child: any) => {
-                                  const childIsActive = location.pathname === child.path;
+                                  const childIsActive = onPath(child.path);
                                   return (
                                     <NavLink key={child.path} to={child.path} onClick={handleNavClick}>
                                       <div

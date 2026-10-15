@@ -492,22 +492,25 @@ const ThinkingBubble: React.FC = () => {
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  const label =
-    seconds < 4 ? 'Thinking' : seconds < 12 ? 'Checking live incidents, teams and stock' : 'Still working, the AI is slow right now';
+  // Only the dots at first; a short status line appears under the bubble if the
+  // wait gets long, so the officer knows it is still working (no "… Thinking…").
+  const status =
+    seconds < 4 ? null : seconds < 12 ? 'Checking live incidents, teams and stock' : 'Still working, the AI is slow right now';
   return (
-    <div className="flex justify-start" role="status" aria-live="polite">
-      <div className="rounded-2xl rounded-bl-none bg-white border border-slate-200 px-3.5 py-2.5 shadow-xs flex items-center gap-2">
-        <span className="flex gap-1" aria-hidden>
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
-              style={{ animationDelay: `${i * 0.15}s` }}
-            />
-          ))}
-        </span>
-        <span className="text-[11px] text-slate-500">{label}…</span>
+    <div className="flex flex-col items-start gap-1" role="status" aria-live="polite">
+      <div
+        className="rounded-2xl rounded-bl-none bg-white border border-slate-200 px-4 py-3 shadow-xs flex items-center gap-1.5"
+        aria-label="Copilot is thinking"
+      >
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="w-2 h-2 rounded-full bg-slate-400 animate-bounce"
+            style={{ animationDelay: `${i * 0.15}s`, animationDuration: '0.9s' }}
+          />
+        ))}
       </div>
+      {status && <span className="text-[10px] text-slate-400 pl-1">{status}</span>}
     </div>
   );
 };
