@@ -157,7 +157,7 @@ const KPICard: React.FC<KPICardProps> = ({
       )}
 
       {showNoActivity && (
-        <p className="h-10 mt-2 flex items-center text-[10px] text-slate-400 italic">No new records in this window</p>
+        <p className="h-10 mt-2 flex items-center text-[10px] text-slate-400">No new records in this window</p>
       )}
 
       {/* Trend footer */}

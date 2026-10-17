@@ -181,7 +181,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCrea
 
             {open && (
               <div className="border-t border-slate-100 divide-y divide-slate-100">
-                {d.items.length === 0 && <p className="px-4 py-4 text-xs text-slate-400 italic">No stock recorded at this depot.</p>}
+                {d.items.length === 0 && <p className="px-4 py-4 text-xs text-slate-400">No stock recorded at this depot.</p>}
                 {d.items.map((item) => {
                   const tone = STOCK_TONE[item.status] ?? STOCK_TONE.Sufficient;
                   const pct = item.min_threshold > 0
@@ -270,7 +270,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCrea
                                 <History size={11} /> Requests ({history.length})
                               </p>
                               {history.length === 0 ? (
-                                <p className="text-[11px] text-slate-400 italic">No requests for this item yet.</p>
+                                <p className="text-[11px] text-slate-400">No requests for this item yet.</p>
                               ) : (
                                 <div className="space-y-1">
                                   {history.slice(0, 6).map((r) => (

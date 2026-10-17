@@ -4,8 +4,14 @@
    VANGUARD — Official NADMA Disaster Command Center Theme
    Aesthetic: Trustworthy, Professional, Grounded & Calm
    Palette: Matte Slate & Blue Navy (No neon, no glows, no purple)
-   Typography: Inter (Google Fonts)
+   Typography: Inter (Google Fonts), one family for every page:
+   the public site, sign-in and the operations app.
    ============================================================ */
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Charis SIL', 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+}
 
 @layer base {
   :root {
@@ -36,7 +42,8 @@
   }
 
   html {
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
@@ -45,7 +52,7 @@
   body {
     background-color: #f8fafc;
     color: #0f172a;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     overflow-x: hidden;
     line-height: 1.5;
   }

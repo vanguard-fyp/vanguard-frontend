@@ -94,7 +94,7 @@ const FactBadge: React.FC<{ incident: Incident; field: FactField }> = ({ inciden
 function factValue(incident: Incident, field: FactField, render: (v: NonNullable<Incident[FactField]>) => React.ReactNode) {
   const v = incident[field];
   if (factState(incident, field) === 'unknown' || v === null || v === undefined) {
-    return <span className="text-slate-400 italic font-semibold text-base">Not reported</span>;
+    return <span className="text-slate-400 font-semibold text-base">Not reported</span>;
   }
   return render(v);
 }
@@ -568,7 +568,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   <span className="text-[10px] text-slate-400 font-medium">AI-screened, see Report Credibility · click to enlarge</span>
                 </div>
                 {isLoadingMedia ? (
-                  <p className="text-xs text-slate-400 italic">Loading media…</p>
+                  <p className="text-xs text-slate-400">Loading media…</p>
                 ) : isMediaError ? (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
                     Media could not be loaded. The attachments are still recorded on the incident.
@@ -921,7 +921,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             <div className="p-4 max-h-[380px] overflow-y-auto">
               <div className="space-y-3 relative before:absolute before:inset-0 before:left-3 before:w-0.5 before:bg-slate-200">
                 {isLoadingLogs ? (
-                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium italic">Loading operational log…</div>
+                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium">Loading operational log…</div>
                 ) : incidentLogs.length > 0 ? (
                   incidentLogs.map((log, idx) => (
                     <div key={log.id || idx} className="relative flex items-start gap-3 pl-7">
@@ -952,7 +952,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     </div>
                   ))
                 ) : (
-                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium italic">
+                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium">
                     No operational log entries recorded yet.
                   </div>
                 )}

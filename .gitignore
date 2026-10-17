@@ -26,3 +26,8 @@ dist-ssr
 # Environment
 .env.*
 .env
+
+.impeccable/
+.claude/
+DESIGN.md
+PRODUCT.md

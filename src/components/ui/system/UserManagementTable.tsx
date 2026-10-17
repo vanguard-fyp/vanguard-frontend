@@ -153,7 +153,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                         {/* <span className="text-[10px] text-slate-400 font-normal">({formatRelativeTime(user.last_active)})</span> */}
                       </div>
                     ) : (
-                      <span className="text-slate-400 italic">Never</span>
+                      <span className="text-slate-400">Never</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right">

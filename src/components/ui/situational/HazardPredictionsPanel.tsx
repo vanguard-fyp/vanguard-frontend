@@ -304,7 +304,7 @@ export const HazardPredictionsPanel: React.FC<HazardPredictionsPanelProps> = ({ 
                         </p>
                       ))}
                       {p.uncertainty.map((u, i) => (
-                        <p key={i} className="text-slate-500 italic">{u}</p>
+                        <p key={i} className="text-slate-500">{u}</p>
                       ))}
                     </div>
                   )}

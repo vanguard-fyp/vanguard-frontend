@@ -144,7 +144,7 @@ export const CredibilityCard: React.FC<{ incidentId: string }> = ({ incidentId }
         </div>
       )}
 
-      <p className="text-[10px] italic text-slate-400">
+      <p className="text-[10px] text-slate-400">
         {cred.note ?? 'AI suggestion only. It never changes the report status; an officer decides.'}
       </p>
     </div>

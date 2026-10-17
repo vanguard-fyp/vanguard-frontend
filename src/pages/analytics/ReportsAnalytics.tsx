@@ -300,7 +300,7 @@ const ReportsAnalytics: React.FC = () => {
               </ResponsiveContainer>
             </div>
             <div className="space-y-3 flex-1">
-              {occurredTypes.length === 0 && <p className="text-xs text-slate-500 italic">No incidents in {dateRange}.</p>}
+              {occurredTypes.length === 0 && <p className="text-xs text-slate-500">No incidents in {dateRange}.</p>}
               {occurredTypes.map((d) => (
                 <div key={d.name} className="flex items-center gap-3">
                   <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: d.color }} />
@@ -351,7 +351,7 @@ const ReportsAnalytics: React.FC = () => {
             <h3 className="text-sm font-bold text-slate-800">Resource Utilization Rate (%)</h3>
             
           </div>
-          {resourceUtilization.length === 0 && <p className="text-xs text-slate-500 italic">No stock or approved requisitions recorded.</p>}
+          {resourceUtilization.length === 0 && <p className="text-xs text-slate-500">No stock or approved requisitions recorded.</p>}
           <div className="space-y-4">
             {resourceUtilization.map((res) => (
               <div key={res.category}>
@@ -407,7 +407,7 @@ const ReportsAnalytics: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {statesWithIncidents === 0 && !showAllStates && (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-xs text-slate-400 italic">No incidents in {dateRange}.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-xs text-slate-400">No incidents in {dateRange}.</td></tr>
               )}
               {visibleStates.map((state) => {
                 const hasIncidents = state.count > 0;
@@ -460,7 +460,7 @@ const ReportsAnalytics: React.FC = () => {
                             <Layers size={11} /> {districts.length} {districts.length === 1 ? 'district' : 'districts'} {isExpanded ? '▲' : '▼'}
                           </button>
                         ) : (
-                          <span className="text-[11px] text-slate-400 italic">No reports</span>
+                          <span className="text-[11px] text-slate-400">No reports</span>
                         )}
                       </td>
                     </tr>

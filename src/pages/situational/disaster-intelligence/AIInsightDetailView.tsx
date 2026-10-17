@@ -121,7 +121,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
     );
 
   if (isLoadingIncident) {
-    return <p className="max-w-6xl mx-auto p-6 text-xs text-slate-400 italic">Loading incident…</p>;
+    return <p className="max-w-6xl mx-auto p-6 text-xs text-slate-400">Loading incident…</p>;
   }
   if (isIncidentError || !incident) {
     return (
@@ -233,7 +233,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-5 pt-4 border-t border-white/10 text-[11px] text-slate-300">
           {isLoadingAssessment ? (
-            <span className="italic">Loading assessment…</span>
+            <span >Loading assessment…</span>
           ) : isAssessmentError ? (
             <span className="text-red-300 font-semibold">
               Assessment unavailable. <button onClick={() => refetch()} className="underline cursor-pointer">Retry</button>
@@ -299,7 +299,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
             </div>
           ) : (
             <Card title="Impact Progression & AI Forecast" icon={Activity}>
-              <p className="text-xs text-slate-500 italic">No confirmed figures and no projection{forecast?.note ? ` — ${forecast.note}` : ''}.</p>
+              <p className="text-xs text-slate-500">No confirmed figures and no projection{forecast?.note ? ` — ${forecast.note}` : ''}.</p>
             </Card>
           )}
 
@@ -344,7 +344,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
                   </div>
                 </>
               ) : (
-                <p className="text-xs text-slate-500 italic">No factor breakdown in this run — re-assess to generate it.</p>
+                <p className="text-xs text-slate-500">No factor breakdown in this run — re-assess to generate it.</p>
               )}
             </Card>
 
@@ -375,7 +375,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
                   {decision.rationale && <p>{decision.rationale}</p>}
                 </AiSuggestion>
               ) : (
-                <p className="text-xs text-slate-500 italic mt-4">
+                <p className="text-xs text-slate-500 mt-4">
                   {impact.status === 'unavailable' ? 'No AI recommendation — no language model was available for this run.' : 'No recommendation in this run.'}
                 </p>
               )}
@@ -449,7 +449,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-xs text-slate-500 italic">{rescue.reason ?? 'No team suggestion in this run.'}</p>
+                  <p className="text-xs text-slate-500">{rescue.reason ?? 'No team suggestion in this run.'}</p>
                 )}
               </div>
               <div>

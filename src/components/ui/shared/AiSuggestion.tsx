@@ -9,7 +9,7 @@ import { Loader2, Sparkles } from 'lucide-react';
  *   │ [✦] AI Decision Advisory  (Status pill)       94% conf.  │  ← meta only when real
  *   │ Headline in plain words.                                 │
  *   │ Supporting lines.                                        │
- *   │ Impact: one key consequence (italic)                     │
+ *   │ Impact: one key consequence                              │
  *   │ Based on …. Suggestion only; an officer decides.         │
  *   └──────────────────────────────────────────────────────────┘
  *
@@ -38,7 +38,7 @@ interface AiSuggestionProps {
   meta?: string;
   headline?: React.ReactNode;
   children?: React.ReactNode;
-  /** one key consequence, shown in italic violet */
+  /** one key consequence, shown in violet */
   impact?: React.ReactNode;
   action?: React.ReactNode;
   loading?: boolean;
@@ -81,7 +81,7 @@ export const AiSuggestion: React.FC<AiSuggestionProps> = ({
       <>
         {headline && <div className="text-xs text-slate-700 mt-2 leading-relaxed">{headline}</div>}
         {children && <div className="text-xs text-slate-600 mt-1.5 space-y-1">{children}</div>}
-        {impact && <p className="text-[11px] italic font-medium text-violet-800 mt-2">{impact}</p>}
+        {impact && <p className="text-[11px] font-medium text-violet-800 mt-2">{impact}</p>}
         {!compact && (
           <p className="text-[10px] text-violet-700/70 mt-2">
             {basis ? `${basis}. ` : ''}Suggestion only; an officer decides.

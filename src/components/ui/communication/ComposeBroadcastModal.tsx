@@ -339,7 +339,7 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
               Target State (Malaysia) <span className="text-rose-500">*</span>
             </label>
             {areasLoading ? (
-              <p className="text-xs text-slate-400 italic flex items-center gap-1.5 py-2">
+              <p className="text-xs text-slate-400 flex items-center gap-1.5 py-2">
                 <Loader2 size={12} className="animate-spin" /> Loading administrative areas…
               </p>
             ) : areasUnavailable ? (
@@ -423,7 +423,7 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
 
             <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
               {!targetState && !areasUnavailable && (
-                <p className="text-[11px] text-slate-400 italic">Select a state (or enter a postcode) to list its districts.</p>
+                <p className="text-[11px] text-slate-400">Select a state (or enter a postcode) to list its districts.</p>
               )}
               <div className="flex flex-wrap gap-1.5">
                 {availableDistrictsForState.map((districtName) => {

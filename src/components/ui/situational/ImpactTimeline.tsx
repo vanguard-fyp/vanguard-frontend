@@ -33,7 +33,7 @@ const TimelineTooltip = ({ active, payload, label }: any) => {
             Stage: {point.stage}
           </p>
         )}
-        {point.note && <p className="text-slate-500 text-[11px] mt-1 italic leading-tight border-t border-slate-100 pt-1">{point.note}</p>}
+        {point.note && <p className="text-slate-500 text-[11px] mt-1 leading-tight border-t border-slate-100 pt-1">{point.note}</p>}
       </div>
     );
   }

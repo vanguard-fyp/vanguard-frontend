@@ -188,7 +188,7 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
           Deployed Response Units ({assignedTeams.length})
         </h4>
         {assignedTeams.length === 0 ? (
-          <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <p className="text-xs text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
             No specific response team assigned to this sector yet.
           </p>
         ) : (
@@ -219,7 +219,7 @@ const DashboardTab: React.FC<{ incident: Incident }> = ({ incident }) => {
           Active Operations &amp; Missions ({assignedMissions.length})
         </h4>
         {assignedMissions.length === 0 ? (
-          <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <p className="text-xs text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
             No active search and rescue missions currently logged.
           </p>
         ) : (

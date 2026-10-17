@@ -168,7 +168,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                         </span>
                       ))
                     ) : (
-                      <span className="text-[11px] text-slate-400 italic">No vehicles assigned</span>
+                      <span className="text-[11px] text-slate-400">No vehicles assigned</span>
                     )}
                   </div>
                 </div>
@@ -187,7 +187,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
                         </span>
                       ))
                     ) : (
-                      <span className="text-[11px] text-slate-400 italic">Standard tactical gear</span>
+                      <span className="text-[11px] text-slate-400">Standard tactical gear</span>
                     )}
                   </div>
                 </div>
