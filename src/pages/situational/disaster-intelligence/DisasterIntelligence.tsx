@@ -1,26 +1,88 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Map, Search, Layers, X, MapPin, AlertTriangle, Navigation, Box, Square } from 'lucide-react';
+import { Search, Layers, X, MapPin, AlertTriangle, Warehouse, Loader2, Box, Square, Globe2 } from 'lucide-react';
 import type { Incident, MapPOI, GISLayerState, FlyToTarget, DisasterIntelligenceProps } from '../../../types';
 import { IntelligenceOverview } from './IntelligenceOverview';
 import { LayerPanel, type LayerCount } from '../../../components/ui/situational/LayerPanel';
 import { AIInsightDetailView } from './AIInsightDetailView';
 import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
-import { Gis3DLayerExplorer } from '../../../components/ui/situational/Gis3DLayerExplorer';
+import { Gis3DLayerExplorer, type GisFocusTarget } from '../../../components/ui/situational/Gis3DLayerExplorer';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
-import { useIncidents, useCities, useWarehouses } from '../../../hooks';
-import { containerAnim, defaultLayers, itemAnim, tabs } from '../../../constants';
+import { useIncidents, useWarehouses } from '../../../hooks';
+import { geoService } from '../../../services/geoService';
+import { containerAnim, defaultLayers, itemAnim } from '../../../constants';
+import { TONE } from '../../../components/ui/shared/Tag';
+
+type Tab = 'map' | 'overview';
+type MapMode = '3d-layers' | '3d' | '2d';
+
+type Result = {
+  id: string;
+  title: string;
+  subtitle: string;
+  kind: 'incident' | 'facility' | 'place';
+  lat: number;
+  lng: number;
+  incident?: Incident;
+};
+
+const KIND_LOOK: Record<Result['kind'], { color: string; Icon: typeof MapPin; group: string }> = {
+  incident: { color: TONE.red, Icon: AlertTriangle, group: 'Incidents' },
+  facility: { color: TONE.amber, Icon: Warehouse, group: 'Facilities' },
+  place: { color: TONE.blue, Icon: MapPin, group: 'Places in Malaysia' },
+};
+
+/** Real addresses and place names in Malaysia (OpenStreetMap, through the backend). */
+function usePlaceSearch(query: string) {
+  const [places, setPlaces] = useState<Result[]>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) {
+      setPlaces([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const rows = await geoService.searchPlaces(q, ctrl.signal);
+        setPlaces(
+          rows.map((r) => ({
+            id: `place-${r.id}`,
+            title: r.name,
+            subtitle: [r.kind_label, r.address.split(', ').slice(0, 3).join(', ')].filter(Boolean).join(' · '),
+            kind: 'place' as const,
+            lat: r.lat,
+            lng: r.lng,
+          }))
+        );
+      } catch {
+        if (!ctrl.signal.aborted) setPlaces([]);
+      } finally {
+        if (!ctrl.signal.aborted) setLoading(false);
+      }
+    }, 350);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [query]);
+  return { places, loading };
+}
 
 const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncident, onFocusHandled }) => {
-  const [activeTab, setActiveTab] = useState<typeof tabs[number]>('Map');
+  const [activeTab, setActiveTab] = useState<Tab>('map');
   const [layers, setLayers] = useState<GISLayerState>(defaultLayers);
   const [layerPanelOpen, setLayerPanelOpen] = useState(false);
   const [layerCounts, setLayerCounts] = useState<Partial<Record<keyof GISLayerState, LayerCount>>>({});
-  const [mapMode, setMapMode] = useState<'3d-layers' | '3d' | '2d'>('3d-layers');
+  const [mapMode, setMapMode] = useState<MapMode>('3d-layers');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
   const [flyToTarget, setFlyToTarget] = useState<FlyToTarget | null>(null);
+  const [focusTarget, setFocusTarget] = useState<GisFocusTarget | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   // The open detail view is driven by ?incidentId= so it can be deep-linked and survives reloads.
@@ -35,12 +97,9 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
   const { data: incidents = [] } = useIncidents();
   const activeIncidents = useMemo(
-    () => incidents.filter(inc => inc.status !== 'Resolved' && inc.status !== 'Rejected'),
+    () => incidents.filter((inc) => inc.status !== 'Resolved' && inc.status !== 'Rejected'),
     [incidents]
   );
-
-  // Live Overpass API is used exclusively for facilities across the map.
-  const { data: backendCities = [] } = useCities();
   const { data: warehouses = [] } = useWarehouses();
 
   const combinedPOIs = useMemo(() => {
@@ -48,12 +107,11 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     warehouses.forEach((w) => {
       // Warehouses without stored coordinates are not plotted (no invented position).
       if (typeof w.lat !== 'number' || !Number.isFinite(w.lat) || typeof w.lng !== 'number' || !Number.isFinite(w.lng)) return;
-      const { lat, lng } = w;
       list.push({
         id: `wh-${w.id}`,
         name: `${w.name} (Logistics Depot)`,
         category: 'Warehouse',
-        coordinates: [lat, lng],
+        coordinates: [w.lat, w.lng],
         details: `${w.full_address || w.name} · ${w.district}, ${w.state}`,
         contact: w.contact_number,
       });
@@ -62,107 +120,65 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   }, [warehouses]);
 
   const searchRef = useRef<HTMLDivElement>(null);
-
-  const toggleLayer = (key: keyof GISLayerState) =>
-    setLayers(prev => ({ ...prev, [key]: !prev[key] }));
-
+  const toggleLayer = (key: keyof GISLayerState) => setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   const handleResetLayers = () => setLayers(defaultLayers);
+  const handleSelectAllLayers = () =>
+    setLayers(Object.fromEntries(Object.keys(defaultLayers).map((k) => [k, true])) as unknown as GISLayerState);
 
-  const handleSelectAllLayers = () => {
-    setLayers({
-      disasterHotspots: true,
-      floodAreas: true,
-      landslideAreas: true,
-      fireZones: true,
-      severeStorms: true,
-      earthquakeDrought: true,
-      emergencyShelters: true,
-      hospitals: true,
-      clinics: true,
-      fireStations: true,
-      policeStations: true,
-      evacuationSchools: true,
-      rescueTeamLocations: true,
+  // Local matches first (incidents, depots), then real places from OpenStreetMap.
+  const local = useMemo<Result[]>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    // Every typed word must appear somewhere ("flood pahang" finds a Pahang flood).
+    const words = q.split(/\s+/);
+    const matches = (text: string) => words.every((w) => text.includes(w));
+    const out: Result[] = [];
+    activeIncidents.forEach((inc) => {
+      const text = `${inc.title} ${inc.type ?? ''} ${inc.display_id ?? ''} ${inc.location} ${inc.district} ${inc.state}`.toLowerCase();
+      if (matches(text)) {
+        out.push({
+          id: `inc-${inc.id}`,
+          title: inc.title,
+          subtitle: `${inc.display_id ?? ''} · ${inc.district}, ${inc.state}`,
+          kind: 'incident',
+          lat: inc.coordinates[0],
+          lng: inc.coordinates[1],
+          incident: inc,
+        });
+      }
     });
-  };
-
-  const searchIndex = useMemo(() => {
-    const list: {
-      id: string;
-      title: string;
-      subtitle: string;
-      type: 'incident' | 'poi' | 'city';
-      lat: number;
-      lng: number;
-      incidentObj?: Incident;
-    }[] = [];
-
-    activeIncidents.forEach(inc => {
-      list.push({
-        id: `inc-${inc.id}`,
-        title: inc.title,
-        subtitle: `${inc.location}, ${inc.state} · ${inc.severity} Hazard`,
-        type: 'incident',
-        lat: inc.coordinates[0],
-        lng: inc.coordinates[1],
-        incidentObj: inc,
-      });
+    combinedPOIs.forEach((poi) => {
+      if (matches(`${poi.name} ${poi.details ?? ''}`.toLowerCase())) {
+        out.push({ id: `poi-${poi.id}`, title: poi.name, subtitle: poi.details ?? poi.category, kind: 'facility', lat: poi.coordinates[0], lng: poi.coordinates[1] });
+      }
     });
+    return out.slice(0, 5);
+  }, [searchQuery, activeIncidents, combinedPOIs]);
+  const { places, loading: placesLoading } = usePlaceSearch(searchQuery);
+  const results = useMemo(() => [...local, ...places], [local, places]);
+  useEffect(() => setActiveIdx(0), [searchQuery]);
 
-    combinedPOIs.forEach(poi => {
-      list.push({
-        id: `poi-${poi.id}`,
-        title: poi.name,
-        subtitle: `${poi.category}`,
-        type: 'poi',
-        lat: poi.coordinates[0],
-        lng: poi.coordinates[1],
-      });
-    });
-
-    backendCities.forEach((c) => {
-      list.push({
-        id: c.id || `city-${c.title}`,
-        title: c.title,
-        subtitle: c.subtitle,
-        type: 'city',
-        lat: c.lat,
-        lng: c.lng,
-      });
-    });
-
-    return list;
-  }, [activeIncidents, combinedPOIs, backendCities]);
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const q = searchQuery.toLowerCase();
-    return searchIndex.filter(
-      item => item.title.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q)
-    ).slice(0, 7);
-  }, [searchQuery, searchIndex]);
-
-  const handleSelectSearchResult = (item: (typeof searchIndex)[number]) => {
+  const handleSelectResult = (item: Result) => {
     setSearchQuery(item.title);
     setSearchOpen(false);
     setFlyToTarget({
       lat: item.lat,
       lng: item.lng,
-      zoom: item.type === 'city' ? 9 : 11.5,
+      zoom: item.kind === 'place' ? 12 : 11.5,
       timestamp: Date.now(),
+      label: item.title,
+      detail: item.subtitle,
     });
-
-    if (item.type === 'incident' && item.incidentObj) {
-      setSelectedIncident(item.incidentObj);
+    setFocusTarget({ lat: item.lat, lng: item.lng, label: item.title, detail: item.subtitle, timestamp: Date.now() });
+    if (item.kind === 'incident' && item.incident) {
+      setSelectedIncident(item.incident);
       setSitrepOpen(true);
     }
   };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSearchOpen(false);
-      }
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -172,15 +188,14 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     setSelectedIncident(incident);
     setSitrepOpen(true);
   };
-
   const handleCloseSitrep = () => {
     setSitrepOpen(false);
     setSelectedIncident(null);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (focusIncident) {
-      setActiveTab('Intelligence Overview');
+      setActiveTab('overview');
       setActiveInsightId(focusIncident.id);
       onFocusHandled?.();
     }
@@ -192,220 +207,190 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       <AIInsightDetailView
         incidentId={activeInsightId}
         onBack={() => {
-          setActiveTab('Intelligence Overview');
+          setActiveTab('overview');
           setActiveInsightId(null);
         }}
       />
     );
   }
 
+  const MODES: { id: MapMode; label: string; Icon: typeof Layers }[] = [
+    { id: '3d-layers', label: 'Layers', Icon: Layers },
+    { id: '3d', label: 'Terrain', Icon: Box },
+    { id: '2d', label: 'Street map', Icon: Square },
+  ];
+
   return (
     <>
-      <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-6">
-        {/* Page header */}
-        <motion.div variants={itemAnim}>
-          <h1 className="text-xl font-bold text-slate-900">Disaster Intelligence</h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Operational GIS map and AI-ranked priority overview · Click any incident marker to open SITREP
-          </p>
+      <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
+        <motion.div variants={itemAnim} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+          <div>
+            <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Disaster Intelligence</h1>
+            <p className="text-xs text-slate-500 mt-0.5">Where incidents are, what is around them, and which need attention first.</p>
+          </div>
+          <div role="tablist" aria-label="View" className="inline-flex items-center bg-slate-100 border border-slate-200/70 rounded-lg p-0.5 self-start sm:self-auto">
+            {([['map', 'GIS Map'], ['overview', 'Priority Overview']] as const).map(([id, label]) => {
+              const on = activeTab === id;
+              return (
+                <button key={id} role="tab" aria-selected={on} onClick={() => setActiveTab(id)}
+                  className={`relative px-3.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${on ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
+                  {on && <motion.span layoutId="intel-tab" className="absolute inset-0 bg-white rounded-md shadow-[0_1px_2px_rgba(15,23,42,.08)]" transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} />}
+                  <span className="relative">{label}</span>
+                </button>
+              );
+            })}
+          </div>
         </motion.div>
 
-        {/* Tab bar */}
-        <motion.div
-          variants={itemAnim}
-          className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1.5 shadow-xs w-fit"
-        >
-          {tabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${activeTab === tab
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </motion.div>
+        {activeTab === 'map' && (
+          <motion.div variants={itemAnim} className="relative bg-white border border-slate-200/80 rounded-2xl overflow-hidden">
+            {/* Toolbar */}
+            <div className="px-4 sm:px-5 py-3 border-b border-slate-100 flex flex-wrap items-center gap-3">
+              <div ref={searchRef} className="relative flex-1 min-w-[220px] max-w-md">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  role="combobox"
+                  aria-expanded={searchOpen && searchQuery.trim().length > 0}
+                  aria-controls="gis-search-results"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSearchQuery(val);
+                    setSearchOpen(true);
+                    if (!val.trim()) {
+                      setFlyToTarget(null);
+                      setFocusTarget(null);
+                    }
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(results.length - 1, i + 1)); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => Math.max(0, i - 1)); }
+                    else if (e.key === 'Enter' && results[activeIdx]) handleSelectResult(results[activeIdx]);
+                    else if (e.key === 'Escape') setSearchOpen(false);
+                  }}
+                  placeholder="Search a place, address or incident"
+                  className="w-full pl-9 pr-8 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-4 focus:ring-blue-600/10 transition"
+                />
+                {placesLoading ? (
+                  <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
+                ) : searchQuery && (
+                  <button onClick={() => { setSearchQuery(''); setSearchOpen(false); setFlyToTarget(null); setFocusTarget(null); }} aria-label="Clear search"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer">
+                    <X size={13} />
+                  </button>
+                )}
 
-        {/* ── MAP TAB ── */}
-        {activeTab === 'Map' && (
-          <motion.div variants={itemAnim} className="w-full">
-            <div className="relative bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-
-              {/* ── MAP TOOLBAR ── */}
-              <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-
-                {/* Left: GIS Title & Status Badge */}
-                <div className="flex items-center gap-2.5">
-                  <Map size={17} className="text-blue-600 shrink-0" />
-                  <h2 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
-                    GIS Map Engine
-                  </h2>
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-0.5">
-                    {mapMode === '3d-layers' ? '3D GIS Layer Stack · Anime.js' : mapMode === '3d' ? '3D Vector Engine' : '2D Leaflet Vector'}
-                  </span>
-                </div>
-
-                {/* Right Controls Container */}
-                <div className="flex items-center gap-2.5">
-
-                  {/* 1. Functional Location Search Input */}
-                  <div ref={searchRef} className="relative">
-                    <div className="relative flex items-center">
-                      <Search size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => {
-                          setSearchQuery(e.target.value);
-                          setSearchOpen(true);
-                        }}
-                        onFocus={() => setSearchOpen(true)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter' && searchResults.length > 0) {
-                            handleSelectSearchResult(searchResults[0]);
-                          }
-                        }}
-                        placeholder="Search location, incident, POI..."
-                        className="pl-8 pr-7 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 w-56 shadow-2xs transition-all"
-                      />
-                      {searchQuery && (
-                        <button
-                          onClick={() => {
-                            setSearchQuery('');
-                            setSearchOpen(false);
-                          }}
-                          className="absolute right-2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Autocomplete Results Dropdown */}
-                    {searchOpen && searchResults.length > 0 && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100 min-w-[260px]">
-                        {searchResults.map(res => (
-                          <button
-                            key={res.id}
-                            onClick={() => handleSelectSearchResult(res)}
-                            className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-start gap-2.5 transition-colors cursor-pointer"
-                          >
-                            <div className="mt-0.5 shrink-0">
-                              {res.type === 'incident' && <AlertTriangle size={14} className="text-red-500" />}
-                              {res.type === 'poi' && <MapPin size={14} className="text-blue-600" />}
-                              {res.type === 'city' && <Navigation size={14} className="text-emerald-600" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold text-slate-900 truncate">{res.title}</p>
-                              <p className="text-[10px] text-slate-500">{res.subtitle}</p>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+                {searchOpen && searchQuery.trim() && (
+                  <div id="gis-search-results" role="listbox"
+                    className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-[0_16px_40px_-16px_rgba(15,23,42,.35)] z-[1000] max-h-80 overflow-y-auto py-1">
+                    {results.length === 0 ? (
+                      <p className="px-3.5 py-3 text-xs text-slate-500">
+                        {placesLoading ? 'Searching places…' : searchQuery.trim().length < 3 ? 'Keep typing to search places' : 'No matching place or incident'}
+                      </p>
+                    ) : (
+                      (['incident', 'facility', 'place'] as const).map((kind) => {
+                        const group = results.filter((r) => r.kind === kind);
+                        if (!group.length) return null;
+                        const look = KIND_LOOK[kind];
+                        return (
+                          <div key={kind}>
+                            <p className="px-3.5 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{look.group}</p>
+                            {group.map((res) => {
+                              const idx = results.indexOf(res);
+                              return (
+                                <button key={res.id} role="option" aria-selected={idx === activeIdx}
+                                  onMouseEnter={() => setActiveIdx(idx)}
+                                  onClick={() => handleSelectResult(res)}
+                                  className={`w-full px-3.5 py-2 text-left flex items-start gap-2.5 cursor-pointer ${idx === activeIdx ? 'bg-slate-50' : ''}`}>
+                                  <look.Icon size={14} className="mt-0.5 shrink-0" style={{ color: look.color }} />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-[13px] font-semibold text-slate-900 truncate">{res.title}</span>
+                                    {res.subtitle && <span className="block text-[11px] text-slate-500 truncate">{res.subtitle}</span>}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })
                     )}
+                    {places.length > 0 && <p className="px-3.5 pt-1.5 pb-1 text-[10px] text-slate-400">Places from OpenStreetMap</p>}
                   </div>
-
-                  {/* 2. 2D / 3D / 3D GIS Stack Mode Toggle Switch */}
-                  <div className="flex bg-slate-200/80 p-0.5 rounded-lg border border-slate-200 shrink-0">
-                    <button
-                      onClick={() => setMapMode('3d-layers')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${mapMode === '3d-layers'
-                        ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
-                        : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      title="3D Layer Stack View with Anime.js"
-                    >
-                      <Layers size={11} /> 3D GIS Layers (Anime.js)
-                    </button>
-                    <button
-                      onClick={() => setMapMode('3d')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${mapMode === '3d'
-                        ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
-                        : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      title="3D Vector Terrain & Columns"
-                    >
-                      <Box size={11} /> 3D Globe
-                    </button>
-                    <button
-                      onClick={() => setMapMode('2d')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition-all cursor-pointer ${mapMode === '2d'
-                        ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
-                        : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      title="2D Standard Leaflet Map"
-                    >
-                      <Square size={11} /> 2D Map
-                    </button>
-                  </div>
-
-                  {/* 3. Layers Filter Panel (applicable in standard 2D/3D map mode) */}
-                  {mapMode !== '3d-layers' && (
-                    <button
-                      onClick={() => setLayerPanelOpen(v => !v)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${layerPanelOpen
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                    >
-                      <Layers size={14} /> Layers ({Object.values(layers).filter(Boolean).length})
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
 
-              {/* Floating layer matrix overlay */}
-              {mapMode !== '3d-layers' && (
-                <LayerPanel
-                  layers={layers}
-                  counts={layerCounts}
-                  isOpen={layerPanelOpen}
-                  onClose={() => setLayerPanelOpen(false)}
-                  onToggleLayer={toggleLayer}
-                  onResetLayers={handleResetLayers}
-                  onSelectAllLayers={handleSelectAllLayers}
-                />
-              )}
-
-              {/* Dynamic Map Canvas Mode */}
-              {mapMode === '3d-layers' ? (
-                <Gis3DLayerExplorer
-                  layers={layers}
-                  incidents={activeIncidents}
-                  pois={combinedPOIs}
-                  onSelectIncident={handleSelectIncident}
-                  onToggleLayer={toggleLayer}
-                />
-              ) : (
-                <MapCanvas3D
-                  layers={layers}
-                  is3D={mapMode === '3d'}
-                  flyToTarget={flyToTarget}
-                  onSelectIncident={handleSelectIncident}
-                  onToggleLayer={toggleLayer}
-                  incidents={activeIncidents}
-                  pois={combinedPOIs}
-                  onLayerCounts={setLayerCounts}
-                />
-              )}
+              <div className="ml-auto flex items-center gap-2">
+                <div role="radiogroup" aria-label="Map view" className="inline-flex items-center bg-slate-100 rounded-lg p-0.5">
+                  {MODES.map(({ id, label, Icon }) => {
+                    const on = mapMode === id;
+                    return (
+                      <button key={id} role="radio" aria-checked={on} onClick={() => setMapMode(id)}
+                        className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${on ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
+                        {on && <motion.span layoutId="intel-mode" className="absolute inset-0 bg-white rounded-md shadow-[0_1px_2px_rgba(15,23,42,.08)]" transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} />}
+                        <Icon size={13} className="relative" />
+                        <span className="relative">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {mapMode !== '3d-layers' && (
+                  <button
+                    onClick={() => setLayerPanelOpen((v) => !v)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
+                      layerPanelOpen ? 'bg-[#1e293b] text-white border-[#1e293b]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Globe2 size={13} /> Layers <span className="tabular-nums opacity-70">{Object.values(layers).filter(Boolean).length}</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {mapMode !== '3d-layers' && (
+              <LayerPanel
+                layers={layers}
+                counts={layerCounts}
+                isOpen={layerPanelOpen}
+                onClose={() => setLayerPanelOpen(false)}
+                onToggleLayer={toggleLayer}
+                onResetLayers={handleResetLayers}
+                onSelectAllLayers={handleSelectAllLayers}
+              />
+            )}
+
+            {mapMode === '3d-layers' ? (
+              <Gis3DLayerExplorer
+                layers={layers}
+                incidents={activeIncidents}
+                pois={combinedPOIs}
+                onSelectIncident={handleSelectIncident}
+                onToggleLayer={toggleLayer}
+                focusTarget={focusTarget}
+              />
+            ) : (
+              <MapCanvas3D
+                layers={layers}
+                is3D={mapMode === '3d'}
+                flyToTarget={flyToTarget}
+                onSelectIncident={handleSelectIncident}
+                onToggleLayer={toggleLayer}
+                incidents={activeIncidents}
+                pois={combinedPOIs}
+                onLayerCounts={setLayerCounts}
+              />
+            )}
           </motion.div>
         )}
 
-        {/* ── INTELLIGENCE OVERVIEW TAB ── */}
-        {activeTab === 'Intelligence Overview' && (
-          <IntelligenceOverview onSelectInsight={setActiveInsightId} />
-        )}
+        {activeTab === 'overview' && <IntelligenceOverview onSelectInsight={setActiveInsightId} />}
       </motion.div>
 
-      {/* ── SITREP DRAWER ── */}
       <SitrepPanel
         incident={sitrepOpen ? selectedIncident : null}
         onClose={handleCloseSitrep}
-        onViewFullAnalysis={incident => {
+        onViewFullAnalysis={(incident) => {
           handleCloseSitrep();
           setActiveInsightId(incident.id);
         }}

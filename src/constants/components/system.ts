@@ -10,6 +10,8 @@ export const userRolesFilterList = [
   'All',
   'NADMA Lead Officer',
   'Disaster Management Officer',
+  'Citizen Reporter',
+  'System / Sensor Bot',
 ];
 
 export const userRolesList: UserRole[] = [

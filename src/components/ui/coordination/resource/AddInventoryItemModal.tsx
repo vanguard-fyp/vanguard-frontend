@@ -127,21 +127,23 @@ export const AddInventoryItemModal: React.FC<AddInventoryItemModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-blue-200 overflow-hidden"
+          className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
         >
-          {/* Header (blue = create, same as every create dialog) */}
-          <div className="px-6 py-3.5 bg-blue-600 text-white flex items-center justify-between">
+          {/* Header */}
+          <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <Warehouse size={18} />
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                <Warehouse size={16} />
+              </div>
               <div>
-                <h3 className="text-sm font-bold">Add stock item</h3>
-                <p className="text-xs text-blue-100">Adds an item to a depot's stock list</p>
+                <h3 className="text-sm font-bold">Add Stock Item</h3>
+                <p className="text-xs text-slate-400">Adds an item to a depot's stock list</p>
               </div>
             </div>
             <button
               onClick={onClose}
               aria-label="Close"
-              className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X size={18} />
             </button>

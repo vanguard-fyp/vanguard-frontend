@@ -17,6 +17,7 @@ import {
   Camera,
   Play,
   X,
+  Search,
 } from 'lucide-react';
 import { TeamCard } from '../../../components/ui/coordination/rescue/TeamCard';
 import { TeamDetailSlideOver } from '../../../components/ui/coordination/rescue/TeamDetailSlideOver';
@@ -58,6 +59,8 @@ const RescueOperations: React.FC = () => {
   const [wizardSourceSos, setWizardSourceSos] = useState<any | null>(null);
   const [showRegisterSlideOver, setShowRegisterSlideOver] = useState(false);
   const [showClosedSos, setShowClosedSos] = useState(false);
+  const [sosSearch, setSosSearch] = useState('');
+  const [sosStatusFilter, setSosStatusFilter] = useState<'All' | 'Pending' | 'Acknowledged' | 'Dispatched' | 'Resolved'>('All');
   const [sosToCancelId, setSosToCancelId] = useState<any | null>(null);
   const [editingTeam, setEditingTeam] = useState<RescueTeam | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -91,8 +94,8 @@ const RescueOperations: React.FC = () => {
   const [sortBy, setSortBy] = useState<TeamSortBy>('default');
 
   // Same capacity rule as the dashboard (backend capacity_service).
-  const availableCount = teams.filter((t) => t.eligible !== false && (t.available_personnel ?? (t.status === 'Available' ? 1 : 0)) > 0).length;
-  const deployedCount = teams.filter((t) => (t.active_assignment_count ?? 0) > 0 || t.status === 'Deployed').length;
+  const availableCount = teams.filter((t) => t.eligible !== false && (t.available_personnel ?? (t.status?.toLowerCase() === 'available' ? 1 : 0)) > 0).length;
+  const deployedCount = teams.filter((t) => (t.active_assignment_count ?? 0) > 0 || ['deployed', 'en route'].includes(t.status?.toLowerCase() || '')).length;
   const pendingSosCount = assistanceRequests.filter((a: any) => a.status === 'Pending' || a.status === 'Acknowledged').length;
 
   const filteredTeams = useMemo(() => {
@@ -109,18 +112,18 @@ const RescueOperations: React.FC = () => {
     }
 
     if (filterAgency !== 'All') {
-      result = result.filter((t) => t.agency === filterAgency);
+      result = result.filter((t) => t.agency?.toUpperCase() === filterAgency.toUpperCase());
     }
 
     if (filterStatus !== 'All') {
-      result = result.filter((t) => t.status === filterStatus);
+      result = result.filter((t) => t.status?.trim().toLowerCase() === filterStatus.trim().toLowerCase());
     }
 
     if (sortBy === 'personnel') {
       result.sort((a, b) => b.personnel_count - a.personnel_count);
     } else if (sortBy === 'status') {
-      const order: Record<string, number> = { Deployed: 0, 'En Route': 1, Available: 2, 'Off Duty': 3 };
-      result.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+      const order: Record<string, number> = { deployed: 0, 'en route': 1, available: 2, 'off duty': 3 };
+      result.sort((a, b) => (order[a.status?.toLowerCase() || ''] ?? 9) - (order[b.status?.toLowerCase() || ''] ?? 9));
     }
 
     return result;
@@ -348,196 +351,260 @@ const RescueOperations: React.FC = () => {
       )}
 
       {/* TAB 2: Citizen SOS Assistance Requests Feed */}
-      {activeTab === 'assistance' && (
-        <motion.div variants={itemAnim} className="space-y-3">
-          <div className="flex items-center justify-between pb-1">
-            <p className="text-xs text-slate-500 font-medium">
-              Live emergency rescue &amp; medical assistance requests filed by citizens on the ground.
-            </p>
-            <button
-              onClick={() => setShowClosedSos(v => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer shrink-0 bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-            >
-              {showClosedSos ? <EyeOff size={13} /> : <Eye size={13} />}
-              {showClosedSos ? 'Hide Closed' : 'Show Closed'}
-            </button>
-          </div>
+      {activeTab === 'assistance' && (() => {
+        const filteredAssistance = assistanceRequests.filter((sos: any) => {
+          const closed = ['Dispatched', 'Resolved', 'Cancelled'].includes(sos.status);
+          if (!showClosedSos && closed && sosStatusFilter === 'All') return false;
+          if (sosStatusFilter !== 'All' && sos.status !== sosStatusFilter) return false;
+          if (sosSearch.trim()) {
+            const q = sosSearch.trim().toLowerCase();
+            const match =
+              (sos.location || '').toLowerCase().includes(q) ||
+              (sos.description || '').toLowerCase().includes(q) ||
+              (sos.display_id || sos.displayId || '').toLowerCase().includes(q) ||
+              (sos.reporter_name || sos.reporterName || '').toLowerCase().includes(q) ||
+              (sos.request_type || sos.requestType || '').toLowerCase().includes(q);
+            if (!match) return false;
+          }
+          return true;
+        });
 
-          {isAssistanceLoading ? (
-            <SkeletonList count={3} />
-          ) : assistanceRequests.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-xl px-5 py-12 text-center shadow-2xs">
-              <LifeBuoy size={32} className="text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-700">No Citizen Assistance Requests</p>
-              <p className="text-xs text-slate-400 mt-1">All emergency SOS requests have been responded to or resolved.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {assistanceRequests
-                .filter((sos: any) => {
-                  const closed = ['Dispatched', 'Resolved', 'Cancelled'].includes(sos.status);
-                  return showClosedSos ? true : !closed;
-                })
-                .map((sos: any) => {
-                const isPending = sos.status === 'Pending';
-                const isAcknowledged = sos.status === 'Acknowledged';
-                const isDispatched = sos.status === 'Dispatched';
-                const isResolved = sos.status === 'Resolved';
-                const isCancelled = sos.status === 'Cancelled';
-                const isClosed = isDispatched || isResolved || isCancelled;
+        const statusCounts: Record<string, number> = {
+          All: assistanceRequests.length,
+          Pending: assistanceRequests.filter((s: any) => s.status === 'Pending').length,
+          Acknowledged: assistanceRequests.filter((s: any) => s.status === 'Acknowledged').length,
+          Dispatched: assistanceRequests.filter((s: any) => s.status === 'Dispatched').length,
+          Resolved: assistanceRequests.filter((s: any) => s.status === 'Resolved').length,
+        };
 
-                return (
-                  <div
-                    key={sos.id}
-                    className={`bg-white border rounded-xl p-4 shadow-2xs transition-all space-y-3 ${isClosed ? 'opacity-60 border-slate-200' : 'border-slate-200 hover:border-slate-300'}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                            {sos.display_id || sos.displayId || 'SOS-2026'}
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
-                            {sos.request_type || sos.requestType || 'Rescue'}
-                          </span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              isPending
-                                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : isAcknowledged
-                                ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                : isDispatched
-                                ? 'bg-purple-50 text-purple-800 border-purple-200'
-                                : isCancelled
-                                ? 'bg-slate-100 text-slate-600 border-slate-200'
-                                : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            }`}
-                          >
-                            {sos.status}
-                          </span>
-                        </div>
-
-                        <p className="text-xs font-bold text-slate-900 mt-1.5 flex items-center gap-1.5">
-                          <MapPin size={13} className="text-blue-600 shrink-0" />
-                          <span>{sos.location}</span>
-                        </p>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <span className="text-[11px] font-bold text-slate-900 block">
-                          {sos.people_affected || sos.peopleAffected || 1} pax affected
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {formatDateTime(sos.created_at || sos.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-slate-700 bg-slate-50 border border-slate-100 p-2.5 rounded-lg leading-relaxed">
-                      {sos.description}
-                    </p>
-
-                    {/* Citizen Submitted Photos / Videos Gallery */}
-                    {(() => {
-                      const mediaList: string[] = sos.media_urls || sos.mediaUrls || [];
-                      if (mediaList.length === 0) return null;
-
-                      return (
-                        <div className="space-y-1.5 pt-1">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                            <Camera size={12} className="text-blue-600" />
-                            Citizen Attached Ground Evidence ({mediaList.length})
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            {mediaList.map((url: string, idx: number) => {
-                              const isVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.includes('video');
-                              return (
-                                <div
-                                  key={idx}
-                                  onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title: `Citizen SOS Attachment #${idx + 1}` })}
-                                  className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 w-20 h-16 cursor-pointer hover:border-blue-500 shadow-2xs transition-all"
-                                >
-                                  {isVideo ? (
-                                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white">
-                                      <Play size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
-                                      <span className="text-[9px] font-mono mt-0.5">Video</span>
-                                    </div>
-                                  ) : (
-                                    <img
-                                      src={url}
-                                      alt={`Citizen attachment ${idx + 1}`}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                      onError={(e) => {
-                                        (e.target as HTMLElement).style.display = 'none';
-                                      }}
-                                    />
-                                  )}
-                                  <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center">
-                                    <Eye size={12} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
-                      <div className="flex items-center gap-3 text-slate-500 text-[11px]">
-                        <span>Reporter: <strong className="text-slate-700">{sos.reporter_name || sos.reporterName || 'Citizen'}</strong></span>
-                        {sos.reporter_contact || sos.reporterContact ? (
-                          <span className="flex items-center gap-1 text-blue-700 font-mono">
-                            <Phone size={11} /> {sos.reporter_contact || sos.reporterContact}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {!isClosed && (
-                        <div className="flex items-center gap-2">
-                          {isPending && (
-                            <>
-                              <button
-                                onClick={() => handleAcknowledgeAssistance(sos)}
-                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                              >
-                                Acknowledge
-                              </button>
-                              <button
-                                onClick={() => handleCancelAssistance(sos)}
-                                className="flex items-center gap-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] rounded-lg border border-red-200 transition-colors cursor-pointer"
-                              >
-                                <XCircle size={12} />
-                                Cancel
-                              </button>
-                            </>
-                          )}
-                          {isAcknowledged && (
-                            <button
-                              onClick={() => handleDeploySosSquad(sos)}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                            >
-                              <span>Deploy Tactical Squad</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {assistanceRequests.filter((sos: any) => !['Dispatched', 'Resolved', 'Cancelled'].includes(sos.status)).length === 0 && !showClosedSos && (
-                <div className="bg-white border border-slate-200 rounded-xl px-5 py-8 text-center shadow-2xs">
-                  <LifeBuoy size={28} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-slate-700">No Active Requests</p>
-                  <p className="text-xs text-slate-400 mt-1">All open requests have been handled. Toggle "Show Closed" to review history.</p>
+        return (
+          <motion.div variants={itemAnim} className="space-y-4">
+            {/* Search and Filters Toolbar */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={sosSearch}
+                    onChange={(e) => setSosSearch(e.target.value)}
+                    placeholder="Search SOS by location, description, or reporter..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 transition-colors"
+                  />
                 </div>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowClosedSos((v) => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer shrink-0 bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                >
+                  {showClosedSos ? <EyeOff size={13} /> : <Eye size={13} />}
+                  <span>{showClosedSos ? 'Hide Closed' : 'Show Closed'}</span>
+                </button>
+              </div>
+
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mr-1">Status:</span>
+                {(['All', 'Pending', 'Acknowledged', 'Dispatched'] as const).map((st) => {
+                  const active = sosStatusFilter === st;
+                  const count = statusCounts[st] ?? 0;
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setSosStatusFilter(st)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                        active
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>{st}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        active ? 'bg-blue-700/60 text-white' : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-        </motion.div>
-      )}
+
+            {isAssistanceLoading ? (
+              <SkeletonList count={3} />
+            ) : filteredAssistance.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-xl px-5 py-12 text-center shadow-2xs">
+                <LifeBuoy size={32} className="text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-700">No Citizen Assistance Requests Found</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {sosSearch.trim() || sosStatusFilter !== 'All'
+                    ? 'No requests match your search query or selected status.'
+                    : 'All emergency SOS requests have been responded to or resolved.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredAssistance.map((sos: any) => {
+                  const isPending = sos.status === 'Pending';
+                  const isAcknowledged = sos.status === 'Acknowledged';
+                  const isDispatched = sos.status === 'Dispatched';
+                  const isResolved = sos.status === 'Resolved';
+                  const isCancelled = sos.status === 'Cancelled';
+                  const isClosed = isDispatched || isResolved || isCancelled;
+
+                  return (
+                    <div
+                      key={sos.id}
+                      className={`bg-white border rounded-xl p-4 shadow-2xs transition-all space-y-3 ${
+                        isClosed ? 'opacity-65 border-slate-200' : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                              {sos.display_id || sos.displayId || 'SOS-2026'}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
+                              {sos.request_type || sos.requestType || 'Rescue'}
+                            </span>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                isPending
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                  : isAcknowledged
+                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                  : isDispatched
+                                  ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                  : isCancelled
+                                  ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              }`}
+                            >
+                              {sos.status}
+                            </span>
+                          </div>
+
+                          <p className="text-xs font-bold text-slate-900 mt-1.5 flex items-center gap-1.5">
+                            <MapPin size={13} className="text-blue-600 shrink-0" />
+                            <span>{sos.location}</span>
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[11px] font-bold text-slate-900 block">
+                            {sos.people_affected || sos.peopleAffected || 1} pax affected
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {formatDateTime(sos.created_at || sos.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-700 bg-slate-50 border border-slate-100 p-2.5 rounded-lg leading-relaxed">
+                        {sos.description}
+                      </p>
+
+                      {/* Citizen Submitted Photos / Videos Gallery */}
+                      {(() => {
+                        const mediaList: string[] = sos.media_urls || sos.mediaUrls || [];
+                        if (mediaList.length === 0) return null;
+
+                        return (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                              <Camera size={12} className="text-blue-600" />
+                              Citizen Attached Ground Evidence ({mediaList.length})
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {mediaList.map((url: string, idx: number) => {
+                                const isVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.includes('video');
+                                return (
+                                  <div
+                                    key={idx}
+                                    onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title: `Citizen SOS Attachment #${idx + 1}` })}
+                                    className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 w-20 h-16 cursor-pointer hover:border-blue-500 shadow-2xs transition-all"
+                                  >
+                                    {isVideo ? (
+                                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white">
+                                        <Play size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
+                                        <span className="text-[9px] font-bold mt-0.5">Video</span>
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={url}
+                                        alt={`Citizen attachment ${idx + 1}`}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                        onError={(e) => {
+                                          (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                      />
+                                    )}
+                                    <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center">
+                                      <Eye size={12} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                        <div className="flex items-center gap-3 text-slate-500 text-[11px]">
+                          <span>Reporter: <strong className="text-slate-700">{sos.reporter_name || sos.reporterName || 'Citizen'}</strong></span>
+                          {sos.reporter_contact || sos.reporterContact ? (
+                            <span className="flex items-center gap-1 text-blue-700 font-semibold">
+                              <Phone size={11} /> {sos.reporter_contact || sos.reporterContact}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {!isClosed && (
+                          <div className="flex items-center gap-2">
+                            {isPending && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAcknowledgeAssistance(sos)}
+                                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                                >
+                                  Acknowledge
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelAssistance(sos)}
+                                  className="flex items-center gap-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] rounded-lg border border-red-200 transition-colors cursor-pointer"
+                                >
+                                  <XCircle size={12} />
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                            {isAcknowledged && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeploySosSquad(sos)}
+                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>Deploy Tactical Squad</span>
+                                <ArrowRight size={12} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        );
+      })()}
 
       {/* Team Detail Slide-Over */}
       <AnimatePresence>

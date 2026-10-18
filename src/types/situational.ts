@@ -7,6 +7,8 @@ export interface FlyToTarget {
   zoom?: number;
   id?: string;
   timestamp?: number;
+  label?: string;
+  detail?: string;
 }
 
 export type HoverInfo =

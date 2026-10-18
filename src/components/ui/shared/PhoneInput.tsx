@@ -103,10 +103,10 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   return (
     <div className={className}>
       {label && (
-        <label className="block text-xs font-bold text-slate-800 mb-1">
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
           {label}
-          {required && <span className="text-rose-500 ml-0.5">*</span>}
-          {!required && <span className="text-[10px] text-slate-500 font-normal ml-0.5">(optional)</span>}
+          {required && <span className="text-red-600 ml-0.5">*</span>}
+          {!required && <span className="font-normal text-slate-400 ml-1">optional</span>}
         </label>
       )}
       <div className="relative">
@@ -118,7 +118,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
           onChange={(e) => onChange(sanitizePhoneInput(e.target.value))}
           placeholder={placeholder}
           required={required}
-          className={`w-full pl-9 pr-3 py-2 text-xs font-mono bg-slate-50 border rounded-lg focus:outline-none focus:bg-white transition-colors ${
+          className={`w-full pl-9 pr-3 py-2 text-[13px] tabular-nums text-slate-900 bg-white border rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-600/10 transition ${
             showError
               ? 'border-rose-400 focus:border-rose-500'
               : 'border-slate-200 focus:border-blue-600'
@@ -128,7 +128,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
       {showError && (
         <span className="block mt-1 text-[10px] text-rose-500 font-medium">
           Enter a valid Malaysian number, e.g.{' '}
-          <span className="font-mono">+60-12-3456 7890</span>
+          <span className="tabular-nums">+60-12-3456 7890</span>
         </span>
       )}
       {showValidation && dirty && valid && (

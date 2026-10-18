@@ -1,26 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import {
-  Bot,
   X,
   Minus,
   Send,
-  CheckCircle2,
   ChevronRight,
   RefreshCw,
   MessageSquare,
-  ListTodo,
-  GripVertical,
   Loader2,
   ShieldAlert,
   AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useCopilotTasks } from '../../hooks';
 import { copilotService } from '../../services/copilotService';
-import type { CopilotTask, CopilotMessage } from '../../types';
+import type { CopilotMessage } from '../../types';
 import { DailyBriefingModal } from './DailyBriefingModal';
 import { TaskCard } from './TaskCard';
+import { CopilotMascot } from './CopilotMascot';
 import { FormattedMessageText } from '../../utils/messageFormatter';
 
 const GUARDRAIL_LABEL: Record<string, string> = {
@@ -35,17 +33,27 @@ const modelLabel = (m?: string | null) => (m ? m.replace(/^(gemini|fallback):/, 
 
 const timeNow = () => new Date().toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' });
 
+/** Starter questions shown before the first message. */
+const STARTERS = [
+  'Which incidents still need a team?',
+  'Summarise the critical incidents',
+  'Which supplies are running low?',
+];
+
 export const EocCopilotChatbot: React.FC = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+
+  // Cached Copilot prioritized tasks (instant on repeat visits / fast with TanStack Query)
+  const { tasks, isLoading: isLoadingTasks, isFetching: isRefreshingTasks, refetchTasks } = useCopilotTasks({
+    enabled: isAuthenticated && !!user,
+  });
 
   // Dialog & Window States
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [showCenterBriefing, setShowCenterBriefing] = useState(false);
   const [activeTab, setActiveTab] = useState<'tasks' | 'chat'>('tasks');
-  const [tasks, setTasks] = useState<CopilotTask[]>([]);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
 
   const [inputMessage, setInputMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -103,24 +111,6 @@ export const EocCopilotChatbot: React.FC = () => {
       }
     }
   }, [isAuthenticated, user]);
-
-  // Fetch today's focus tasks on load
-  const fetchTasks = async () => {
-    setIsLoadingTasks(true);
-    try {
-      const data = await copilotService.getTodayTasks();
-      setTasks(data);
-    } catch {
-      // Fallback
-    } finally {
-      setIsLoadingTasks(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isAuthenticated && user) fetchTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAuthenticated]);
 
   // Send a message (typed, or a suggestion chip, which sends straight away).
   const send = async (text: string) => {
@@ -214,32 +204,44 @@ export const EocCopilotChatbot: React.FC = () => {
             onDragStart={() => {
               launcherDragged.current = true;
             }}
-            initial={{ scale: 0.8, opacity: 0 }}
+            initial={{ scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="absolute bottom-5 right-5 pointer-events-auto touch-none"
+            transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+            className="absolute bottom-6 right-6 pointer-events-auto touch-none"
           >
-            <button
-              onPointerDown={(e) => {
-                launcherDragged.current = false;
-                launcherDrag.start(e);
-              }}
-              onClick={() => {
-                if (launcherDragged.current) return; // it was a drag, not a click
-                setIsOpen(true);
-                setIsMinimized(false);
-              }}
-              className="group relative flex items-center justify-center w-12 h-12 rounded-3xl bg-slate-800 text-white shadow-xl hover:bg-slate-700 border border-slate-700 transition-all cursor-grab active:cursor-grabbing hover:scale-105"
-              title="Drag to reposition · Click to open"
-              aria-label="Open Vanguard Copilot"
-            >
-              <img src="/favicon_io/favicon-32x32.png" alt="" className="w-10 h-10 pointer-events-none" />
-
-              {tasks.length > 0 && (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-black shadow-md border border-white">
-                  {tasks.length}
-                </span>
-              )}
-            </button>
+            {/* The float lives on an inner wrapper so it never fights the drag transform. */}
+            <div className="group relative flex flex-col items-center">
+              <span className="pointer-events-none absolute right-full top-4 mr-2 whitespace-nowrap rounded-lg bg-[#1e293b] px-2.5 py-1.5 text-xs font-semibold text-white shadow-lg opacity-0 translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
+                Ask Copilot
+              </span>
+              <div className="copilot-float relative">
+                {tasks.some((t) => t.priority === 'Critical') && (
+                  <span className="copilot-halo absolute inset-1 rounded-full bg-blue-400/30 pointer-events-none" aria-hidden="true" />
+                )}
+                <button
+                  onPointerDown={(e) => {
+                    launcherDragged.current = false;
+                    launcherDrag.start(e);
+                  }}
+                  onClick={() => {
+                    if (launcherDragged.current) return; // it was a drag, not a click
+                    setIsOpen(true);
+                    setIsMinimized(false);
+                  }}
+                  className="relative block rounded-2xl transition-transform duration-300 ease-out group-hover:-rotate-6 group-hover:scale-105 active:scale-95 cursor-grab active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600 drop-shadow-[0_8px_12px_rgba(15,23,42,.25)]"
+                  title="Drag to move · click to open"
+                  aria-label={`Open Vanguard Copilot${tasks.length ? `, ${tasks.length} tasks today` : ''}`}
+                >
+                  <CopilotMascot size={60} />
+                  {tasks.length > 0 && (
+                    <span className="absolute top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                      {tasks.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+              <span className="copilot-shadow mt-0.5 w-9 h-1.5 rounded-full bg-slate-900 blur-[2px]" aria-hidden="true" />
+            </div>
           </motion.div>
         )}
 
@@ -252,103 +254,100 @@ export const EocCopilotChatbot: React.FC = () => {
             dragMomentum={false}
             dragElastic={0}
             dragConstraints={boundsRef}
-            initial={{ opacity: 0, scale: 0.92, y: 25 }}
+            initial={{ opacity: 0, scale: 0.94, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 25 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, scale: 0.94, y: 16 }}
+            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            style={{ transformOrigin: 'bottom right' }}
             role="dialog"
             aria-label="Vanguard Copilot"
-            className="absolute bottom-5 right-5 pointer-events-auto w-[370px] sm:w-[420px] max-w-[calc(100vw-2.5rem)] h-[580px] max-h-[calc(100%-2.5rem)] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden text-slate-800"
+            className="absolute bottom-6 right-6 pointer-events-auto w-[370px] sm:w-[400px] max-w-[calc(100vw-2.5rem)] h-[600px] max-h-[calc(100%-3rem)] bg-white rounded-2xl shadow-[0_24px_60px_-20px_rgba(15,23,42,.45)] border border-slate-200 flex flex-col overflow-hidden text-slate-800"
           >
             {/* Header (drag handle) */}
             <div
               onPointerDown={(e) => panelDrag.start(e)}
-              className="px-4 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800 cursor-grab active:cursor-grabbing select-none touch-none"
+              className="px-4 py-3.5 bg-[#1e293b] text-white flex items-center justify-between shrink-0 cursor-grab active:cursor-grabbing select-none touch-none"
             >
-              <div className="flex items-center gap-2.5">
-                <GripVertical size={15} className="text-slate-500 shrink-0" />
-                <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-md border border-slate-400/30">
-                  <img
-                    src="/favicon_io/favicon-32x32.png"
-                    alt="Logo"
-                    className="w-7 h-7"
-                  />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold tracking-wider text-white">VANGUARD COPILOT</h3>
-                  <p className="text-[10px] text-slate-400">Drag to move · Esc or click outside to close</p>
+              <div className="flex items-center gap-3 min-w-0">
+                <CopilotMascot size={38} tone="light" className="copilot-float shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white">Vanguard Copilot</h3>
+                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                    AI assistant · verify before acting
+                  </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 text-slate-400" onPointerDown={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-0.5 text-slate-400" onPointerDown={(e) => e.stopPropagation()}>
                 <button
-                  onClick={fetchTasks}
-                  className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  onClick={() => refetchTasks(true)}
+                  className="p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
                   title="Refresh tasks"
+                  aria-label="Refresh tasks"
                 >
-                  <RefreshCw size={13} className={isLoadingTasks ? 'animate-spin' : ''} />
+                  <RefreshCw size={14} className={isRefreshingTasks ? 'animate-spin' : ''} />
                 </button>
                 <button
                   onClick={() => setIsMinimized(true)}
-                  className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-                  title="Minimize"
+                  className="p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  title="Minimise"
+                  aria-label="Minimise copilot"
                 >
-                  <Minus size={14} />
+                  <Minus size={15} />
                 </button>
                 <button
                   onClick={closePanel}
-                  className="p-1 rounded-md hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
                   title="Close"
                   aria-label="Close copilot"
                 >
-                  <X size={14} />
+                  <X size={15} />
                 </button>
               </div>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-slate-100 bg-slate-50 shrink-0">
-              <button
-                onClick={() => setActiveTab('tasks')}
-                className={`flex-1 py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'tasks'
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <ListTodo size={14} />
-                <span>Today's Tasks ({tasks.length})</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`flex-1 py-2 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'chat'
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <MessageSquare size={14} />
-                <span>EOC AI Chat</span>
-              </button>
+            <div className="px-4 py-3 shrink-0 border-b border-slate-100">
+              <div role="tablist" className="flex items-center bg-slate-100 rounded-lg p-0.5">
+                {([
+                  { key: 'tasks', label: "Today's tasks", count: tasks.length },
+                  { key: 'chat', label: 'Ask Copilot', count: null },
+                ] as const).map(({ key, label, count }) => {
+                  const on = activeTab === key;
+                  return (
+                    <button key={key} role="tab" aria-selected={on} onClick={() => setActiveTab(key)}
+                      className={`relative flex-1 py-1.5 text-xs font-semibold rounded-md cursor-pointer transition-colors ${on ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      {on && <motion.span layoutId="copilot-tab" className="absolute inset-0 bg-white rounded-md shadow-[0_1px_2px_rgba(15,23,42,.08)]" transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} />}
+                      <span className="relative">{label}{count != null && <span className="text-slate-400 tabular-nums"> {count}</span>}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Tasks Tab */}
             {activeTab === 'tasks' && (
-              <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5 bg-slate-50/50">
+              <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-slate-50/60">
                 {isLoadingTasks ? (
-                  <div className="p-8 text-center text-slate-400 text-xs">
-                    <RefreshCw size={20} className="animate-spin mx-auto mb-2 text-blue-500" />
-                    <p>Compiling live tasks...</p>
-                  </div>
+                  [0, 1, 2].map((i) => <div key={i} className="h-[58px] rounded-xl bg-slate-200/60 animate-pulse" />)
                 ) : tasks.length === 0 ? (
-                  <div className="p-8 text-center bg-white rounded-xl border border-slate-200">
-                    <CheckCircle2 size={28} className="text-emerald-500 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-slate-800">All Operations Clear!</p>
+                  <div className="py-12 text-center">
+                    <p className="text-sm font-semibold text-slate-800">Nothing urgent right now</p>
+                    <p className="text-xs text-slate-500 mt-1">Copilot will flag anything new.</p>
                   </div>
                 ) : (
-                  tasks.map((task) => (
-                    <TaskCard key={task.id} task={task} onAction={handleTaskAction} />
-                  ))
+                  <AnimatePresence initial={false}>
+                    {tasks.map((task, i) => (
+                      <motion.div key={task.id}
+                        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
+                      >
+                        <TaskCard task={task} onAction={handleTaskAction} />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 )}
               </div>
             )}
@@ -358,13 +357,19 @@ export const EocCopilotChatbot: React.FC = () => {
               <div className="flex flex-col flex-1 min-h-0 bg-slate-50/50">
                 <div className="flex-1 overflow-y-auto p-3 space-y-3">
                   {messages.length === 0 && (
-                    <div className="p-6 text-center text-slate-400 text-xs">
-                      <Bot size={28} className="mx-auto mb-2 text-slate-300" />
-                      <p className="font-bold text-slate-700">How can I assist your shift today?</p>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        Ask for incident verification advice, available rescue teams, or supply depot
-                        status.
-                      </p>
+                    <div className="px-3 pt-8 pb-4 text-center">
+                      <CopilotMascot size={64} className="copilot-float mx-auto" />
+                      <p className="mt-4 text-sm font-semibold text-slate-900">How can I help this shift?</p>
+                      <p className="text-xs text-slate-500 mt-1">Ask about incidents, teams or supplies.</p>
+                      <div className="mt-5 flex flex-col gap-1.5">
+                        {STARTERS.map((q) => (
+                          <button key={q} onClick={() => send(q)}
+                            className="group w-full text-left text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-lg px-3 py-2 transition-colors cursor-pointer flex items-center justify-between gap-2">
+                            {q}
+                            <ChevronRight size={13} className="text-slate-300 group-hover:text-slate-500 transition-colors" />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -441,7 +446,7 @@ export const EocCopilotChatbot: React.FC = () => {
                             key={i}
                             onClick={() => send(s)}
                             title="Send this question"
-                            className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                            className="text-[11px] bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 rounded-full px-2.5 py-1 font-medium transition-colors cursor-pointer flex items-center gap-1"
                           >
                             <ChevronRight size={10} />
                             {s}
@@ -455,19 +460,20 @@ export const EocCopilotChatbot: React.FC = () => {
 
                 <form
                   onSubmit={handleSendMessage}
-                  className="p-2.5 bg-white border-t border-slate-200 flex gap-2"
+                  className="p-3 bg-white border-t border-slate-100 flex gap-2"
                 >
                   <input
                     type="text"
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder={isSending ? 'Copilot is thinking…' : 'Ask Copilot assistant...'}
-                    className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-600"
+                    placeholder={isSending ? 'Copilot is thinking…' : 'Ask about incidents, teams or supplies'}
+                    className="flex-1 px-3.5 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-xl placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-300 focus:ring-4 focus:ring-blue-600/10 transition"
                   />
                   <button
                     type="submit"
                     disabled={isSending || !inputMessage.trim()}
-                    className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition-colors cursor-pointer"
+                    aria-label="Send message"
+                    className="w-10 shrink-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl transition-colors cursor-pointer disabled:cursor-default"
                   >
                     {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>

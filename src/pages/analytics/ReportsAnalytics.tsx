@@ -484,12 +484,12 @@ const ReportsAnalytics: React.FC = () => {
                                 >
                                   <div>
                                     <p className="font-bold text-slate-800">{d.district}</p>
-                                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                    <p className="text-[10px] text-slate-500 mt-0.5">
                                       {d.affected_population.toLocaleString()} affected (reported)
                                     </p>
                                   </div>
                                   <div className="text-right flex flex-col items-end gap-1">
-                                    <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                       {d.count} {d.count === 1 ? 'incident' : 'incidents'}
                                     </span>
                                     <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${

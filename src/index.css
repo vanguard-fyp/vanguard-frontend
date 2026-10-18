@@ -13,6 +13,141 @@
   --font-display: 'Charis SIL', 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 }
 
+/* Copilot: a slow float for the launcher and its mark, and a soft halo that
+   breathes while something critical is waiting. */
+.copilot-float {
+  animation: copilot-float 3.6s ease-in-out infinite;
+}
+
+@keyframes copilot-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.copilot-halo {
+  animation: copilot-halo 2.8s ease-out infinite;
+}
+
+@keyframes copilot-halo {
+  0% { transform: scale(1); opacity: 0.45; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+/* Mascot: blinks every few seconds, antenna glows, and a ground shadow
+   shrinks as the launcher floats up. */
+.mascot-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascot-blink 5.5s ease-in-out infinite;
+}
+
+@keyframes mascot-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  93% { transform: scaleY(0.1); }
+  96% { transform: scaleY(1); }
+}
+
+.mascot-antenna {
+  animation: mascot-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes mascot-glow {
+  0%, 100% { fill: #3b82f6; }
+  50% { fill: #93c5fd; }
+}
+
+.copilot-shadow {
+  animation: copilot-shadow 3.6s ease-in-out infinite;
+}
+
+@keyframes copilot-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 0.28; }
+  50% { transform: scaleX(0.78); opacity: 0.16; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-float,
+  .copilot-halo,
+  .copilot-shadow,
+  .mascot-eye,
+  .mascot-antenna {
+    animation: none;
+  }
+}
+
+/* Dashboard skeletons: a soft light sweep while data loads. */
+.dash-bone {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f6 25%, #f7f9fc 37%, #eef2f6 63%);
+  background-size: 400% 100%;
+  animation: dash-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes dash-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-bone {
+    animation: none;
+  }
+}
+
+/* Dashboard map: live markers pulse a soft ring outward. */
+.dash-map-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation-name: dash-map-ping;
+  animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  animation-iteration-count: infinite;
+}
+
+@keyframes dash-map-ping {
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-map-ping {
+    animation: none;
+    display: none;
+  }
+}
+
+/* Dashboard: secondary details appear on hover / keyboard focus.
+   Touch screens (no hover) always show them. */
+.dash-reveal {
+  overflow: hidden;
+  transition: opacity 0.18s ease, max-height 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (hover: hover) {
+  .dash-reveal {
+    opacity: 0;
+    max-height: 0;
+  }
+
+  .group:hover .dash-reveal,
+  .group:focus-within .dash-reveal,
+  .group:focus-visible .dash-reveal,
+  .group[aria-current='true'] .dash-reveal {
+    opacity: 1;
+    max-height: 3rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-reveal {
+    transition: none;
+  }
+}
+
 @layer base {
   :root {
     --bg-app: #f8fafc;
@@ -75,15 +210,4 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
-}
-
-/* ==================== Network Topology Dash Animation ==================== */
-@keyframes dash {
-  from {
-    stroke-dashoffset: 24;
-  }
-
-  to {
-    stroke-dashoffset: 0;
-  }
 }

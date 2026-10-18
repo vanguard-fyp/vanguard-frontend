@@ -1,44 +1,46 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { TrendingUp, Sparkles, CheckCircle2 } from 'lucide-react';
 import type { ImpactSnapshot, ImpactTimelineProps } from '../../../types';
 import { formatDateTime } from '../../../utils/dateFormatter';
 
-const TimelineTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    const point: ImpactSnapshot = payload[0].payload;
-    const isPred = point.is_predicted;
-    return (
-      <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 shadow-xl text-xs max-w-[240px] space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-slate-500 font-mono font-bold text-[10px]">{formatDateTime(label)}</p>
-          <span
-            className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full flex items-center gap-1 ${isPred
-                ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                : 'bg-blue-100 text-blue-700 border border-blue-200'
-              }`}
-          >
-            {isPred ? <Sparkles size={9} /> : <CheckCircle2 size={9} />}
-            {isPred ? 'AI PREDICTION' : 'CONFIRMED'}
-          </span>
-        </div>
-        <p className={`font-black text-sm ${isPred ? 'text-purple-700' : 'text-blue-700'}`}>
-          {point.affected_population.toLocaleString()} affected
-        </p>
-        {!isPred && point.casualties_count != null && (
-          <p className="text-slate-600 text-[11px] font-medium">{point.casualties_count} casualties reported</p>
-        )}
-        {point.stage && (
-          <p className="text-[10px] font-mono text-slate-400">
-            Stage: {point.stage}
-          </p>
-        )}
-        {point.note && <p className="text-slate-500 text-[11px] mt-1 leading-tight border-t border-slate-100 pt-1">{point.note}</p>}
-      </div>
-    );
-  }
-  return null;
+/* Confirmed figures in blue, AI projection in indigo (dashed), casualties in red.
+   Chart text uses the app font (Inter), never a monospace face. */
+const C = { confirmed: '#2563eb', predicted: '#4f46e5', casualties: '#dc2626' };
+const AXIS_TICK = { fill: '#64748b', fontSize: 11, fontFamily: 'inherit' };
+/** Axis label: day and time only ("1 Aug, 22:00"); the tooltip has the full date. */
+const shortTick = (v: string) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 };
+
+const TimelineTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const point: ImpactSnapshot = payload[0].payload;
+  const isPred = point.is_predicted;
+  // Just the numbers for that moment; notes and stages live elsewhere.
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg px-3 py-2 shadow-lg text-xs space-y-1">
+      <p className="text-[11px] text-slate-500">{shortTick(label)}{isPred ? ' · projection' : ''}</p>
+      <p className="flex items-center gap-1.5 font-semibold text-slate-900 tabular-nums">
+        <span className="w-2 h-2 rounded-full" style={{ background: isPred ? C.predicted : C.confirmed }} />
+        {point.affected_population.toLocaleString()} affected
+      </p>
+      {!isPred && point.casualties_count != null && (
+        <p className="flex items-center gap-1.5 text-slate-700 tabular-nums">
+          <span className="w-2 h-2 rounded-full" style={{ background: C.casualties }} />
+          {point.casualties_count} casualties
+        </p>
+      )}
+    </div>
+  );
+};
+
+const Legend: React.FC<{ color: string; dashed?: boolean; children: React.ReactNode }> = ({ color, dashed, children }) => (
+  <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+    <span className="w-4 h-0 border-t-2" style={{ borderColor: color, borderStyle: dashed ? 'dashed' : 'solid' }} />
+    {children}
+  </span>
+);
 
 export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
   timeline,
@@ -49,11 +51,7 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
 }) => {
   if (!timeline || timeline.length === 0) return null;
 
-  // Filter if confirmed-only is requested
-  const displayTimeline = mode === 'confirmed-only'
-    ? timeline.filter((p) => !p.is_predicted)
-    : timeline;
-
+  const displayTimeline = mode === 'confirmed-only' ? timeline.filter((p) => !p.is_predicted) : timeline;
   if (displayTimeline.length === 0) return null;
 
   const latest = displayTimeline[displayTimeline.length - 1];
@@ -84,114 +82,116 @@ export const ImpactTimeline: React.FC<ImpactTimelineProps> = ({
   });
 
   const hasPredictions = mode === 'predictive' && displayTimeline.some((p) => p.is_predicted);
+  const full = size === 'full';
+  // Rising impact is bad news (red); falling is good (emerald).
+  const trendColor = growth > 0 ? '#b91c1c' : growth < 0 ? '#047857' : '#475569';
+  const trendBg = growth > 0 ? '#dc262612' : growth < 0 ? '#05966912' : '#64748b12';
 
   return (
-    <div className={size === 'full' ? 'bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4' : 'space-y-2'}>
-      {size === 'full' && (
+    <div className={full ? 'bg-white border border-slate-200/80 rounded-2xl px-5 sm:px-6 pt-5 pb-5 space-y-4' : 'space-y-2'}>
+      {full && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <TrendingUp size={17} className={hasPredictions ? 'text-purple-600' : 'text-blue-600'} />
-              {title ?? (mode === 'confirmed-only' ? 'Confirmed Ground Impact Progression' : 'Impact Progression & AI Forecast')}
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {hasPredictions && (
-              <div className="flex items-center gap-3 text-[10px] font-bold">
-                <span className="flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
-                  <span className="size-2 rounded-full bg-blue-600 inline-block" /> Confirmed History
-                </span>
-                <span className="flex items-center gap-1 text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
-                  <Sparkles size={10} className="text-purple-600" /> AI projection (dotted)
-                </span>
-              </div>
-            )}
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${growth >= 0 ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-              {growth >= 0 ? '+' : ''}{growth}% trend
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+            {title ?? (mode === 'confirmed-only' ? 'Impact over time' : 'Impact and AI projection')}
+          </h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Legend color={C.confirmed}>Confirmed</Legend>
+            {hasPredictions && <Legend color={C.predicted} dashed>AI projection</Legend>}
+            {mode === 'confirmed-only' && <Legend color={C.casualties}>Casualties</Legend>}
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md tabular-nums" style={{ color: trendColor, background: trendBg }}>
+              {growth > 0 ? '+' : ''}{growth}% since first report
             </span>
           </div>
         </div>
       )}
 
-      <div className={size === 'full' ? 'h-64' : 'h-32'}>
+      <div className={full ? 'h-60' : 'h-32'}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData}>
+          <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="confirmedGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                <stop offset="5%" stopColor={C.confirmed} stopOpacity={0.18} />
+                <stop offset="95%" stopColor={C.confirmed} stopOpacity={0} />
               </linearGradient>
               <linearGradient id="predictedGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
+                <stop offset="5%" stopColor={C.predicted} stopOpacity={0.16} />
+                <stop offset="95%" stopColor={C.predicted} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis dataKey="timestamp" tickFormatter={(value) => formatDateTime(value)} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} width={40} />
-            <Tooltip content={<TimelineTooltip />} />
+            <CartesianGrid stroke="#f1f5f9" vertical={false} />
+            <XAxis dataKey="timestamp" tickFormatter={shortTick} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={24} />
+            <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => v.toLocaleString()} />
+            <Tooltip content={<TimelineTooltip />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '3 3' }} />
 
-            {/* Confirmed Series (Solid Blue) */}
             <Area
               type="monotone"
               dataKey="confirmedPop"
-              stroke="#2563eb"
+              stroke={C.confirmed}
               fill="url(#confirmedGrad)"
-              strokeWidth={2.5}
-              name="Confirmed Ground Impact"
+              strokeWidth={2}
+              name="Confirmed"
               connectNulls={false}
-              dot={{ r: 3.5, fill: '#2563eb', stroke: '#ffffff', strokeWidth: 1.5 }}
+              dot={{ r: 3, fill: C.confirmed, stroke: '#ffffff', strokeWidth: 1.5 }}
             />
-
-            {/* Predicted Forecast Series (Dashed Purple) */}
             {hasPredictions && (
               <Area
                 type="monotone"
                 dataKey="predictedPop"
-                stroke="#8b5cf6"
+                stroke={C.predicted}
                 fill="url(#predictedGrad)"
-                strokeWidth={2.5}
+                strokeWidth={2}
                 strokeDasharray="4 4"
-                name="AI Predicted Forecast"
+                name="AI projection"
                 connectNulls={false}
-                dot={{ r: 4, fill: '#8b5cf6', stroke: '#ffffff', strokeWidth: 1.5 }}
+                dot={{ r: 3, fill: C.predicted, stroke: '#ffffff', strokeWidth: 1.5 }}
               />
             )}
             {mode === 'confirmed-only' && (
               <Area
                 type="monotone"
                 dataKey="casualties"
-                stroke="#dc2626"
+                stroke={C.casualties}
                 fill="none"
-                strokeWidth={2}
-                name="Confirmed Casualties"
+                strokeWidth={1.75}
+                name="Casualties"
                 connectNulls={false}
-                dot={{ r: 3, fill: '#dc2626', stroke: '#ffffff', strokeWidth: 1.5 }}
+                dot={{ r: 2.5, fill: C.casualties, stroke: '#ffffff', strokeWidth: 1.5 }}
               />
             )}
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {size === 'full' && (
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-          <p>
-            {lastConfirmed ? (
-              <>
-                Latest confirmed: <span className="font-bold text-slate-800">{lastConfirmed.affected_population.toLocaleString()} affected</span>{' '}
-                ({formatDateTime(lastConfirmed.timestamp)})
-                {firstConfirmed && firstConfirmed !== lastConfirmed && <> · first {firstConfirmed.affected_population.toLocaleString()}</>}
-              </>
-            ) : (
-              'No confirmed figures reported yet'
-            )}
-          </p>
+      {full && (
+        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500">
+          {firstConfirmed && firstConfirmed !== lastConfirmed && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Initial:</span>
+              <span className="font-semibold text-slate-700 tabular-nums">
+                {firstConfirmed.affected_population.toLocaleString()} affected
+              </span>
+              <span className="text-[11px] text-slate-400">({formatDateTime(firstConfirmed.timestamp)})</span>
+            </div>
+          )}
+          {lastConfirmed ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Latest recorded:</span>
+              <span className="font-semibold text-slate-900 tabular-nums">
+                {lastConfirmed.affected_population.toLocaleString()} affected
+              </span>
+              <span className="text-[11px] text-slate-400">({formatDateTime(lastConfirmed.timestamp)})</span>
+            </div>
+          ) : (
+            <p className="text-slate-400">No confirmed figures recorded</p>
+          )}
           {lastPredicted && (
-            <p>
-              Projected by {formatDateTime(lastPredicted.timestamp)}:{' '}
-              <span className="font-bold text-purple-700">{lastPredicted.affected_population.toLocaleString()}</span>
-            </p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">AI Projected:</span>
+              <span className="font-semibold tabular-nums" style={{ color: C.predicted }}>
+                {lastPredicted.affected_population.toLocaleString()} affected
+              </span>
+              <span className="text-[11px] text-slate-400">({formatDateTime(lastPredicted.timestamp)})</span>
+            </div>
           )}
         </div>
       )}

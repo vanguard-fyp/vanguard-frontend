@@ -17,7 +17,7 @@ interface TeamListFiltersProps {
 }
 
 const agencies: AgencyFilter[] = ['All', 'SMART', 'BOMBA', 'APM', 'PDRM', 'ATM'];
-const statuses: StatusFilter[] = ['All', 'Available', 'Deployed', 'En Route', 'Off Duty'];
+const statuses: StatusFilter[] = ['All', 'Available', 'Deployed', 'En Route'];
 
 const agencyAccent: Record<string, string> = {
   SMART: 'border-blue-400 text-blue-800 bg-blue-50',

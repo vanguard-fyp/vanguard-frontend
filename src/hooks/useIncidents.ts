@@ -15,19 +15,21 @@ export const INCIDENT_KEYS = {
   cities: () => ['incidents', 'cities'] as const,
 };
 
-export function useGlobalIncidents(refresh?: boolean) {
+export function useGlobalIncidents(refresh?: boolean, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: INCIDENT_KEYS.global(),
     queryFn: () => incidentService.getGlobalIncidents(refresh),
     staleTime: 60_000,
+    enabled: options?.enabled ?? true,
   });
 }
 
-export function useIncidents(filters?: { severity?: string; status?: string; district?: string }) {
+export function useIncidents(filters?: { severity?: string; status?: string; district?: string }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: INCIDENT_KEYS.list(filters),
     queryFn: () => incidentService.getIncidents(filters),
     staleTime: 30_000,
+    enabled: options?.enabled ?? true,
   });
 }
 

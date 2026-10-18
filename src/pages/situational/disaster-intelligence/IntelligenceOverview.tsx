@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
-import { ChevronRight, ChevronDown, ChevronUp, BarChart3, AlertCircle, RefreshCw, Loader2, Sparkles } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ChevronRight, ChevronDown, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { AssessmentStatusBadge } from '../../../components/ui/situational/AssessmentStatus';
 import { PaginationBar } from '../../../components/ui/shared/PaginationBar';
 import { useIntelligenceOverview } from '../../../hooks';
@@ -12,40 +11,58 @@ import { clampPage, pageCount, pageOffset } from '../../../hooks/usePagination';
 import { fmtNumber, isNum, relativeTime } from '../../../utils/display';
 import { factState } from '../../../utils/facts';
 import type { IntelligenceOverviewProps } from '../../../types';
-import { itemAnim, MINIMAL_STATUS_FILTERS, SEVERITY_COLORS } from '../../../constants';
-import { CustomChartTooltip } from '../../../components/ui/situational/CustomChartTooltip';
+import { itemAnim } from '../../../constants';
 import { disasterLevelInfo } from '../../../constants/components/disasterLevels';
 import { WiderEventsPanel } from '../../../components/ui/situational/WiderEventsPanel';
+import { Tag, TONE, SEVERITY_TONE, LevelTag, StatusTag, type Tone } from '../../../components/ui/shared/Tag';
+import { Bone } from '../../../components/ui/dashboard/Panel';
 
 const PAGE_SIZE = 30;
 const UNCLASSIFIED = 'Level not declared';
 const LEVEL_ORDER = ['Level 3: Federal', 'Level 2: State', 'Level 1: District', UNCLASSIFIED] as const;
+const FILTERS = [
+  { id: 'active', label: 'Active' },
+  { id: 'all', label: 'All tracked' },
+  { id: 'resolved', label: 'Resolved' },
+] as const;
 
 /** The officer-declared NADMA level; never inferred from the AI score. */
 function declaredLevel(incident: { disaster_level?: string | null }): string {
   return incident.disaster_level && disasterLevelInfo[incident.disaster_level] ? incident.disaster_level : UNCLASSIFIED;
 }
 
+/** Priority bands, the same thresholds everywhere on this page. */
+const BANDS: { id: 'high' | 'elevated' | 'watch' | 'unscored'; label: string; tone: Tone; test: (s: number | null) => boolean }[] = [
+  { id: 'high', label: 'High (80+)', tone: 'red', test: (s) => s != null && s >= 80 },
+  { id: 'elevated', label: 'Elevated (60–79)', tone: 'orange', test: (s) => s != null && s >= 60 && s < 80 },
+  { id: 'watch', label: 'Watch (under 60)', tone: 'blue', test: (s) => s != null && s < 60 },
+  { id: 'unscored', label: 'Not scored yet', tone: 'slate', test: (s) => s == null },
+];
+const bandOf = (s: number | null) => BANDS.find((b) => b.test(s))!;
+
 /**
- * Ranked incident overview organized by NADMA operational levels (Level 3, 2, 1).
+ * Ranked incidents, grouped by the declared NADMA level (Level 3 → 1).
+ * The summary up top answers "how many need attention"; each row answers
+ * "what is it, how many people, how urgent".
  */
 export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSelectInsight }) => {
   const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'resolved'>('active');
   const [pageIndex, setPageIndex] = useState(0);
-  const [showChart, setShowChart] = useState(false);
   const [collapsedLevels, setCollapsedLevels] = useState<Record<string, boolean>>({});
 
-  const { data, isLoading, isError, isFetching, refetch } = useIntelligenceOverview(
-    statusFilter,
-    PAGE_SIZE,
-    pageOffset(pageIndex, PAGE_SIZE)
-  );
+  const { data, isLoading, isError, isFetching, isPlaceholderData, refetch } = useIntelligenceOverview(statusFilter, PAGE_SIZE, pageOffset(pageIndex, PAGE_SIZE));
+  // Totals for each tab (one row each; only `total` is used).
+  const activeCount = useIntelligenceOverview('active', 1, 0).data?.total;
+  const allCount = useIntelligenceOverview('all', 1, 0).data?.total;
+  const resolvedCount = useIntelligenceOverview('resolved', 1, 0).data?.total;
+  const tabCount: Record<typeof statusFilter, number | undefined> = { active: activeCount, all: allCount, resolved: resolvedCount };
+  // The previous filter's rows stay on screen while the new ones load: say so.
+  const switching = isPlaceholderData && isFetching;
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const { hasPermission } = useAuth();
   const toast = useToast();
   const assessPending = useAssessPending();
-  // Incidents on this page that have never produced a usable assessment.
   const unassessed = items.filter((it) => it.analysis_state === 'not_analysed' || it.analysis_state === 'failed').length;
   const runAssessPending = () =>
     assessPending.mutate(false, {
@@ -63,304 +80,199 @@ export const IntelligenceOverview: React.FC<IntelligenceOverviewProps> = ({ onSe
     }
   }, [data, pageIndex, total]);
 
-  const chartData = items
-    .filter((it) => isNum(it.assessment?.priority_score))
-    .map((it) => ({
-      name: it.incident.display_id || it.incident.district || 'Incident',
-      detail: `${it.incident.title} · ${it.incident.district}`,
-      score: it.assessment!.priority_score as number,
-      severity: it.incident.severity ?? 'Medium',
-    }));
-
+  const scoreOf = (it: (typeof items)[number]) => (isNum(it.assessment?.priority_score) ? Math.round(it.assessment!.priority_score as number) : null);
+  const reportedOf = (it: (typeof items)[number]) =>
+    factState(it.incident, 'affected_population') !== 'unknown' && isNum(it.incident.affected_population) && it.incident.affected_population > 0
+      ? it.incident.affected_population
+      : null;
+  
   const changeFilter = (f: typeof statusFilter) => {
     setStatusFilter(f);
     setPageIndex(0);
   };
 
   return (
-    <motion.div variants={itemAnim} className="space-y-5 max-w-[1400px]">
-      {/* Filter and Top Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80">
-          {MINIMAL_STATUS_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => changeFilter(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                statusFilter === f.id ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+    <motion.div variants={itemAnim} className="space-y-5">
+      {/* Filters and actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Incidents shown" className="inline-flex items-center bg-slate-100 rounded-lg p-0.5">
+          {FILTERS.map((f) => {
+            const on = statusFilter === f.id;
+            return (
+              <button key={f.id} role="tab" aria-selected={on} onClick={() => changeFilter(f.id)}
+                className={`relative inline-flex items-center px-3.5 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${on ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
+                {on && <motion.span layoutId="overview-filter" className="absolute inset-0 bg-white rounded-md shadow-[0_1px_2px_rgba(15,23,42,.08)]" transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} />}
+                <span className="relative">{f.label}</span>
+                {tabCount[f.id] != null && (
+                  <span className={`relative ml-1.5 min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${on ? 'bg-blue-50 text-blue-700' : 'bg-slate-200/70 text-slate-500'}`}>
+                    {tabCount[f.id]}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
-
         <div className="flex items-center gap-2">
-          {data && (
-            <span className="text-[10px] text-slate-400 font-medium">
-              Updated {relativeTime(data.generated_at) ?? '—'}
-            </span>
-          )}
+          {data && <span className="text-[11px] text-slate-400">Updated {relativeTime(data.generated_at) ?? 'just now'}</span>}
           {hasPermission('MANAGE_INCIDENTS') && unassessed > 0 && (
-            <button
-              onClick={runAssessPending}
-              disabled={assessPending.isPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer disabled:opacity-60"
-            >
+            <button onClick={runAssessPending} disabled={assessPending.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-60">
               {assessPending.isPending ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-              Analyse {unassessed} unassessed
+              Analyse {unassessed} not yet scored
             </button>
           )}
-          <button
-            onClick={() => refetch()}
-            title="Refresh"
-            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer"
-          >
+          <button onClick={() => refetch()} title="Refresh" aria-label="Refresh"
+            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
             <RefreshCw size={13} className={isFetching ? 'animate-spin text-slate-400' : 'text-slate-600'} />
           </button>
-          {chartData.length > 0 && (
-            <button
-              onClick={() => setShowChart((prev) => !prev)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
-            >
-              <BarChart3 size={13} className="text-blue-600" />
-              <span>{showChart ? 'Hide Chart' : 'Priority Chart'}</span>
-              {showChart ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Priority Bar Chart (Collapsible) */}
-      <AnimatePresence>
-        {showChart && chartData.length > 0 && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <BarChart3 size={14} className="text-blue-600" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">AI Priority Score by Incident</h3>
-                </div>
-                <span className="text-[10px] text-slate-400 font-medium">0–100</span>
-              </div>
-              <div className="h-[180px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
-                    <XAxis dataKey="name" tick={{ fill: '#475569', fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomChartTooltip />} />
-                    <Bar dataKey="score" name="Priority" radius={[4, 4, 0, 0]} barSize={26}>
-                      {chartData.map((entry, idx) => (
-                        <Cell key={idx} fill={SEVERITY_COLORS[entry.severity] || '#2563eb'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className={`space-y-5 transition-opacity duration-200 ${switching ? 'opacity-40 pointer-events-none' : ''}`} aria-busy={switching}>
+      {statusFilter !== 'resolved' && <WiderEventsPanel onSelectIncident={onSelectInsight} />}
 
-      <WiderEventsPanel onSelectIncident={onSelectInsight} />
-
-      {/* Grouped by Disaster Operational Level: Level 3, Level 2, Level 1 */}
       {isLoading ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-          <Loader2 size={14} className="animate-spin" /> Loading ranked incidents…
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-3">
+          {[0, 1, 2, 3].map((i) => <Bone key={i} className="h-14 rounded-xl" />)}
         </div>
       ) : isError ? (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center text-xs text-red-800">
-          The intelligence overview could not be loaded.{' '}
-          <button onClick={() => refetch()} className="underline font-semibold cursor-pointer">Retry</button>
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-8 text-center text-sm text-slate-600">
+          The priority overview could not be loaded.{' '}
+          <button onClick={() => refetch()} className="font-semibold text-blue-600 hover:text-blue-800 cursor-pointer">Retry</button>
         </div>
       ) : items.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-xs">
-          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
-            <AlertCircle size={24} />
-          </div>
-          <h3 className="text-sm font-bold text-slate-800">No active incidents in this view</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
-            Incidents are tracked and categorized under NADMA Operational Levels (Level 1 District, Level 2 State, Level 3 Federal) once reported and verified.
-          </p>
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center">
+          <p className="text-sm font-semibold text-slate-700">No incidents in this view</p>
+          <p className="text-xs text-slate-400 mt-1">Verified incidents appear here, ranked by AI priority.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {LEVEL_ORDER.map((level) => {
+            const rows = items.filter((it) => declaredLevel(it.incident) === level);
+            if (rows.length === 0) return null;
             const info = disasterLevelInfo[level] ?? { desc: 'No NADMA level has been declared for these incidents yet.' };
-            const incidentsAtLevel = items.filter((it) => declaredLevel(it.incident) === level);
-            if (incidentsAtLevel.length === 0) return null;
-
-            const isCollapsed = collapsedLevels[level] ?? false;
-            const dotColor = level.includes('Level 3')
-              ? 'bg-red-600'
-              : level.includes('Level 2')
-              ? 'bg-purple-600'
-              : 'bg-blue-600';
-
+            // Only the highest declared level starts open (normally L3); officers open the others.
+            const firstLevel = LEVEL_ORDER.find((l) => items.some((it) => declaredLevel(it.incident) === l));
+            const isCollapsed = collapsedLevels[level] ?? level !== firstLevel;
+            const topScore = Math.max(...rows.map((r) => scoreOf(r) ?? -1));
             return (
-              <div key={level} className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs">
-                {/* Level Section Header */}
-                <div
+              <section key={level} className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden">
+                <button type="button" aria-expanded={!isCollapsed}
                   onClick={() => setCollapsedLevels((p) => ({ ...p, [level]: !isCollapsed }))}
-                  className="flex items-center justify-between cursor-pointer select-none group"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />
-                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                        {level}
-                      </h3>
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {incidentsAtLevel.length}
-                      </span>
+                  title={info.desc}
+                  className="w-full px-5 sm:px-6 py-4 flex items-center justify-between gap-4 text-left cursor-pointer hover:bg-slate-50/60 transition-colors">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5">
+                      {level === UNCLASSIFIED ? <Tag variant="outline" dot={false}>No level</Tag> : <LevelTag level={level} />}
+                      <span className="text-xs font-semibold text-slate-500 tabular-nums">{rows.length} incident{rows.length === 1 ? '' : 's'}</span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed font-normal">
-                      {info.desc}
-                    </p>
                   </div>
-                  <button
-                    type="button"
-                    className="p-1 rounded-lg text-slate-400 group-hover:text-slate-600 transition-colors"
-                  >
-                    {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-                  </button>
-                </div>
+                  {isCollapsed && topScore >= 0 && (
+                    <span className="ml-auto text-xs text-slate-500">Top priority <span className="font-semibold tabular-nums" style={{ color: TONE[bandOf(topScore).tone] }}>{topScore}</span></span>
+                  )}
+                  <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                </button>
 
-                {/* 1 Clean Row Per Incident */}
                 {!isCollapsed && (
-                  <div className="mt-4 space-y-3">
-                    {incidentsAtLevel.map(({ incident, assessment, priority_rank, analysis_state }) => {
-                      // incident_assessments is the source of truth for AI values.
-                      const score = isNum(assessment?.priority_score) ? (assessment!.priority_score as number) : null;
-                      const conf = isNum(assessment?.confidence_score) ? (assessment!.confidence_score as number) : null;
-                      const reportedAffected =
-                        factState(incident, 'affected_population') !== 'unknown' && isNum(incident.affected_population) && incident.affected_population > 0
-                          ? incident.affected_population
-                          : null;
-                      const modelled = assessment?.estimated_affected_population ?? assessment?.population?.estimated_exposed_population ?? null;
-
-                      const scoreColor =
-                        score == null ? 'text-slate-400' : score >= 80 ? 'text-red-600' : score >= 60 ? 'text-amber-600' : 'text-blue-600';
-
-                      const sevColor =
-                        incident.severity === 'Critical'
-                          ? 'text-red-600'
-                          : incident.severity === 'High'
-                          ? 'text-orange-600'
-                          : incident.severity === 'Medium'
-                          ? 'text-amber-600'
-                          : 'text-slate-600';
-
-                      const sevDot =
-                        incident.severity === 'Critical'
-                          ? 'bg-red-600'
-                          : incident.severity === 'High'
-                          ? 'bg-orange-600'
-                          : incident.severity === 'Medium'
-                          ? 'bg-amber-600'
-                          : 'bg-slate-400';
-
-                      return (
-                        <div
-                          key={incident.id}
-                          onClick={() => onSelectInsight(incident.id)}
-                          className="bg-white border border-slate-100 hover:border-slate-300 rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center justify-between gap-4 group"
-                        >
-                          {/* Left Column: Metadata, Title, Location */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 text-xs mb-1">
-                              <span className="font-mono text-slate-400 font-semibold">
-                                {incident.display_id || incident.id}
+                  <>
+                    <div className="hidden md:grid grid-cols-[40px_minmax(0,1fr)_150px_180px_20px] gap-4 px-6 py-2 border-y border-slate-100 bg-slate-50/60 text-[11px] font-semibold text-slate-500">
+                      <span>Rank</span><span>Incident</span><span>People</span><span>AI priority</span><span />
+                    </div>
+                    <ul className="divide-y divide-slate-100">
+                      {rows.map((it) => {
+                        const { incident, assessment, priority_rank, analysis_state } = it;
+                        const closed = incident.status === 'Resolved' || incident.status === 'Rejected' || incident.status === 'Archived';
+                        const score = scoreOf(it);
+                        const band = bandOf(score);
+                        const reported = reportedOf(it);
+                        const modelled = assessment?.estimated_affected_population ?? assessment?.population?.estimated_exposed_population ?? null;
+                        return (
+                          <li key={incident.id}>
+                            <button type="button" onClick={() => onSelectInsight(incident.id)}
+                              className={`group w-full text-left px-5 sm:px-6 py-3.5 grid grid-cols-[32px_minmax(0,1fr)_auto] md:grid-cols-[40px_minmax(0,1fr)_150px_180px_20px] gap-x-4 gap-y-2 items-center transition-colors cursor-pointer ${closed ? 'bg-slate-50/60 hover:bg-slate-50' : 'hover:bg-slate-50/70'}`}>
+                              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold tabular-nums ${isNum(priority_rank) ? 'bg-slate-100 text-slate-700' : 'text-slate-300'}`}>
+                                {isNum(priority_rank) ? priority_rank : '–'}
                               </span>
-                              <span className="text-slate-300">·</span>
-                              <span className={`flex items-center gap-1 font-bold ${sevColor}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${sevDot}`} />
-                                {incident.severity || 'Severity not set'}
-                              </span>
-                              <span className="text-slate-300">·</span>
-                              <span className="text-slate-500 font-medium">
-                                {incident.type || 'Disaster'}
-                              </span>
-                              {assessment?.credibility?.verdict === 'Possibly false' && (
-                                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold" title={assessment.credibility.suggestion ?? undefined}>
-                                  Evidence does not support it
-                                </span>
-                              )}
-                              {assessment?.scoring?.wider_event && (
-                                <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">
-                                  Part of {assessment.scoring.wider_event.incident_count}-incident event
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
-                              {incident.title}
-                            </h4>
-                            <p className="text-xs text-slate-500 mt-0.5 truncate">
-                              {[incident.location, incident.district, incident.state]
-                                .filter(Boolean)
-                                .join(', ')}
-                            </p>
-                          </div>
 
-                          {/* Right Column: AI Priority, Confidence, Exposed Population, Arrow */}
-                          <div className="flex items-center gap-4 shrink-0">
-                            <div className="text-right">
-                              {score != null ? (
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                  {isNum(priority_rank) && <span className="mr-1.5 text-slate-500">#{priority_rank}</span>}
-                                  AI priority
-                                  <span className={`text-sm font-black font-mono ml-1 ${scoreColor}`}>{Math.round(score)}</span>
-                                  <span className="text-slate-400">/100</span>
+                              <div className="min-w-0">
+                                <p className={`text-sm font-semibold truncate group-hover:text-blue-700 transition-colors ${closed ? 'text-slate-500' : 'text-slate-900'}`}>{incident.title}</p>
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap text-xs text-slate-500">
+                                  {closed
+                                    ? <Tag tone={incident.status === 'Resolved' ? 'teal' : 'slate'}>{incident.status}</Tag>
+                                    : <>
+                                        {incident.severity && <Tag tone={SEVERITY_TONE[incident.severity] ?? 'slate'}>{incident.severity}</Tag>}
+                                        <StatusTag status={incident.status} />
+                                      </>}
+                                  <span className="truncate">{incident.type || 'Disaster'} · {[incident.district, incident.state].filter(Boolean).join(', ')}</span>
                                 </div>
-                              ) : (
-                                <AssessmentStatusBadge state={analysis_state} />
-                              )}
-                              {conf != null && (
-                                <div className="text-[10px] text-slate-500 mt-0.5" title="Share of scoring inputs that were reported rather than defaulted — not a probability">
-                                  Input completeness {conf}%
-                                </div>
-                              )}
-                              <div className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                                {reportedAffected != null
-                                  ? `${fmtNumber(reportedAffected)} affected (reported)`
-                                  : modelled != null
-                                    ? `~${fmtNumber(modelled)} exposed (model estimate)`
-                                    : 'Affected population not reported'}
+                                {(assessment?.credibility?.verdict === 'Possibly false' || assessment?.scoring?.wider_event) && (
+                                  <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                    {assessment?.credibility?.verdict === 'Possibly false' && (
+                                      <Tag tone="red" title={assessment.credibility.suggestion ?? undefined}>Evidence does not support it</Tag>
+                                    )}
+                                    {assessment?.scoring?.wider_event && (
+                                      <Tag variant="outline" tone="indigo" className="max-w-full truncate text-[11px]">
+                                        Part of a {assessment.scoring.wider_event.incident_count}-incident event
+                                      </Tag>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                            <div className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 group-hover:border-blue-400 group-hover:text-blue-600 transition-all">
-                              <ChevronRight size={16} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+
+                              {/* People */}
+                              <div className="hidden md:block text-xs">
+                                {reported != null ? (
+                                  <><p className="font-semibold text-slate-900 tabular-nums">{fmtNumber(reported)}</p><p className="text-slate-400">reported</p></>
+                                ) : modelled != null ? (
+                                  <><p className="font-semibold text-slate-700 tabular-nums">~{fmtNumber(modelled)}</p><p className="text-slate-400">estimated</p></>
+                                ) : (
+                                  <p className="text-slate-400">Not reported</p>
+                                )}
+                              </div>
+
+                              {/* AI priority */}
+                              <div className="col-start-3 row-start-1 md:col-start-auto md:row-start-auto text-right md:text-left shrink-0 pl-2 self-start">
+                                {score != null ? (
+                                  <>
+                                    <div className="flex items-baseline justify-end md:justify-start gap-1">
+                                      <span className="text-base sm:text-lg font-bold tabular-nums" style={{ color: TONE[band.tone] }}>{score}</span>
+                                      <span className="text-[10px] sm:text-[11px] text-slate-400">/100</span>
+                                    </div>
+                                    <div className="hidden md:block mt-1 h-1.5 w-full max-w-[150px] rounded-full bg-slate-100 overflow-hidden">
+                                      <div className="h-full rounded-full" style={{ width: `${score}%`, background: TONE[band.tone] }} />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <AssessmentStatusBadge state={analysis_state} />
+                                )}
+                              </div>
+
+                              <ChevronRight size={16} className="hidden md:block text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
                 )}
-              </div>
+              </section>
             );
           })}
         </div>
       )}
 
-      {data && total > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-xs">
-          <PaginationBar
-            pageIndex={pageIndex}
-            pageCount={pageCount(total, PAGE_SIZE)}
-            total={total}
-            pageSize={PAGE_SIZE}
-            onPageChange={setPageIndex}
-            isFetching={isFetching}
-            label="incidents"
-          />
-        </div>
+      </div>
+
+      {data && total > PAGE_SIZE && (
+        <PaginationBar
+          pageIndex={pageIndex}
+          pageCount={pageCount(total, PAGE_SIZE)}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPageIndex}
+          isFetching={isFetching}
+          label="incidents"
+        />
       )}
     </motion.div>
   );

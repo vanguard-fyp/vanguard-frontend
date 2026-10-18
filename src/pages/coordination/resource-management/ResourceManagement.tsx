@@ -1,18 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Warehouse, ClipboardCheck, Send, GitFork, Plus } from 'lucide-react';
+import { Warehouse, ClipboardCheck, Send, GitFork, Plus, Box } from 'lucide-react';
 import {
   useInventory,
   useResourceRequests,
   useApproveResourceRequest,
   useRejectResourceRequest,
+  useWarehouses,
+  useIncidents,
 } from '../../../hooks';
 import { useAuth } from '../../../context/AuthContext';
 import { InventoryStage } from '../../../components/ui/coordination/resource/InventoryStage';
 import { RequestApprovalStage } from '../../../components/ui/coordination/resource/RequestApprovalStage';
 import { AllocationTrackerStage } from '../../../components/ui/coordination/resource/AllocationTrackerStage';
 import { PipelineFlowDiagram } from '../../../components/ui/coordination/resource/PipelineFlowDiagram';
+import { ResourceFlow3D } from '../../../components/ui/coordination/resource/ResourceFlow3D';
 import { SkeletonTable } from '../../../components/ui/shared/SkeletonLoader';
 import { RequestDetailModal } from '../../../components/ui/coordination/resource/RequestDetailModal';
 import { CreateResourceRequestModal } from '../../../components/ui/coordination/resource/CreateResourceRequestModal';
@@ -24,11 +27,14 @@ import { containerAnim, itemAnim } from '../../../constants';
 const ResourceManagement: React.FC = () => {
   const { data: inventory = [], isLoading: isInventoryLoading } = useInventory();
   const { data: requests = [], isLoading: isRequestsLoading } = useResourceRequests();
+  const { data: warehouses = [] } = useWarehouses();
   const approveMutation = useApproveResourceRequest();
   const rejectMutation = useRejectResourceRequest();
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
+  // Incident locations are only needed by the 3D view.
+  const { data: incidents = [] } = useIncidents(undefined, { enabled: activeStep === '3d' });
 
   // Modal states
   const [selectedRequestForModal, setSelectedRequestForModal] = useState<ResourceRequest | null>(null);
@@ -173,7 +179,7 @@ const ResourceManagement: React.FC = () => {
             <button
               onClick={() => setActiveStep(1)}
               className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                activeStep !== 'all'
+                typeof activeStep === 'number'
                   ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
               }`}
@@ -190,6 +196,17 @@ const ResourceManagement: React.FC = () => {
             >
               <GitFork size={13} className={activeStep === 'all' ? 'text-blue-600' : 'text-slate-500'} />
               <span>Pipeline</span>
+            </button>
+            <button
+              onClick={() => setActiveStep('3d')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeStep === '3d'
+                  ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-transparent'
+              }`}
+            >
+              <Box size={13} className={activeStep === '3d' ? 'text-blue-600' : 'text-slate-500'} />
+              <span>3D flow</span>
             </button>
           </div>
         </div>
@@ -220,7 +237,7 @@ const ResourceManagement: React.FC = () => {
       </motion.div>
 
       {/* Sleek Segmented Pipeline Navigation Bar (Hidden when in Full Pipeline Flow view) */}
-      {activeStep !== 'all' && (
+      {typeof activeStep === 'number' && (
         <motion.div variants={itemAnim} className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
             {steps.map((s) => {
@@ -315,6 +332,24 @@ const ResourceManagement: React.FC = () => {
             exit={{ opacity: 0, y: -6 }}
           >
             <AllocationTrackerStage requests={requests} onSelectRequest={(req) => setSelectedRequestForModal(req)} />
+          </motion.div>
+        )}
+
+        {activeStep === '3d' && (
+          <motion.div
+            key="flow3d"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+          >
+            <ResourceFlow3D
+              inventory={inventory}
+              requests={requests}
+              warehouses={warehouses}
+              incidents={incidents}
+              onOpenRequest={(req) => setSelectedRequestForModal(req)}
+              onReview={(req) => { setActiveStep(2); setSelectedRequestForModal(req); }}
+            />
           </motion.div>
         )}
 

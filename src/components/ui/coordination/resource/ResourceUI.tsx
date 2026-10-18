@@ -133,6 +133,7 @@ export const RecommendationLine: React.FC<{ req: ResourceRequest; compact?: bool
   // safety level, incident). The LLM wording is on request, in full view only.
   return (
     <AiSuggestion
+      tone={d.tone}
       title="AI Decision Advisory"
       meta={rec.confidence != null ? `${Math.round(rec.confidence)}% confidence` : undefined}
       headline={<AiVerdict tone={d.tone} verdict={d.status}>{rec.action ?? d.headline}</AiVerdict>}
@@ -196,7 +197,7 @@ const DIALOG_TONE: Record<DialogTone, { head: string; sub: string; ring: string 
   reject: { head: 'bg-red-600', sub: 'text-red-100', ring: 'border-red-200' },
   dispatch: { head: 'bg-blue-600', sub: 'text-blue-100', ring: 'border-blue-200' },
   create: { head: 'bg-blue-600', sub: 'text-blue-100', ring: 'border-blue-200' },
-  record: { head: 'bg-slate-800', sub: 'text-slate-300', ring: 'border-slate-200' },
+  record: { head: 'bg-slate-900', sub: 'text-slate-300', ring: 'border-slate-200' },
 };
 
 /** One dialog frame for every resource confirmation and detail view. */
@@ -259,26 +260,46 @@ const URGENCY_PILL: Record<string, string> = {
   Low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
-/** Request at a glance inside a dialog (the earlier layout, shorter). */
+/** Request at a glance inside a dialog with clean explicit labelling. */
 export const RequestSummary: React.FC<{ req: ResourceRequest; tone: DialogTone; quantityLabel?: string }> = ({ req, tone, quantityLabel = 'Quantity' }) => {
   const { from, to } = requestRoute(req);
-  const qtyTone = tone === 'approve' ? 'text-emerald-700' : tone === 'reject' ? 'text-slate-900' : 'text-blue-700';
+  const qtyTone = tone === 'approve' ? 'text-emerald-700' : tone === 'reject' ? 'text-red-700' : 'text-blue-700';
   return (
-    <SummaryBox>
-      <div className="flex items-center justify-between">
-        <span className="font-mono font-bold text-slate-600">{req.display_id}</span>
-        <span className={`font-bold px-2 py-0.5 rounded-full border text-[10px] ${URGENCY_PILL[req.urgency] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+          {req.display_id}
+        </span>
+        <span className={`font-bold px-2.5 py-0.5 rounded-full border text-[10px] flex items-center gap-1.5 ${URGENCY_PILL[req.urgency] ?? 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current" />
           {req.urgency} Urgency
         </span>
       </div>
-      <p className="font-bold text-slate-900 text-sm">{req.item_requested || 'Requested supplies'}</p>
-      <p className="text-slate-700 font-medium">
-        {quantityLabel}: <strong className={qtyTone}>{req.quantity_requested.toLocaleString()} {req.unit}</strong>
-      </p>
-      <p className="text-slate-500 text-[11px]">
-        {from} ·  <strong className="text-slate-800">{to}</strong> · Agency: <strong className="text-slate-800">{req.agency}</strong>
-      </p>
-    </SummaryBox>
+
+      <div>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Item Description</span>
+        <h4 className="font-bold text-slate-900 text-sm leading-snug">{req.item_requested || 'Requested supplies'}</h4>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2.5 pt-2.5 border-t border-slate-200/70 text-xs">
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">{quantityLabel}</span>
+          <span className={`font-bold text-sm ${qtyTone}`}>{req.quantity_requested.toLocaleString()} {req.unit}</span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Requesting Agency</span>
+          <span className="font-semibold text-slate-800 block truncate">{req.agency}</span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Supplying Depot</span>
+          <span className="font-medium text-slate-700 block truncate">{from}</span>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Target Destination</span>
+          <span className="font-semibold text-slate-800 block truncate">{to}</span>
+        </div>
+      </div>
+    </div>
   );
 };
 

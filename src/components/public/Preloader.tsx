@@ -9,8 +9,22 @@ import { MonitoringPlate } from './MonitoringPlate';
    Plays when the page is loaded or reloaded, not when the app routes back
    here (signing out, "Back to public site"). */
 
-/** Module state lives for one page load; a reload resets it. */
-let playedThisLoad = false;
+/** Path the browser actually loaded (not where the app has routed since). */
+const loadedPath = (() => {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    return new URL(nav?.name ?? window.location.href).pathname;
+  } catch {
+    return window.location.pathname;
+  }
+})();
+
+/**
+ * Module state lives for one page load; a reload resets it. The radar only
+ * plays when that load started on the landing page itself: arriving at "/"
+ * later by routing (signing out, "Back to public site") skips it.
+ */
+let playedThisLoad = loadedPath !== '/';
 
 const C = 300;
 const OUTER = 270;

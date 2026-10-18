@@ -69,7 +69,7 @@ const num = (v: string): number | null => {
 };
 
 const inputCls =
-  'w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:bg-white disabled:opacity-60';
+  'w-full px-3 py-2 text-[13px] text-slate-900 bg-white border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 transition disabled:opacity-60 disabled:bg-slate-50';
 
 /**
  * Incident location picker. The map pin is the source of truth: searching an
@@ -243,11 +243,9 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
     searchTimer.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=my&limit=6`,
-          { headers: { 'Accept-Language': 'en' } }
-        );
-        setSuggestions(res.ok ? await res.json() : []);
+        // Through the backend: Nominatim blocks direct browser calls (CORS).
+        const rows = await geoService.searchPlaces(q);
+        setSuggestions(rows.map((r) => ({ display_name: r.display_name, lat: String(r.lat), lon: String(r.lng) })));
       } catch {
         setSuggestions([]);
       } finally {
@@ -272,8 +270,8 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1">
-            Postcode <span className="text-[10px] text-slate-500 font-normal">(optional)</span>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            Postcode <span className="font-normal text-slate-400 ml-1">optional</span>
           </label>
           <div className="relative">
             <input
@@ -284,13 +282,13 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
               onChange={(e) => dispatch({ type: 'POSTCODE_ENTERED', postcode: e.target.value })}
               placeholder="e.g. 15000"
               title="Entering a postcode moves the pin"
-              className={`${inputCls} font-mono pl-8`}
+              className={`${inputCls} tabular-nums pl-8`}
             />
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1 truncate">State / Territory <span className="text-red-500">*</span></label>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5 truncate">State / Territory <span className="text-red-600">*</span></label>
           <select
             value={selectedState}
             disabled={areasUnavailable}
@@ -310,8 +308,8 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-800 mb-1">
-            District / Zone <span className="text-red-500">*</span>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            District / Zone <span className="text-red-600">*</span>
           </label>
           <input
             type="text"
@@ -343,8 +341,8 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
 
       {/* 1. Address search → moves the pin */}
       <div className="relative">
-        <label className="block text-xs font-bold text-slate-800 mb-1">
-          Specific location / address <span className="text-red-500">*</span>
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          Specific location / address <span className="text-red-600">*</span>
         </label>
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -388,14 +386,14 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       {/* 2. Map — the source of truth */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-            <MapPin size={13} className="text-blue-600" /> Incident pin <span className="text-red-500">*</span>
+          <label className="text-xs font-semibold text-slate-700">
+            Incident pin <span className="text-red-600">*</span>
           </label>
           <span className="text-[10px] text-slate-500">Click or drag to adjust</span>
         </div>
         <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-xs h-56">
           <div ref={mapEl} className="w-full h-full" />
-          <div className="absolute bottom-2 left-2 z-[400] bg-slate-900/85 text-white px-2.5 py-1 rounded-md text-[10px] font-mono flex items-center gap-2">
+          <div className="absolute bottom-2 left-2 z-[400] bg-slate-900/85 text-white px-2.5 py-1 rounded-md text-[10px] font-medium tabular-nums flex items-center gap-2">
             <Navigation size={10} className="text-blue-400" />
             {s.lat != null && s.lng != null ? `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}` : 'No pin placed'}
           </div>

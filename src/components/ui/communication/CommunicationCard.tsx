@@ -3,20 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown,
   ChevronUp,
-  MapPin,
-  Radio,
   UserCheck,
-  Clock,
   Send,
   EyeOff,
   CheckCircle2,
-  Trash2,
+  MapPin,
+  Clock,
+  Bell,
 } from 'lucide-react';
 import { DisasterBadge } from '../dashboard/DisasterBadge';
 import { formatDateTime } from '../../../utils/dateFormatter';
 
 import type { PublicAnnouncement } from '../../../types';
-import { categoryIcons, categoryBadgeStyle } from '../../../constants';
+import { categoryBadgeStyle } from '../../../constants';
 
 interface CommunicationCardProps {
   announcement: PublicAnnouncement;
@@ -47,62 +46,48 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
         onClick={onToggleExpand}
         className="px-5 py-4 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/50 transition-colors"
       >
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="mt-0.5 shrink-0 p-1.5 rounded-lg bg-slate-50 border border-slate-100">
-            {categoryIcons[announcement.category] || <Radio size={16} className="text-slate-500" />}
+        <div className="flex-1 min-w-0 space-y-0.5">
+          {/* Dim ID + timestamp row above title */}
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+            <span className='text-xs font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 flex gap-1 items-center'><Bell size={10} className="shrink-0" />{announcement.display_id || `ANN-${announcement.id.slice(0, 8).toUpperCase()}`}</span>
+            <span>·</span>
+            <span className="flex items-center gap-1">
+              <Clock size={10} className="shrink-0" />
+              {formatDateTime(announcement.issued_at ?? '')}
+            </span>
           </div>
 
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                {announcement.display_id || (announcement.id.startsWith('ann-') ? announcement.id.split('-').slice(0, 3).join('-').toUpperCase() : announcement.id.length > 15 ? `ANN-${announcement.id.slice(0, 8).toUpperCase()}` : announcement.id)}
-              </span>
-              <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                  categoryBadgeStyle[announcement.category] || 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                {announcement.category}
-              </span>
-              <DisasterBadge type="severity" value={announcement.severity} />
+          {/* Title — prominent */}
+          <h4 className="text-sm font-bold text-slate-900 truncate">{announcement.title}</h4>
 
-              <span
-                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ml-auto sm:ml-0 flex items-center gap-1 ${
-                  announcement.active
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-slate-100 text-slate-600 border-slate-200'
-                }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    announcement.active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
-                  }`}
-                />
-                {announcement.active ? 'Active Notice' : 'Archived / Retracted'}
-              </span>
-            </div>
-
-            <h4 className="text-sm font-bold text-slate-900 truncate">{announcement.title}</h4>
-
-            <div className="flex items-center gap-3 text-xs text-slate-500 font-medium flex-wrap">
-              <span className="flex items-center gap-1">
-                <MapPin size={11} className="text-slate-400" />
-                {announcement.target_state} ({announcement.target_districts.join(', ')})
-              </span>
-              <span>·</span>
-              <span className="flex items-center gap-1">
-                <Clock size={11} className="text-slate-400" />
-                {formatDateTime(announcement.issued_at ?? '')}
-              </span>
-              <span>·</span>
-              <span>Issued by: {announcement.issued_by ?? 'EOC Authority'}</span>
-            </div>
+          {/* Category + Severity badges only — no location/time (shown in details) */}
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
+            <span
+              className={`text-[11px] font-bold px-2 py-0.5 rounded border shrink-0 ${
+                categoryBadgeStyle[announcement.category] || 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+            >
+              {announcement.category}
+            </span>
+            <DisasterBadge type="severity" value={announcement.severity} className="shrink-0" />
           </div>
         </div>
 
+        {/* Right rail: Live/Retracted status pill + chevron */}
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs font-bold text-blue-600 hover:text-blue-700 underline hidden sm:inline">
-            {isExpanded ? 'Hide Details' : 'View Broadcast Details'}
+          <span
+            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border hidden sm:flex items-center gap-1.5 ${
+              announcement.active
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-slate-100 text-slate-500 border-slate-200'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                announcement.active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+              }`}
+            />
+            {announcement.active ? 'Live' : 'Retracted'}
           </span>
           <div className="text-slate-400">
             {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -153,25 +138,23 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
             {/* Actions Bar */}
             <div className="flex items-center justify-end flex-wrap gap-3 pt-1">
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onToggleActive(announcement.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-2xs border ${
-                    announcement.active
-                      ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
-                  }`}
-                >
-                  {announcement.active ? <EyeOff size={13} /> : <CheckCircle2 size={13} />}
-                  {announcement.active ? 'Retract Announcement' : 'Reactivate Announcement'}
-                </button>
-
-                {onDelete && (
+                {announcement.active ? (
+                  // Active → Retract goes through confirmation modal
                   <button
-                    onClick={() => onDelete(announcement.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
+                    onClick={() => onDelete?.(announcement.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-2xs border bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200 cursor-pointer"
                   >
-                    <Trash2 size={13} />
-                    Delete
+                    <EyeOff size={13} />
+                    Retract Announcement
+                  </button>
+                ) : (
+                  // Inactive → Reactivate directly (no confirmation needed)
+                  <button
+                    onClick={() => onToggleActive(announcement.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-2xs border bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200 cursor-pointer"
+                  >
+                    <CheckCircle2 size={13} />
+                    Reactivate Announcement
                   </button>
                 )}
                 <button

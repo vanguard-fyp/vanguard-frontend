@@ -4,16 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   CheckCircle,
-  Radio,
   MapPin,
   Users,
-  ShieldAlert,
-  Zap,
-  FileText,
   AlertTriangle,
   Send,
-  PhoneCall,
-  History,
   Building2,
   Wind,
   Navigation,
@@ -23,11 +17,9 @@ import {
   Printer,
   CheckSquare,
   X,
-  Loader2,
   Copy,
   Check,
   Phone,
-  CloudRain,
   Thermometer,
   Droplets,
   Edit3,
@@ -35,12 +27,15 @@ import {
   Image as ImageIcon,
   Maximize2,
   Video,
+  ShieldCheck,
+  Gauge,
+  UserRound,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
-import { CredibilityCard } from '../../../components/ui/situational/CredibilityCard';
-import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia } from '../../../hooks';
+import { CredibilityCard, isCredibilityAvailable } from '../../../components/ui/situational/CredibilityCard';
+import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia, useIncidentAssessment } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useToast } from '../../../context/ToastContext';
@@ -49,7 +44,10 @@ import { FACT_STATE_LABEL, editedFieldVerification, factState } from '../../../u
 import { fmtText, isNum } from '../../../utils/display';
 import type { CommandTabType, FactField, FactState, Incident, IncidentDetailViewProps } from '../../../types';
 import { useAuth } from '../../../context/AuthContext';
-import { statusIcons } from '../../../constants/situational';
+import { Tag, TONE, IconTile, StatusTag, LevelTag, SourceTag, type Tone } from '../../../components/ui/shared/Tag';
+import { FormModal, ConfirmModal, Field, GhostButton, PrimaryButton, inputCls, NAVY, Overlay } from '../../../components/ui/shared/Modal';
+import { Bone } from '../../../components/ui/dashboard/Panel';
+import { FormattedMessageText } from '../../../utils/messageFormatter';
 
 function getCleanIncidentId(id: string, displayId?: string): string {
   if (displayId) return displayId;
@@ -63,6 +61,9 @@ function getCleanIncidentId(id: string, displayId?: string): string {
   return id.toUpperCase();
 }
 
+/** Activity entries shown before "Show all". */
+const LOG_PREVIEW = 5;
+
 function getWeatherDescription(code: number): string {
   if (code === 0) return 'Clear sky';
   if (code === 1 || code === 2 || code === 3) return 'Partly cloudy / Overcast';
@@ -73,22 +74,51 @@ function getWeatherDescription(code: number): string {
   return 'Overcast / Monsoon Conditions';
 }
 
-const FACT_BADGE_CLASS: Record<FactState, string> = {
-  verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  reported: 'bg-slate-50 text-slate-600 border-slate-200',
-  disputed: 'bg-amber-50 text-amber-700 border-amber-200',
-  unknown: 'bg-slate-100 text-slate-500 border-slate-200',
+const FACT_TONE: Record<FactState, Tone> = {
+  verified: 'teal',
+  reported: 'slate',
+  disputed: 'amber',
+  unknown: 'slate',
 };
 
-/** Provenance chip shown next to each officer-entered fact. */
+/** Provenance tag shown next to each officer-entered fact. */
 const FactBadge: React.FC<{ incident: Incident; field: FactField }> = ({ incident, field }) => {
   const state = factState(incident, field);
-  return (
-    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${FACT_BADGE_CLASS[state]}`}>
-      {FACT_STATE_LABEL[state]}
-    </span>
-  );
+  return <Tag tone={FACT_TONE[state]} dot={state === 'verified' || state === 'disputed'} className="!text-[10px] !px-1.5">{FACT_STATE_LABEL[state]}</Tag>;
 };
+
+/** Tag on the navy header: light hue on a white wash. */
+const ON_NAVY_SEVERITY: Record<string, string> = { Critical: '#fca5a5', High: '#fdba74', Medium: '#fcd34d', Low: '#cbd5e1' };
+const ON_NAVY_STATUS: Record<string, string> = { Unverified: '#fcd34d', Verified: '#93c5fd', Responding: '#67e8f9', Resolved: '#5eead4', Rejected: '#cbd5e1', Archived: '#cbd5e1' };
+const OnNavyTag: React.FC<{ color: string; quiet?: boolean; children: React.ReactNode }> = ({ color, quiet, children }) => (
+  <span
+    className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold ${quiet ? 'text-slate-200 ring-1 ring-inset ring-white/15' : 'bg-white/10'}`}
+    style={quiet ? undefined : { color }}>
+    <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+    {children}
+  </span>
+);
+
+/** A white section card with a small uppercase title (dashboard panel style). */
+const Section: React.FC<{ title: string; count?: number; note?: string; divided?: boolean; children: React.ReactNode }> = ({ title, count, note, divided, children }) => (
+  <section className="bg-white border border-slate-200/80 rounded-2xl">
+    <header className={`px-5 sm:px-6 pt-5 flex items-center justify-between gap-3 ${divided ? 'pb-3.5 mb-4 border-b border-slate-100' : 'pb-3'}`}>
+      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+        {title}{count != null && <span className="ml-2 font-semibold text-slate-400 tabular-nums">{count}</span>}
+      </h2>
+      {note && <span className="text-[11px] text-slate-400">{note}</span>}
+    </header>
+    <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
+  </section>
+);
+
+/** Short status note in an action tab: a soft wash of its hue, no border. */
+const Note: React.FC<{ tone: Tone; title: string; children: React.ReactNode }> = ({ tone, title, children }) => (
+  <div className="rounded-xl px-3.5 py-3 text-xs text-slate-600" style={{ background: `${TONE[tone]}12` }}>
+    <p className="font-semibold mb-0.5" style={{ color: TONE[tone] }}>{title}</p>
+    <p className="leading-relaxed">{children}</p>
+  </div>
+);
 
 /** A fact's display value, or "Not reported" when its provenance is unknown. */
 function factValue(incident: Incident, field: FactField, render: (v: NonNullable<Incident[FactField]>) => React.ReactNode) {
@@ -108,6 +138,8 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const isTracked = !!incident.impact_timeline?.length;
   const { user } = useAuth();
   const { data: incidentLogs = [], isLoading: isLoadingLogs } = useIncidentLogs(incident.id);
+  const { data: assessmentData, isLoading: isLoadingAssessment } = useIncidentAssessment(incident.id);
+  const isCredibilityShown = isCredibilityAvailable(assessmentData, isLoadingAssessment);
   const updateIncident = useUpdateIncident();
   const resolveIncident = useResolveIncident();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
@@ -121,7 +153,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [showContactModal, setShowContactModal] = useState(false);
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
   const [outcomeNotes, setOutcomeNotes] = useState('');
   const [resolverName] = useState(user?.name ?? 'EOC Incident Commander');
@@ -129,6 +160,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [rejectReason, setRejectReason] = useState('');
   const [rejectReasonError, setRejectReasonError] = useState('');
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [showAllLogs, setShowAllLogs] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
   // Assessment edit fields
@@ -307,1094 +339,605 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     setTimeout(() => setCopiedId(false), 2000);
   };
 
+  const idLabel = getCleanIncidentId(incident.id, incident.display_id);
+  const assessmentChanged =
+    assessmentPop !== (incident.affected_population || 0) ||
+    assessmentCas !== (incident.casualties_count || 0) ||
+    assessmentInfra !== (incident.infrastructure_damage || 'None') ||
+    assessmentAccess !== (incident.accessibility_score ?? 50);
+  const location = formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district);
+  const COMMAND_TABS: { key: CommandTabType; label: string; dot?: boolean }[] = [
+    { key: 'verify', label: 'Verify', dot: incident.status === 'Unverified' },
+    { key: 'deploy', label: 'Deploy' },
+    { key: 'resolve', label: 'Resolve' },
+    { key: 'export', label: 'Export' },
+  ];
+  const IMPACT: { field: FactField; title: string; caption: string; color: string; Icon: typeof Users; render: (v: NonNullable<Incident[FactField]>) => React.ReactNode; small?: boolean }[] = [
+    { field: 'affected_population', title: 'People affected', caption: 'Field report', color: TONE.indigo, Icon: Users, render: (v) => Number(v).toLocaleString() },
+    { field: 'casualties_count', title: 'Casualties', caption: 'Needing immediate aid', color: TONE.red, Icon: AlertTriangle, render: (v) => Number(v).toLocaleString() },
+    { field: 'infrastructure_damage', title: 'Infrastructure damage', caption: 'Primary impact', color: TONE.blue, Icon: Building2, render: (v) => String(v), small: true },
+    { field: 'accessibility_score', title: 'Access score', caption: 'Ground access', color: TONE.cyan, Icon: Navigation, render: (v) => <>{String(v)}<span className="text-sm text-slate-400 font-semibold">/100</span></> },
+  ];
+  const hasConditions = factState(incident, 'weather_condition') !== 'unknown' && !!incident.weather_condition?.trim()
+    || weatherStatus === 'loading' || !!liveWeather;
+  const logDot = (action: string) => {
+    const a = action.toLowerCase();
+    return a.includes('create') ? TONE.blue : a.includes('verif') ? TONE.teal : a.includes('resolv') ? TONE.indigo : a.includes('reject') ? TONE.red : a.includes('updat') ? TONE.amber : TONE.slate;
+  };
+
+  const activitySection = (isLoadingLogs || incidentLogs.length > 0) && (
+    <section className="bg-white border border-slate-200/80 rounded-2xl">
+      <header className={`${isCredibilityShown ? 'px-5' : 'px-5 sm:px-6'} pt-5 pb-3.5 border-b border-slate-100 flex items-center justify-between gap-3`}>
+        <div className="flex items-center gap-2 min-w-0">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 truncate">
+            Operational Action Log
+          </h2>
+        </div>
+        {incidentLogs.length > LOG_PREVIEW && (
+          <button type="button" onClick={() => setShowAllLogs((v) => !v)} className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer shrink-0">
+            {showAllLogs ? (isCredibilityShown ? 'Show latest' : 'Show latest only') : `Show all ${incidentLogs.length}`}
+          </button>
+        )}
+      </header>
+      <div className={`${isCredibilityShown ? 'px-5' : 'px-5 sm:px-6'} py-5`}>
+        {isLoadingLogs ? (
+          <div className="space-y-4">{[0, 1, 2].map((i) => <div key={i} className="space-y-1.5"><Bone className="h-3 w-1/3" /><Bone className="h-2.5 w-1/2" /></div>)}</div>
+        ) : incidentLogs.length > 0 ? (
+          <ol className="relative space-y-3.5">
+            {(showAllLogs ? incidentLogs : incidentLogs.slice(0, LOG_PREVIEW)).map((log, idx, arr) => (
+              <li key={log.id || idx} className="relative pl-7">
+                {idx < arr.length - 1 && (
+                  <span className="absolute left-[5px] top-6 bottom-[-14px] w-0.5 bg-slate-200" aria-hidden="true" />
+                )}
+                <span
+                  className="absolute left-0 top-[18px] w-3 h-3 rounded-full ring-4 ring-white"
+                  style={{ background: logDot(log.action) }}
+                  aria-hidden="true"
+                />
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-300 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-bold text-slate-900 text-xs sm:text-[13px] leading-snug">{log.action}</h3>
+                    <span className="text-[11px] text-slate-400 font-medium tabular-nums shrink-0 whitespace-nowrap">
+                      {formatDateTime(log.logged_at)}
+                    </span>
+                  </div>
+                  {log.detail && (
+                    <div className="mt-2 text-xs text-slate-600 leading-relaxed">
+                      <LogDetailBody detail={log.detail} />
+                    </div>
+                  )}
+                  {log.actor && (
+                    <p className="mt-2.5 text-xs text-slate-500">
+                      <span className="text-slate-400">Actor:</span>{' '}
+                      <span className="font-medium text-slate-700">{log.actor}</span>
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </div>
+    </section>
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="space-y-6 max-w-7xl mx-auto pb-12"
+      className="space-y-5 max-w-7xl mx-auto pb-12"
     >
       {/* ── Top bar ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
         >
-          <ArrowLeft size={16} />
-          Return to Incident Feed
+          <ArrowLeft size={15} />
+          Incidents
         </button>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-mono font-medium text-slate-500">
-            OCCURRED: {formatDateTime(incident.occurred_at)}
-          </span>
-          <button
-            type="button"
-            onClick={() => navigate(`/situational/intelligence?incidentId=${incident.id}`)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
-          >
-            <BrainCircuit size={14} />
-            View intelligence assessment
-          </button>
-        </div>
-      </div>
-
-      {/* ── Hero banner ── */}
-      <div className="bg-slate-900 text-white rounded-xl p-6 shadow-md relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-          <ShieldAlert size={200} />
-        </div>
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCopyId}
-                title="Click to copy incident ID"
-                className="flex items-center gap-1.5 text-xs font-mono font-bold bg-white/10 hover:bg-white/15 text-blue-100 px-2.5 py-1.5 rounded-lg border border-white/10 transition-colors cursor-pointer"
-              >
-                <span>INCIDENT ID: {getCleanIncidentId(incident.id, incident.display_id)}</span>
-                {copiedId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} className="text-slate-400" />}
-              </button>
-              <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700">
-                {statusIcons[incident.status]}
-                <span className="text-xs font-bold text-slate-200">{incident.status}</span>
-              </div>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              {incident.title}
-            </h1>
-
-            <p className="text-xs sm:text-sm text-slate-300 flex items-center gap-1.5 font-medium">
-              <MapPin size={14} className="text-blue-300 shrink-0" />
-              {formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district)}
-            </p>
-          </div>
-
-          <div className="bg-slate-800/90 border border-slate-700/80 rounded-xl p-4 shrink-0 space-y-1 min-w-[220px]">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Source & Verification
-            </p>
-            <p className="text-sm font-extrabold text-slate-100">{incident.source}</p>
-            <p className="text-xs text-slate-400 pt-1 border-t border-slate-700">
-              Officer: <span className="text-slate-200 font-medium">{incident.verified_by ?? 'Unassigned'}</span>
-            </p>
-            {(incident.verified_by_role || incident.verified_by_agency) && (
-              <p className="text-[10px] text-slate-400 font-medium">
-                {[incident.verified_by_role, incident.verified_by_agency].filter(Boolean).join(' · ')}
-              </p>
-            )}
-            {incident.verified_at && (
-              <p className="text-[10px] text-emerald-400 font-mono">
-                Verified: {formatDateTime(incident.verified_at)}
-              </p>
-            )}
-            {incident.resolved_at && (
-              <p className="text-[10px] text-emerald-300 font-mono flex items-center gap-1 font-bold">
-                <CheckCircle size={10} className="text-emerald-400" />
-                Resolved: {formatDateTime(incident.resolved_at)}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── KPI cards & Impact Assessment Header ── */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-            Disaster Impact Assessment &amp; Ground Situation
-          </span>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowAssessmentModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
           >
-            <Edit3 size={13} />
-            <span>Update Assessment Metrics</span>
+            <Edit3 size={13} style={{ color: TONE.blue }} />
+            Update impact
           </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Reported Affected</span>
-              <Users size={16} className="text-slate-600" />
-            </div>
-            <p className="text-2xl font-black text-slate-900">
-              {factValue(incident, 'affected_population', (v) => Number(v).toLocaleString())}
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-500 font-medium">Field report, not a model estimate</span>
-              <FactBadge incident={incident} field="affected_population" />
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Reported Casualties</span>
-              <AlertTriangle size={16} className="text-red-600" />
-            </div>
-            <p className="text-2xl font-black text-slate-900">
-              {factValue(incident, 'casualties_count', (v) => Number(v).toLocaleString())}
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-500 font-medium">Requiring immediate aid</span>
-              <FactBadge incident={incident} field="casualties_count" />
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Infrastructure Damage</span>
-              <Building2 size={16} className="text-slate-600" />
-            </div>
-            <p className="text-lg font-black text-slate-900 truncate">
-              {factValue(incident, 'infrastructure_damage', (v) => String(v))}
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-500 font-medium">Primary impact area</span>
-              <FactBadge incident={incident} field="infrastructure_damage" />
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider">Access Score</span>
-              <Zap size={16} className="text-slate-600" />
-            </div>
-            <p className="text-2xl font-black text-slate-900">
-              {factValue(incident, 'accessibility_score', (v) => (
-                <>{String(v)}<span className="text-xs text-slate-400 font-normal">/100</span></>
-              ))}
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-500 font-medium">Ground transit viability</span>
-              <FactBadge incident={incident} field="accessibility_score" />
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/situational/intelligence?incidentId=${incident.id}`)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            <BrainCircuit size={14} style={{ color: TONE.indigo }} />
+            Intelligence assessment
+          </button>
         </div>
       </div>
 
-      {/* ── Main grid ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Hydrological Trigger & Prediction (Only shown when source is telemetry / hydrological sensor, not Citizen/SOS) */}
-          {isSensorSource && incident.trigger_alert && (
-            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-                <Radio size={16} className="text-orange-600" /> Hydrological Telemetry &amp; Forecast
-              </h2>
-              <TriggerAlertPanel alert={incident.trigger_alert} size="full" />
+      {/* ── 1. What and where: a slim navy identity bar ── */}
+      <section className="rounded-2xl text-white px-6 py-5 sm:px-7" style={{ background: NAVY }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleCopyId}
+            title="Copy incident ID"
+            className="flex items-center gap-1.5 text-xs font-semibold bg-white/10 hover:bg-white/15 text-slate-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer tabular-nums"
+          >
+            {idLabel}
+            {copiedId ? <Check size={12} style={{ color: '#5eead4' }} /> : <Copy size={12} className="text-slate-400" />}
+          </button>
+          <OnNavyTag color={ON_NAVY_SEVERITY[incident.severity] ?? '#cbd5e1'}>{incident.severity}</OnNavyTag>
+          <OnNavyTag color={ON_NAVY_STATUS[incident.status] ?? '#cbd5e1'} quiet>{incident.status}</OnNavyTag>
+          <span className="ml-auto text-xs text-slate-400">Occurred {formatDateTime(incident.occurred_at)}</span>
+        </div>
+        <h1 className="mt-3 text-2xl sm:text-[26px] font-extrabold tracking-tight leading-tight">{incident.title}</h1>
+        <p className="mt-1.5 text-sm text-slate-300 flex items-center gap-1.5">
+          <MapPin size={14} className="shrink-0" style={{ color: '#93c5fd' }} />
+          {location}{incident.postcode ? ` · ${incident.postcode}` : ''}
+        </p>
+      </section>
+
+      {/* ── 2. How bad: all four figures, "Not reported" when unknown ── */}
+      <dl className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+        {IMPACT.map(({ field, title, Icon, render, small }) => {
+          const alarm = field === 'casualties_count' && factState(incident, field) !== 'unknown' && (incident.casualties_count ?? 0) > 0;
+          return (
+            <div key={field} className="bg-white border border-slate-200/80 rounded-2xl px-5 py-4 min-w-0">
+              <dt className="flex items-center gap-1.5 text-xs font-medium text-slate-500 truncate">
+                <Icon size={14} strokeWidth={2} className="shrink-0 text-slate-400" />{title}
+              </dt>
+              <dd className={`${small ? 'text-xl' : 'text-[26px]'} font-bold tabular-nums leading-tight mt-1.5 truncate ${alarm ? 'text-red-700' : 'text-slate-900'}`}>
+                {factValue(incident, field, render)}
+              </dd>
+              <dd className="mt-2"><FactBadge incident={incident} field={field} /></dd>
             </div>
+          );
+        })}
+      </dl>
+
+      {/* ── 3. The story (one reading column) and what to do (slim sticky panel) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+        <div className="space-y-5 min-w-0">
+          {incident.description?.trim() && (
+            <Section title="Situation" divided>
+              <div className="text-sm text-slate-700 leading-relaxed max-w-prose"><FormattedMessageText text={incident.description} /></div>
+            </Section>
+          )}
+
+          {isSensorSource && incident.trigger_alert && (
+            <Section title="River telemetry" divided>
+              <TriggerAlertPanel alert={incident.trigger_alert} size="full" />
+            </Section>
           )}
 
           {isTracked && incident.impact_timeline && (
             <ImpactTimeline timeline={incident.impact_timeline} mode="confirmed-only" size="full" />
           )}
 
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <FileText size={16} className="text-blue-600" /> Ground Situation Narrative
-            </h2>
-            <p className="text-sm text-slate-700 leading-relaxed font-normal">
-              {incident.description}
-            </p>
-
-            {/* Dynamic Live Weather Forecast & Reported Metrology */}
-            <div className="pt-4 border-t border-slate-100 bg-slate-50 p-4 rounded-xl space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <CloudRain size={14} className="text-blue-600" />
-                  Live Weather Forecast &amp; Location Metrology
-                </span>
+          {hasConditions && (
+          <Section title="Conditions" note={liveWeather ? 'Live from Open-Meteo' : undefined}>
+            <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
+                <dt className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+                  Reported weather <FactBadge incident={incident} field="weather_condition" />
+                </dt>
+                <dd className="text-sm font-semibold text-slate-900 mt-1">{fmtText(incident.weather_condition, 'Not reported')}</dd>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                    Reported Weather <FactBadge incident={incident} field="weather_condition" />
-                  </span>
-                  <p className="text-xs font-bold text-slate-800 mt-0.5">{fmtText(incident.weather_condition, 'Not reported')}</p>
-                </div>
-
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Live Conditions (Open-Meteo)</span>
-                  <p className="text-xs font-bold text-blue-700 mt-0.5 flex items-center gap-1">
-                    <Thermometer size={12} />
-                    {weatherStatus === 'loading'
-                      ? 'Syncing…'
-                      : weatherStatus === 'no_location'
-                        ? 'No incident pin'
-                        : liveWeather
-                          ? `${isNum(liveWeather.temp) ? `${liveWeather.temp}°C` : 'Temp unavailable'} · ${fmtText(liveWeather.weatherDesc)}`
-                          : 'Unavailable'}
-                  </p>
-                </div>
-
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Rain / Humidity</span>
-                  <p className="text-xs font-bold text-slate-800 mt-0.5 flex items-center gap-1">
-                    <Droplets size={12} className="text-blue-500" />
-                    {liveWeather
-                      ? `Rain: ${isNum(liveWeather.rainProb) ? `${liveWeather.rainProb}%` : 'n/a'} · Hum: ${isNum(liveWeather.humidity) ? `${liveWeather.humidity}%` : 'n/a'}`
-                      : weatherStatus === 'loading' ? 'Syncing…' : 'Unavailable'}
-                  </p>
-                </div>
+              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
+                <dt className="flex items-center gap-1.5 text-[11px] text-slate-500"><Thermometer size={12} style={{ color: TONE.blue }} /> Live conditions</dt>
+                <dd className="text-sm font-semibold text-slate-900 mt-1">
+                  {weatherStatus === 'loading'
+                    ? <Bone className="h-4 w-28 mt-0.5" />
+                    : weatherStatus === 'no_location'
+                      ? 'No incident pin'
+                      : liveWeather
+                        ? `${isNum(liveWeather.temp) ? `${liveWeather.temp}°C` : 'Temp unavailable'} · ${fmtText(liveWeather.weatherDesc)}`
+                        : 'Unavailable'}
+                </dd>
               </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 font-medium">
-                <span className="flex items-center gap-1">
-                  <Navigation size={12} className="text-slate-400" />
-                  Target Zone: <strong className="text-slate-700">{formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district)} {incident.postcode ? `(${incident.postcode})` : ''}</strong>
-                </span>
-                {liveWeather && isNum(liveWeather.windSpeed) && (
-                  <span className="flex items-center gap-1 font-mono text-[10px]">
-                    <Wind size={11} className="text-slate-400" /> Wind: {liveWeather.windSpeed} km/h
-                  </span>
-                )}
+              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
+                <dt className="flex items-center gap-1.5 text-[11px] text-slate-500"><Droplets size={12} style={{ color: TONE.cyan }} /> Rain chance · humidity</dt>
+                <dd className="text-sm font-semibold text-slate-900 mt-1 tabular-nums">
+                  {weatherStatus === 'loading'
+                    ? <Bone className="h-4 w-24 mt-0.5" />
+                    : liveWeather
+                      ? `${isNum(liveWeather.rainProb) ? `${liveWeather.rainProb}%` : 'n/a'} · ${isNum(liveWeather.humidity) ? `${liveWeather.humidity}%` : 'n/a'}`
+                      : 'Unavailable'}
+                </dd>
               </div>
-            </div>
-
-            {/* Field evidence — private bucket, served as short-lived signed URLs */}
-            {hasMedia && (
-              <div className="pt-4 border-t border-slate-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <ImageIcon size={14} className="text-blue-600" />
-                    Field Evidence &amp; Attached Media ({incident.media_urls!.length})
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-medium">AI-screened, see Report Credibility · click to enlarge</span>
-                </div>
-                {isLoadingMedia ? (
-                  <p className="text-xs text-slate-400">Loading media…</p>
-                ) : isMediaError ? (
-                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                    Media could not be loaded. The attachments are still recorded on the incident.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {media.map((m) =>
-                      m.status === 'available' && m.url ? (
-                        <div
-                          key={m.ref}
-                          onClick={() => m.kind === 'image' && setSelectedMediaUrl(m.url)}
-                          className="group relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 aspect-video cursor-pointer hover:border-blue-500 hover:shadow-md transition-all"
-                        >
-                          {m.kind === 'video' ? (
-                            <video src={m.url} controls preload="metadata" className="w-full h-full object-cover" />
-                          ) : (
-                            <>
-                              <img
-                                src={m.url}
-                                alt="Field evidence"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                                <span className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-slate-900 shadow-sm transition-opacity">
-                                  <Maximize2 size={14} />
-                                </span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <div
-                          key={m.ref}
-                          className="rounded-xl border border-dashed border-slate-300 bg-slate-50 aspect-video flex flex-col items-center justify-center gap-1 text-slate-400"
-                        >
-                          {m.kind === 'video' ? <Video size={16} /> : <ImageIcon size={16} />}
-                          <span className="text-[10px] font-semibold">
-                            {m.status === 'unsupported' ? 'Unsupported format' : 'Unavailable'}
-                          </span>
-                        </div>
-                      )
-                    )}
-                  </div>
-                )}
-              </div>
+            </dl>
+            {liveWeather && isNum(liveWeather.windSpeed) && (
+              <p className="mt-3 text-xs text-slate-500 flex items-center justify-end gap-1.5">
+                <Wind size={12} className="text-slate-400" /> Wind {liveWeather.windSpeed} km/h at the incident pin
+              </p>
             )}
-          </div>
+          </Section>
+          )}
 
-          <CredibilityCard incidentId={incident.id} />
-        </div>
-
-        {/* ── Tabbed Command Actions Sidebar ── */}
-        <div className="flex flex-col gap-6">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-            {/* Header & Tabs */}
-            <div className="p-4 border-b border-slate-100 bg-slate-50/70">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                    Command Action Center
-                  </h3>
+          {hasMedia && (
+            <Section title="Field evidence" count={incident.media_urls!.length} note="AI-screened · click to enlarge" divided>
+              {isLoadingMedia ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {incident.media_urls!.slice(0, 4).map((_, i) => <Bone key={i} className="aspect-video rounded-xl" />)}
                 </div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/80 text-slate-700">
-                  {incident.status}
-                </span>
-              </div>
-
-              {/* Segmented Tab Controls */}
-              <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 border border-slate-200 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setActiveCommandTab('verify')}
-                  className={`relative flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'verify'
-                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
-                    }`}
-                >
-                  <CheckCircle size={13} />
-                  <span>Verify</span>
-
-                  {incident.status === 'Unverified' && (
-                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveCommandTab('deploy')}
-                  className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'deploy'
-                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
-                    }`}
-                >
-                  <Send size={13} />
-                  <span>Deploy</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveCommandTab('resolve')}
-                  className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'resolve'
-                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
-                    }`}
-                >
-                  <CheckSquare size={13} />
-                  <span>Resolve</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveCommandTab('export')}
-                  className={`flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${activeCommandTab === 'export'
-                    ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-100'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/70'
-                    }`}
-                >
-                  <Download size={13} />
-                  <span>Export</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Tab Panel Body */}
-            <div className="p-4 space-y-4">
-              {/* ── TAB 1: VERIFY & TRIAGE ── */}
-              {activeCommandTab === 'verify' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Step 1 · Verification & Triage
-                    </span>
-                  </div>
-
-                  {incident.status === 'Unverified' ? (
-                    <div className="space-y-2.5">
-                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-                        <p className="font-bold mb-0.5">⚠️ Pending Field Verification</p>
-                        <p className="text-[11px] text-amber-800">
-                          Confirm source validity before dispatching emergency tactical teams.
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => setShowVerifyModal(true)}
-                        disabled={updateIncident.isPending}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                      >
-                        <CheckCircle size={14} /> Verify Incident Report
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setRejectReasonError('');
-                          setShowRejectModal(true);
-                        }}
-                        disabled={updateIncident.isPending}
-                        className="w-full px-4 py-2 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 text-xs font-semibold rounded-lg border border-red-200 transition-colors cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <XCircle size={14} /> Reject / Mark Duplicate
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2.5">
-                        <CheckCircle size={16} className="text-blue-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-bold text-blue-950">Verified & Confirmed</p>
-                          <p className="text-[11px] text-blue-800 mt-0.5">
-                            Verified by {incident.verified_by || 'EOC Watch Commander'}.
-                          </p>
-                        </div>
-                      </div>
-
-                      {onTrackInIntelligence && (
-                        <button
-                          onClick={() => onTrackInIntelligence(incident)}
-                          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-black hover:bg-black-100 text-white text-xs font-bold rounded-lg border border-black transition-colors cursor-pointer"
-                        >
-                          <ArrowUpRight size={14} /> Track in Intelligence Module
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── TAB 2: TACTICAL OPS & CONTACT ── */}
-              {activeCommandTab === 'deploy' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Step 2 · Tactical Operations
-                    </span>
-                  </div>
-
-                  <a
-                    href="/response/rescue"
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer text-center"
-                  >
-                    <Send size={14} /> Dispatch via Rescue Ops →
-                  </a>
-
-                  {reporterContact && <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Reporter Contact
-                      </span>
-                    </div>
-
-                    <div className="flex items-stretch gap-2">
-                      <div className="flex items-center justify-between flex-1 min-w-0 bg-white border border-slate-200 rounded-lg px-3 py-2.5">
-                        <span className="text-xs font-mono font-bold text-slate-800 truncate">
-                          {reporterContact}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() => handleCopyPhone(reporterContact || '')}
-                          className="ml-3 flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-blue-600 font-semibold transition-colors cursor-pointer shrink-0"
-                          title="Copy phone number"
-                        >
-                          {copiedPhone ? (
-                            <>
-                              <Check size={12} className="text-blue-600" />
-                              <span className="text-blue-600">Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={12} />
-                              <span>Copy</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      <a
-                        href={`tel:${reporterContact.replace(/\s/g, '')}`}
-                        className="flex items-center justify-center w-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
-                        title="Call reporter"
-                      >
-                        <Phone size={14} />
-                      </a>
-                    </div>
-
-                  </div>
-                  }
-                </div>
-              )}
-
-              {/* ── TAB 3: RESOLUTION ── */}
-              {activeCommandTab === 'resolve' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Step 3 · Lifecycle Resolution
-                    </span>
-                  </div>
-
-                  {incident.status === 'Resolved' ? (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1.5">
-                      <span className="text-emerald-700 font-bold flex items-center gap-1">
-                        <CheckCircle size={14} /> Incident Resolved & Closed
-                      </span>
-                      <p className="text-[11px] text-emerald-800">
-                        Closed by <strong>{incident.verified_by || 'EOC Command'}</strong>
-                        {incident.resolved_at ? ` · ${formatDateTime(incident.resolved_at)}` : ''}.
-                      </p>
-                      {incident.outcome_notes && (
-                        <div className="mt-2 pt-2 border-t border-emerald-200">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 mb-1">Outcome Notes</p>
-                          <p className="text-[11px] text-emerald-900 leading-relaxed whitespace-pre-wrap">{incident.outcome_notes}</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
-                        <p className="font-bold mb-0.5">🏁 Complete Incident Handover</p>
-                        <p className="text-[11px] text-blue-800">
-                          Closes mission records, releases assigned rescue teams, and files closing audit.
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => setShowResolveModal(true)}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-black hover:bg-black-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer"
-                      >
-                        <CheckSquare size={14} /> Mark Incident Resolved
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── TAB 4: OFFICIAL EXPORT ── */}
-              {activeCommandTab === 'export' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                      Step 4 · Official Documents
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => incidentService.downloadSitrepPdf(incident.id, incident.display_id)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5
-  bg-slate-50 hover:bg-blue-50
-  text-slate-800 hover:text-blue-700
-  text-xs font-bold rounded-lg
-  border border-slate-200 hover:border-blue-200
-  transition-colors cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Download size={14} className="text-blue-600" />
-                        Official SITREP PDF
-                      </span>
-
-                    </button>
-
-                    <button
-                      onClick={() => incidentService.downloadSitrepPoster(incident.id, incident.display_id)}
-                      className="w-full flex items-center justify-between px-3.5 py-2.5
-  bg-slate-50 hover:bg-blue-50
-  text-slate-800 hover:text-blue-700
-  text-xs font-bold rounded-lg
-  border border-slate-200 hover:border-blue-200
-  transition-colors cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Printer size={14} className="text-blue-600" />
-                        Warning Poster PDF
-                      </span>
-
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Operational Action Log (below Command Action Center) ── */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-              <History size={15} className="text-slate-600" />
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">Operational Action Log</h3>
-            </div>
-            <div className="p-4 max-h-[380px] overflow-y-auto">
-              <div className="space-y-3 relative before:absolute before:inset-0 before:left-3 before:w-0.5 before:bg-slate-200">
-                {isLoadingLogs ? (
-                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium">Loading operational log…</div>
-                ) : incidentLogs.length > 0 ? (
-                  incidentLogs.map((log, idx) => (
-                    <div key={log.id || idx} className="relative flex items-start gap-3 pl-7">
+              ) : isMediaError ? (
+                <p className="text-xs text-slate-600 rounded-xl px-3.5 py-3" style={{ background: `${TONE.amber}12` }}>
+                  Media could not be loaded. The attachments are still recorded on the incident.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {media.map((m) =>
+                    m.status === 'available' && m.url ? (
                       <div
-                        className={`absolute left-1.5 top-1.5 -translate-x-1/2 w-2.5 h-2.5 rounded-full ring-4 ring-white ${log.action.toLowerCase().includes('create')
-                          ? 'bg-blue-600'
-                          : log.action.toLowerCase().includes('verif')
-                            ? 'bg-emerald-600'
-                            : log.action.toLowerCase().includes('resolv')
-                              ? 'bg-purple-600'
-                              : log.action.toLowerCase().includes('updat')
-                                ? 'bg-amber-500'
-                                : 'bg-slate-600'
-                          }`}
-                      />
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 w-full">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-bold text-slate-800">{log.action}</span>
-                          <span className="text-[10px] font-mono text-slate-400">
-                            {formatDateTime(log.logged_at, 'Recent')}
-                          </span>
-                        </div>
-                        <LogDetailBody detail={log.detail} />
-                        <div className="mt-1 text-[10px] text-slate-400">
-                          by <span className="font-semibold text-slate-600">{log.actor}</span>
-                        </div>
+                        key={m.ref}
+                        onClick={() => m.kind === 'image' && setSelectedMediaUrl(m.url)}
+                        className="group relative rounded-xl overflow-hidden bg-slate-100 aspect-video cursor-pointer ring-1 ring-slate-200 hover:ring-2 hover:ring-blue-500 transition-all"
+                      >
+                        {m.kind === 'video' ? (
+                          <video src={m.url} controls preload="metadata" className="w-full h-full object-cover" />
+                        ) : (
+                          <>
+                            <img src={m.url} alt="Field evidence" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors flex items-center justify-center">
+                              <span className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-slate-900 transition-opacity"><Maximize2 size={14} /></span>
+                            </span>
+                          </>
+                        )}
                       </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="pl-7 py-3 text-xs text-slate-400 font-medium">
-                    No operational log entries recorded yet.
-                  </div>
-                )}
+                    ) : (
+                      <div key={m.ref} className="rounded-xl border border-dashed border-slate-300 bg-slate-50 aspect-video flex flex-col items-center justify-center gap-1 text-slate-400">
+                        {m.kind === 'video' ? <Video size={16} /> : <ImageIcon size={16} />}
+                        <span className="text-[11px] font-semibold">{m.status === 'unsupported' ? 'Unsupported format' : 'Unavailable'}</span>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </Section>
+          )}
+
+          <CredibilityCard incidentId={incident.id} hideWhenEmpty />
+
+          {!isCredibilityShown && activitySection}
+        </div>
+
+        {/* ── Slim panel: stays in view while reading ── */}
+        <aside className={`space-y-5 ${isCredibilityShown ? '' : 'lg:sticky lg:top-4'}`}>
+          <section className="bg-white border border-slate-200/80 rounded-2xl">
+            <header className="px-5 pt-5 pb-3.5 mb-4 border-b border-slate-100 flex items-center justify-between gap-3">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Actions</h2>
+              <StatusTag status={incident.status} />
+            </header>
+
+            <div className="px-5 pb-4">
+              <div role="tablist" className="grid grid-cols-4 bg-slate-100 rounded-lg p-0.5">
+                {COMMAND_TABS.map(({ key, label, dot }) => {
+                  const on = activeCommandTab === key;
+                  return (
+                    <button key={key} role="tab" aria-selected={on} type="button" onClick={() => setActiveCommandTab(key)}
+                      className={`relative py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${on ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                    >
+                      {on && <motion.span layoutId="incident-cmd-tab" className="absolute inset-0 bg-white rounded-md shadow-[0_1px_2px_rgba(15,23,42,.08)]" transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} />}
+                      <span className="relative">{label}</span>
+                      {dot && <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: TONE.amber }} />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        </div>
+
+            <div className="px-5 pb-5 space-y-3">
+              {activeCommandTab === 'verify' && (
+                incident.status === 'Unverified' ? (
+                  <>
+                    <Note tone="amber" title="Waiting for verification">Confirm the report is real before sending teams.</Note>
+                    <button
+                      onClick={() => setShowVerifyModal(true)}
+                      disabled={updateIncident.isPending}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    >
+                      <CheckCircle size={14} /> Verify report
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRejectReasonError('');
+                        setShowRejectModal(true);
+                      }}
+                      disabled={updateIncident.isPending}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-60 text-red-700 bg-red-50 hover:bg-red-100"
+                    >
+                      <XCircle size={14} /> Reject or mark duplicate
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Note tone="blue" title="Verified">Verified by {incident.verified_by || 'EOC Watch Commander'}.</Note>
+                    {onTrackInIntelligence && (
+                      <button
+                        onClick={() => onTrackInIntelligence(incident)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <ArrowUpRight size={14} /> Track in Disaster Intelligence
+                      </button>
+                    )}
+                  </>
+                )
+              )}
+
+              {activeCommandTab === 'deploy' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/response/rescue')}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
+                    style={{ background: NAVY }}
+                  >
+                    <Send size={14} /> Dispatch in Rescue Operations
+                  </button>
+                  <p className="text-[11px] text-slate-400">Teams and missions are assigned in Rescue Operations.</p>
+                </>
+              )}
+
+              {activeCommandTab === 'resolve' && (
+                incident.status === 'Resolved' ? (
+                  <Note tone="teal" title="Resolved and closed">
+                    Closed by {incident.verified_by || 'EOC Command'}{incident.resolved_at ? ` · ${formatDateTime(incident.resolved_at)}` : ''}.
+                    {incident.outcome_notes && (
+                      <span className="block mt-2 pt-2 border-t border-slate-200/70 text-slate-700 whitespace-pre-wrap">{incident.outcome_notes}</span>
+                    )}
+                  </Note>
+                ) : (
+                  <>
+                    <Note tone="slate" title="Close this incident">Closes its missions, releases assigned teams and files the closing record.</Note>
+                    <button
+                      onClick={() => setShowResolveModal(true)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
+                      style={{ background: NAVY }}
+                    >
+                      <CheckSquare size={14} /> Mark resolved
+                    </button>
+                  </>
+                )
+              )}
+
+              {activeCommandTab === 'export' && (
+                <ul className="space-y-2">
+                  {[
+                    { label: 'Situation report (SITREP)', hint: 'Official PDF', Icon: Download, run: () => incidentService.downloadSitrepPdf(incident.id, incident.display_id) },
+                    { label: 'Public warning poster', hint: 'Printable PDF', Icon: Printer, run: () => incidentService.downloadSitrepPoster(incident.id, incident.display_id) },
+                  ].map(({ label, hint, Icon, run }) => (
+                    <li key={label}>
+                      <button onClick={run}
+                        className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer text-left">
+                        <IconTile color={TONE.blue}><Icon size={15} /></IconTile>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs font-semibold text-slate-900">{label}</span>
+                          <span className="block text-[11px] text-slate-400">{hint}</span>
+                        </span>
+                        <Download size={14} className="text-slate-300 group-hover:text-blue-600 transition-colors" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* Record details: who reported, through what, at which tier */}
+          <section className="bg-white border border-slate-200/80 rounded-2xl">
+            <header className="px-5 pt-5 pb-3.5 border-b border-slate-100">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Details</h2>
+            </header>
+            <dl className="px-5 py-2 divide-y divide-slate-100 text-xs">
+              <div className="flex items-center justify-between gap-3 py-2.5">
+                <dt className="text-slate-500 shrink-0">Disaster level</dt>
+                <dd><LevelTag level={incident.disaster_level} /></dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-2.5">
+                <dt className="text-slate-500 shrink-0">Source</dt>
+                <dd className="min-w-0 flex justify-end"><SourceTag source={incident.source} /></dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-2.5">
+                <dt className="text-slate-500 shrink-0">Type</dt>
+                <dd className="font-semibold text-slate-800 truncate">{incident.type}</dd>
+              </div>
+              {incident.verified_by && (
+              <div className="flex items-start justify-between gap-3 py-2.5">
+                <dt className="text-slate-500 shrink-0">Verified by</dt>
+                <dd className="text-right min-w-0">
+                  <span className="block font-semibold text-slate-800 truncate">{incident.verified_by}</span>
+                  {incident.verified_at && <span className="block text-[11px] text-slate-400">{formatDateTime(incident.verified_at)}</span>}
+                </dd>
+              </div>
+              )}
+              {incident.resolved_at && (
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <dt className="text-slate-500 shrink-0">Resolved</dt>
+                  <dd className="font-semibold" style={{ color: TONE.teal }}>{formatDateTime(incident.resolved_at)}</dd>
+                </div>
+              )}
+            </dl>
+
+            {(incident.reporter_name || reporterContact) && (
+            <div className="mx-5 mb-5 pt-4 border-t border-slate-100">
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0"><UserRound size={16} /></span>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-slate-400">Reporter</p>
+                  {incident.reporter_name && <p className="text-[13px] font-semibold text-slate-900 truncate">{incident.reporter_name}</p>}
+                  {reporterContact && <p className="text-xs text-slate-600 tabular-nums">{reporterContact}</p>}
+                </div>
+              </div>
+              {reporterContact ? (
+                <div className="flex gap-2 mt-3">
+                  <a
+                    href={`tel:${reporterContact.replace(/\s/g, '')}`}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    <Phone size={13} /> Call
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPhone(reporterContact || '')}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    {copiedPhone ? <><Check size={13} style={{ color: TONE.teal }} /> Copied</> : <><Copy size={13} /> Copy number</>}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            )}
+          </section>
+
+          {isCredibilityShown && activitySection}
+        </aside>
       </div>
 
-      {/* ── Resolve Incident Modal ── */}
-      <AnimatePresence>
-        {showResolveModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={(e) => e.target === e.currentTarget && setShowResolveModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <CheckSquare size={18} className="text-purple-600" /> Close Disaster Incident
-                </h2>
-                <button onClick={() => setShowResolveModal(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <X size={18} />
-                </button>
-              </div>
+      {/* ── Resolve ── */}
+      <FormModal
+        open={showResolveModal}
+        onClose={() => setShowResolveModal(false)}
+        title="Resolve incident"
+        icon={CheckSquare}
+        subtitle={`${idLabel} · Closes Missions`}
+        width="max-w-md"
+        footer={<>
+          <GhostButton onClick={() => setShowResolveModal(false)}>Cancel</GhostButton>
+          <PrimaryButton onClick={handleResolve} pending={resolveIncident.isPending}>Mark resolved</PrimaryButton>
+        </>}
+      >
+        <Field label="Closing officer">
+          <p className="px-3 py-2 text-[13px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg">{resolverName || 'EOC Incident Commander'}</p>
+        </Field>
+        <Field label="Outcome notes" optional>
+          <textarea
+            value={outcomeNotes}
+            onChange={(e) => setOutcomeNotes(e.target.value)}
+            rows={4}
+            className={`${inputCls} resize-y`}
+            placeholder="Final outcome, lessons learned or handover"
+          />
+        </Field>
+      </FormModal>
 
-              <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 text-xs text-purple-800 font-medium">
-                Marking this incident as <strong>Resolved</strong> will: release assigned rescue teams back to Available, mark in-progress missions as Completed, and write a closing audit log entry.
-              </div>
+      {/* ── Verify ── */}
+      <ConfirmModal
+        open={showVerifyModal}
+        onClose={() => setShowVerifyModal(false)}
+        onConfirm={handleConfirmVerify}
+        title="Verify this incident?"
+        icon={ShieldCheck}
+        confirmLabel="Verify"
+        pending={updateIncident.isPending}
+      >
+        Teams can be dispatched to <span className="font-semibold text-slate-800">{idLabel}</span> once it is verified.
+      </ConfirmModal>
 
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Closing Officer / Resolver</label>
-                  <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium select-none">
-                    {resolverName || 'EOC Incident Commander'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Outcome Synthesis Notes</label>
-                  <textarea
-                    value={outcomeNotes}
-                    onChange={(e) => setOutcomeNotes(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-slate-900 resize-none"
-                    placeholder="Summarise the final outcome, lessons learned, or handover notes..."
-                  />
-                </div>
-              </div>
+      {/* ── Reject ── */}
+      <FormModal
+        open={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        title="Reject report"
+        icon={XCircle}
+        subtitle={`${idLabel} · leaves the active list, the reason is logged`}
+        width="max-w-md"
+        footer={<>
+          <GhostButton onClick={() => setShowRejectModal(false)}>Cancel</GhostButton>
+          <PrimaryButton danger onClick={handleConfirmReject} pending={updateIncident.isPending} disabled={!rejectReason.trim()}>Reject</PrimaryButton>
+        </>}
+      >
+        <Field label="Reason" required error={rejectReasonError}>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => {
+              setRejectReason(e.target.value);
+              if (e.target.value.trim()) setRejectReasonError('');
+            }}
+            rows={3}
+            className={`${inputCls} resize-y`}
+            placeholder="Duplicate, false alarm, or resolved before verification"
+          />
+        </Field>
+      </FormModal>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowResolveModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleResolve}
-                  disabled={resolveIncident.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  {resolveIncident.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                  Confirm & Close
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Update impact ── */}
+      <FormModal
+        open={showAssessmentModal}
+        onClose={() => setShowAssessmentModal(false)}
+        title="Update impact"
+        icon={Gauge}
+        subtitle={`${idLabel} · ${incident.title}`}
+        width="max-w-md"
+        footer={<>
+          <GhostButton onClick={() => setShowAssessmentModal(false)}>Cancel</GhostButton>
+          <PrimaryButton onClick={handleSaveAssessment} pending={updateIncident.isPending}>Save</PrimaryButton>
+        </>}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="People affected">
+            <input type="number" min={0} value={assessmentPop}
+              onChange={(e) => setAssessmentPop(parseInt(e.target.value, 10) || 0)} className={`${inputCls} tabular-nums`} />
+          </Field>
+          <Field label="Casualties">
+            <input type="number" min={0} value={assessmentCas}
+              onChange={(e) => setAssessmentCas(parseInt(e.target.value, 10) || 0)} className={`${inputCls} tabular-nums`} />
+          </Field>
+          <Field label="Infrastructure damage">
+            <select value={assessmentInfra} onChange={(e) => setAssessmentInfra(e.target.value as typeof assessmentInfra)} className={`${inputCls} cursor-pointer`}>
+              <option value="None">None</option>
+              <option value="Minor">Minor</option>
+              <option value="Moderate">Moderate</option>
+              <option value="Severe">Severe</option>
+            </select>
+          </Field>
+          <Field label="Road access" note="0–100">
+            <input type="number" min={0} max={100} value={assessmentAccess}
+              onChange={(e) => setAssessmentAccess(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))} className={`${inputCls} tabular-nums`} />
+          </Field>
+        </div>
+        {assessmentChanged && <p className="text-[11px] text-slate-400">Saving re-runs the AI assessment.</p>}
+      </FormModal>
 
-      {/* ── Contact Field Commander Modal ── */}
-      <AnimatePresence>
-        {showContactModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={(e) => e.target === e.currentTarget && setShowContactModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <PhoneCall size={18} className="text-blue-600" /> Contact Field Commander
-                </h2>
-                <button onClick={() => setShowContactModal(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Reporter / Source Contact</p>
-                <p className="text-sm font-bold text-slate-800">{incident.reporter_contact || 'No contact recorded'}</p>
-              </div>
-
-              {reporterContact ? (
-                <a
-                  href={`tel:${reporterContact.replace(/\s/g, '')}`}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  <PhoneCall size={15} /> Call {reporterContact}
-                </a>
-              ) : (
-                <div className="text-xs text-slate-500 font-medium bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  No callable phone number found. Contact via agency radio channels or NADMA Operations Room: <strong>03-8888 2010</strong>
-                </div>
-              )}
-
-              <button
-                onClick={() => setShowContactModal(false)}
-                className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Verify Incident Confirmation Modal ── */}
-      <AnimatePresence>
-        {showVerifyModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={(e) => e.target === e.currentTarget && setShowVerifyModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <CheckCircle size={18} className="text-blue-600" /> Confirm Incident Verification
-                </h2>
-                <button onClick={() => setShowVerifyModal(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-900 space-y-1">
-                <p className="font-bold">Verify and Activate Emergency Response</p>
-                <p className="text-[11px] text-blue-800">
-                  Verifying will upgrade status to <strong>Verified</strong>, timestamp the official verification in the national database, and enable search & rescue dispatch.
-                </p>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-1.5 text-xs text-slate-700">
-                <div className="flex justify-between">
-                  <span className="font-semibold text-slate-500">Incident:</span>
-                  <span className="font-bold text-slate-900 truncate max-w-[240px]">{incident.title}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold text-slate-500">Location:</span>
-                  <span className="font-medium text-slate-800">{incident.location}, {incident.district}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold text-slate-500">Severity:</span>
-                  <span className="font-bold text-red-600">{incident.severity} · {incident.disaster_level}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold text-slate-500">Reported Affected:</span>
-                  <span className="font-mono font-bold text-slate-900">
-                    {factState(incident, 'affected_population') === 'unknown'
-                      ? 'Not reported'
-                      : `${incident.affected_population.toLocaleString()} people`}
-                  </span>
-                </div>
-              </div>
-
-              {/* <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700">Verifying Officer Name & Agency</label>
-                <input
-                  type="text"
-                  value={verifierName}
-                  onChange={(e) => setVerifierName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-600 font-medium"
-                  placeholder="e.g. Dato' Ir. Ahmad Rosli (NADMA)"
-                />
-              </div> */}
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowVerifyModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmVerify}
-                  disabled={updateIncident.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  {updateIncident.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                  Confirm Verification
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Reject Incident Confirmation Modal ── */}
-      <AnimatePresence>
-        {showRejectModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={(e) => e.target === e.currentTarget && setShowRejectModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <XCircle size={18} className="text-red-600" /> Reject Incident Report
-                </h2>
-                <button onClick={() => setShowRejectModal(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-xs text-red-900 space-y-1">
-                <p className="font-bold">Report Rejection</p>
-                <p className="text-[11px] text-red-800">
-                  Rejecting this report will mark it as <strong>Rejected</strong>, removing it from active disaster feeds and recording the reason in the audit trail.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Reason for Rejection <span className="text-red-600">*</span></label>
-                  <textarea
-                    value={rejectReason}
-                    onChange={(e) => {
-                      setRejectReason(e.target.value);
-                      if (e.target.value.trim()) setRejectReasonError('');
-                    }}
-                    rows={3}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-red-600 resize-none font-medium"
-                    placeholder="e.g. Duplicate report, false alarm, or resolved prior to verification..."
-                  />
-                  {rejectReasonError && <p className="mt-1 text-[11px] font-medium text-red-600">{rejectReasonError}</p>}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => setShowRejectModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmReject}
-                  disabled={updateIncident.isPending || !rejectReason.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  {updateIncident.isPending ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-                  Confirm Rejection
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Impact Assessment Edit Modal (EOC Disaster Management Authority) ── */}
-      <AnimatePresence>
-        {showAssessmentModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={(e) => e.target === e.currentTarget && setShowAssessmentModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200"
-            >
-              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Edit3 size={16} className="text-blue-400" />
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Update Disaster Assessment Metrics</h3>
-                    <p className="text-[10px] text-slate-400">
-                      Official ground damage &amp; impact updates for {getCleanIncidentId(incident.id, incident.display_id)}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowAssessmentModal(false)}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Impacted Population</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={assessmentPop}
-                      onChange={(e) => setAssessmentPop(parseInt(e.target.value, 10) || 0)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-blue-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Confirmed Casualties</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={assessmentCas}
-                      onChange={(e) => setAssessmentCas(parseInt(e.target.value, 10) || 0)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-blue-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Infrastructure Risk</label>
-                    <select
-                      value={assessmentInfra}
-                      onChange={(e) => setAssessmentInfra(e.target.value as any)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-600 cursor-pointer"
-                    >
-                      <option value="None">None</option>
-                      <option value="Minor">Minor</option>
-                      <option value="Moderate">Moderate</option>
-                      <option value="Severe">Severe</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-800 mb-1">Access Score (0 - 100)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={assessmentAccess}
-                      onChange={(e) => setAssessmentAccess(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:border-blue-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setShowAssessmentModal(false)}
-                    className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveAssessment}
-                    disabled={updateIncident.isPending}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-sm"
-                  >
-                    {updateIncident.isPending ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                    Save Assessment Metrics
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Citizen Media Lightbox Modal ── */}
+      {/* ── Field evidence lightbox ── */}
+      <Overlay>
       <AnimatePresence>
         {selectedMediaUrl && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+            className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
             onClick={() => setSelectedMediaUrl(null)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.96, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              exit={{ scale: 0.96, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="relative max-w-4xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700"
+              className="relative max-w-4xl max-h-[85vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl"
             >
               <button
                 type="button"
                 onClick={() => setSelectedMediaUrl(null)}
+                aria-label="Close"
                 className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/90 text-white rounded-full transition-colors z-10 cursor-pointer"
               >
                 <X size={18} />
               </button>
-              <img
-                src={selectedMediaUrl}
-                alt="Enlarged Citizen Evidence"
-                className="w-full max-h-[80vh] object-contain"
-              />
-              <div className="p-3 bg-slate-900/90 border-t border-slate-800 text-xs text-slate-300 flex items-center justify-between">
-                <span>Field Evidence · {incident.title}</span>
-                <a
-                  href={selectedMediaUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-400 hover:text-blue-300 font-bold"
-                >
-                  Open in New Tab →
+              <img src={selectedMediaUrl} alt="Field evidence, enlarged" className="w-full max-h-[80vh] object-contain" />
+              <div className="px-4 py-3 text-xs text-slate-300 flex items-center justify-between gap-3" style={{ background: NAVY }}>
+                <span className="truncate">Field evidence · {incident.title}</span>
+                <a href={selectedMediaUrl} target="_blank" rel="noreferrer" className="shrink-0 font-semibold text-blue-300 hover:text-blue-200">
+                  Open in new tab
                 </a>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+      </Overlay>
     </motion.div>
   );
 };

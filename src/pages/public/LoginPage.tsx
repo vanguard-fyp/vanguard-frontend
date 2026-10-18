@@ -112,6 +112,7 @@ export const LoginPage: React.FC = () => {
                     disabled={isLoading}
                     onKeyDown={checkCaps}
                     onKeyUp={checkCaps}
+                    placeholder="********"
                     onBlur={() => setCapsOn(false)}
                     aria-describedby={capsOn ? 'login-caps' : undefined}
                   />

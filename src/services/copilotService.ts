@@ -5,8 +5,10 @@ export const copilotService = {
   /**
    * Fetch today's focus task cards prioritized for the active officer
    */
-  getTodayTasks: async (): Promise<CopilotTask[]> => {
-    return apiClient.get<CopilotTask[]>('/copilot/tasks');
+  getTodayTasks: async (forceRefresh: boolean = false): Promise<CopilotTask[]> => {
+    return apiClient.get<CopilotTask[]>('/copilot/tasks', {
+      params: forceRefresh ? { force_refresh: true } : undefined,
+    });
   },
 
   /**

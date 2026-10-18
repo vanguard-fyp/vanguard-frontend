@@ -9,7 +9,15 @@ import {
   Target,
 } from 'lucide-react';
 import type { RescueTeam, Mission, Incident } from '../../../../types';
+import { Tag, StatusTag, SEVERITY_TONE } from '../../shared/Tag';
 import { MissionProgressPipeline } from './MissionProgressPipeline';
+
+const SEVERITY_BORDER: Record<string, string> = {
+  Critical: 'border-l-red-500',
+  High: 'border-l-orange-500',
+  Medium: 'border-l-amber-500',
+  Low: 'border-l-slate-400',
+};
 interface TeamDetailSlideOverProps {
   team: RescueTeam | null;
   missions: Mission[];
@@ -56,7 +64,17 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
   );
   const activeMission = teamMissions.find((m) => m.status !== 'Completed' && m.status !== 'Aborted');
   const assignedIncident = incidents.find((i) => i.id === activeMission?.incident_id);
-  const sc = statusConfig[team.status] || statusConfig['Off Duty'];
+  const normalizedStatus =
+    team.status?.trim().toLowerCase() === 'en route'
+      ? 'En Route'
+      : team.status?.trim().toLowerCase() === 'deployed'
+      ? 'Deployed'
+      : team.status?.trim().toLowerCase() === 'available'
+      ? 'Available'
+      : team.status?.trim().toLowerCase() === 'off duty'
+      ? 'Off Duty'
+      : team.status;
+  const sc = statusConfig[normalizedStatus] || statusConfig['Off Duty'];
   const ac = agencyColors[team.agency] || '';
 
   return (
@@ -87,7 +105,7 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
                 </span>
                 <span className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${sc.badge}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-                  {team.status}
+                  {normalizedStatus || team.status}
                 </span>
                 <span className="text-xs font-mono font-bold text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
                   {team.display_id || (team.id.startsWith('team-') ? team.id.split('-').slice(0, 3).join('-').toUpperCase() : team.id.length > 12 ? `TEAM-${team.id.slice(0, 6).toUpperCase()}` : team.id)}
@@ -148,14 +166,21 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
 
             {/* Active Incident assignment */}
             {assignedIncident && (
-              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-1">
-                <div className="flex items-center gap-1.5 text-orange-700 text-xs font-bold uppercase tracking-wider">
-                  <ShieldCheck size={14} />
-                  Active Incident Assignment
+              <div className={`bg-white border border-slate-200/90 border-l-4 ${SEVERITY_BORDER[assignedIncident.severity] ?? 'border-l-blue-500'} rounded-xl p-4 shadow-2xs space-y-2`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-slate-500">
+                    <ShieldCheck size={14} className="text-blue-600" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Incident Assignment</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Tag tone={SEVERITY_TONE[assignedIncident.severity] ?? 'slate'}>{assignedIncident.severity}</Tag>
+                    <StatusTag status={assignedIncident.status} />
+                  </div>
                 </div>
-                <h4 className="text-sm font-bold text-orange-950">{assignedIncident.title}</h4>
-                <p className="text-xs text-orange-800">
-                  📍 {assignedIncident.location}, {assignedIncident.district}, {assignedIncident.state} · Severity: {assignedIncident.severity}
+                <h4 className="text-sm font-bold text-slate-900">{assignedIncident.title}</h4>
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <MapPin size={12} className="text-slate-400 shrink-0" />
+                  {[assignedIncident.location, assignedIncident.district, assignedIncident.state].filter(Boolean).join(', ')}
                 </p>
               </div>
             )}

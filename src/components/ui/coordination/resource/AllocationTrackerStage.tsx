@@ -100,7 +100,7 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
             <div className="p-5 flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
               <button type="button" onClick={() => setExpandedId(open ? null : req.id)} className="min-w-0 space-y-1.5 text-left cursor-pointer">
                 <span className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-mono font-bold text-slate-400">{req.display_id}</span>
+                  <span className="text-xs font-bold text-slate-400">{req.display_id}</span>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${dispatched ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
                       }`}

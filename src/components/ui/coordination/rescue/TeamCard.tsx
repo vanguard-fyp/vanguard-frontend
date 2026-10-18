@@ -5,6 +5,14 @@ import {
   Truck, ShieldCheck, Target, Navigation, ArrowUpRight, Sparkles
 } from 'lucide-react';
 import type { RescueTeam, Mission, Incident } from '../../../../types';
+import { Tag, StatusTag, SEVERITY_TONE } from '../../shared/Tag';
+
+const SEVERITY_BORDER: Record<string, string> = {
+  Critical: 'border-l-red-500',
+  High: 'border-l-orange-500',
+  Medium: 'border-l-amber-500',
+  Low: 'border-l-slate-400',
+};
 
 interface TeamCardProps {
   team: RescueTeam;
@@ -52,7 +60,17 @@ export const TeamCard: React.FC<TeamCardProps> = ({
     ? incidents.find((i) => i.id === activeMission.incident_id || i.display_id === activeMission.incident_id)
     : undefined;
   const myAssignment = activeMission?.teams?.find((t) => t.id === team.id);
-  const sc = statusConfig[team.status] || statusConfig['Off Duty'];
+  const normalizedStatus =
+    team.status?.trim().toLowerCase() === 'en route'
+      ? 'En Route'
+      : team.status?.trim().toLowerCase() === 'deployed'
+      ? 'Deployed'
+      : team.status?.trim().toLowerCase() === 'available'
+      ? 'Available'
+      : team.status?.trim().toLowerCase() === 'off duty'
+      ? 'Off Duty'
+      : team.status;
+  const sc = statusConfig[normalizedStatus] || statusConfig['Off Duty'];
   const ac = agencyColors[team.agency] || '';
 
   return (
@@ -83,7 +101,6 @@ export const TeamCard: React.FC<TeamCardProps> = ({
             <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
               <Target size={11} className="text-slate-400" />
               {activeCount} active mission{activeCount !== 1 ? 's' : ''}
-              {teamMissions.length > activeCount ? ` · ${teamMissions.length} total` : ''}
             </span>
           </div>
         </div>
@@ -92,7 +109,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <span className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border ${sc.badge}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-            {team.status}
+            {normalizedStatus || team.status}
           </span>
           
           {onViewOperations && (
@@ -195,21 +212,33 @@ export const TeamCard: React.FC<TeamCardProps> = ({
 
               {/* Assigned Incident */}
               {assignedIncident && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <ShieldCheck size={13} className="text-orange-600" />
-                    <p className="text-[10px] font-bold text-orange-700 uppercase tracking-wide">Active Incident Assignment</p>
+                <div className={`bg-white border border-slate-200/90 border-l-4 ${SEVERITY_BORDER[assignedIncident.severity] ?? 'border-l-blue-500'} rounded-xl p-3.5 shadow-2xs space-y-1.5`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-slate-500">
+                      <ShieldCheck size={13} className="text-blue-600" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Incident Assignment</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Tag tone={SEVERITY_TONE[assignedIncident.severity] ?? 'slate'}>{assignedIncident.severity}</Tag>
+                      <StatusTag status={assignedIncident.status} />
+                    </div>
                   </div>
-                  <p className="text-xs font-bold text-orange-900">{assignedIncident.title}</p>
-                  <p className="text-[11px] text-orange-700 font-medium">
-                    {assignedIncident.location}, {assignedIncident.state} · Severity: {assignedIncident.severity}
+                  <p className="text-xs font-bold text-slate-900">{assignedIncident.title}</p>
+                  <p className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                    <MapPin size={11} className="text-slate-400 shrink-0" />
+                    {assignedIncident.location}, {assignedIncident.state}
                   </p>
                   {myAssignment && (
-                    <p className="text-[11px] text-orange-800 mt-1">
-                      {myAssignment.assigned_personnel != null
-                        ? `${myAssignment.assigned_personnel} personnel committed`
-                        : 'Personnel count not recorded (legacy assignment — whole team counted)'}
-                      {myAssignment.selection_source ? ` · ${myAssignment.selection_source === 'ai' ? 'AI-recommended' : 'Officer-selected'}` : ''}
+                    <p className="text-[11px] text-slate-600 pt-1.5 border-t border-slate-100 flex items-center gap-1.5">
+                      <Users size={11} className="text-slate-400 shrink-0" />
+                      <span className="font-semibold text-slate-700">
+                        {myAssignment.assigned_personnel != null
+                          ? `${myAssignment.assigned_personnel} personnel committed`
+                          : 'Whole squad committed'}
+                      </span>
+                      {myAssignment.selection_source && (
+                        <span className="text-slate-400">· {myAssignment.selection_source === 'ai' ? 'AI-recommended' : 'Officer-selected'}</span>
+                      )}
                     </p>
                   )}
                 </div>

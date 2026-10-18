@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Users, Search, Edit2, Trash2, SlidersHorizontal } from 'lucide-react';
 import type { UserAccount, UserManagementTableProps } from '../../../types';
 import { userRolesFilterList as roles } from '../../../constants';
 import { ConfirmationDialog } from '../shared/ConfirmationDialog';
 import { formatDateTime } from '../../../utils/dateFormatter';
-import { filterValue, useDebouncedValue, usePaginatedQuery } from '../../../hooks';
-import { userService } from '../../../services/userService';
+import { useUsers } from '../../../hooks/useUsers';
+import { useAuth } from '../../../context/AuthContext';
 import { PaginationBar } from '../shared/PaginationBar';
 
 export const UserManagementTable: React.FC<UserManagementTableProps> = ({
@@ -16,16 +16,51 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All');
   const [userToDelete, setUserToDelete] = useState<UserAccount | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const PAGE_SIZE = 15;
 
-  // Server-side page. The signed-in admin is excluded by the backend (exclude_self)
-  // so they cannot deactivate or delete their own account from this list.
-  const debouncedSearch = useDebouncedValue(searchQuery.trim());
-  const filters = useMemo(
-    () => ({ search: debouncedSearch || undefined, role: filterValue(roleFilter), exclude_self: true }),
-    [debouncedSearch, roleFilter]
-  );
-  const userPage = usePaginatedQuery(['users'], (args) => userService.getUsersPage(args), filters, 15);
-  const filteredUsers = userPage.items;
+  // Cached user accounts query — fast, zero-delay instant search in client memory
+  const { data: allUsers = [], isLoading, isError, refetch, isFetching } = useUsers();
+  const { user: currentUser } = useAuth();
+
+  const filteredUsers = useMemo(() => {
+    let list = allUsers.filter((u) => {
+      if (
+        currentUser &&
+        (String(u.id) === String(currentUser.id) ||
+          (u.email && u.email.toLowerCase() === currentUser.email?.toLowerCase()))
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    if (roleFilter !== 'All') {
+      list = list.filter((u) => u.role === roleFilter);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (u) =>
+          (u.name || '').toLowerCase().includes(q) ||
+          (u.email || '').toLowerCase().includes(q) ||
+          (u.agency || '').toLowerCase().includes(q) ||
+          (u.role || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [allUsers, roleFilter, searchQuery, currentUser]);
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [searchQuery, roleFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const pagedUsers = useMemo(() => {
+    const start = pageIndex * PAGE_SIZE;
+    return filteredUsers.slice(start, start + PAGE_SIZE);
+  }, [filteredUsers, pageIndex]);
 
   const handleConfirmDelete = () => {
     if (userToDelete) {
@@ -42,7 +77,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
           <Users size={16} className="text-blue-600" />
           <h3 className="text-sm font-bold text-slate-800">System User Accounts Directory</h3>
           <span className="text-xs font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full">
-            {userPage.total} Users
+            {filteredUsers.length} Users
           </span>
         </div>
 
@@ -93,19 +128,19 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {userPage.isLoading ? (
+            {isLoading ? (
               <tr>
                 <td colSpan={7} className="px-5 py-8 text-center text-xs text-slate-400 font-medium">Loading user accounts…</td>
               </tr>
-            ) : userPage.isError ? (
+            ) : isError ? (
               <tr>
                 <td colSpan={7} className="px-5 py-8 text-center text-xs text-red-700 font-medium">
                   User accounts could not be loaded.{' '}
-                  <button onClick={() => userPage.refetch()} className="underline font-bold cursor-pointer">Retry</button>
+                  <button onClick={() => refetch()} className="underline font-bold cursor-pointer">Retry</button>
                 </td>
               </tr>
-            ) : filteredUsers.length > 0 ? (
-              filteredUsers.map((user) => (
+            ) : pagedUsers.length > 0 ? (
+              pagedUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2.5">
@@ -186,15 +221,15 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
           </tbody>
         </table>
       </div>
-      {userPage.total > 0 && (
+      {filteredUsers.length > 0 && (
         <div className="px-4 border-t border-slate-100">
           <PaginationBar
-            pageIndex={userPage.pageIndex}
-            pageCount={userPage.pageCount}
-            total={userPage.total}
-            pageSize={userPage.pageSize}
-            onPageChange={userPage.setPageIndex}
-            isFetching={userPage.isFetching}
+            pageIndex={pageIndex}
+            pageCount={pageCount}
+            total={filteredUsers.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPageIndex}
+            isFetching={isFetching}
             label="accounts"
           />
         </div>

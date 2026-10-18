@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { AlertTriangle, CheckCircle, CheckCircle2, ClipboardCheck, Eye, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, CheckCircle2, ClipboardCheck, Eye, Sparkles, XCircle } from 'lucide-react';
 import type { ResourceRequest } from '../../../../types';
 import { requestFlow } from '../../../../utils/resourceFlow';
 import { usePaginatedQuery, useRequestRecommendation } from '../../../../hooks';
 import { resourceService } from '../../../../services/resourceService';
+import { formatDateTime } from '../../../../utils/dateFormatter';
 import { PaginationBar } from '../../shared/PaginationBar';
-import { RecommendationLine, RequestSummary, ResourceDialog, requestRoute } from './ResourceUI';
+import type { AiTone } from '../../shared/AiSuggestion';
+import { describeRecommendation, RequestSummary, ResourceDialog, requestRoute } from './ResourceUI';
 
 const PENDING = 'Pending Approval';
 const PENDING_FILTER = { status: PENDING };
@@ -23,6 +25,58 @@ const STATUS_PILL: Record<string, string> = {
   Dispatched: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Delivered: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   Rejected: 'bg-red-50 text-red-700 border-red-200',
+};
+
+/** 1-Line Streamlined AI Decision Advisory Banner for review queue */
+const CompactRecommendationBanner: React.FC<{ req: ResourceRequest }> = ({ req }) => {
+  const { data: rec, isLoading } = useRequestRecommendation(req.id);
+  if (isLoading || !rec) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-slate-50/90 border border-slate-200/90 rounded-lg text-xs text-slate-500">
+        <Sparkles size={12} className="text-slate-400 animate-pulse shrink-0" />
+        <span>Evaluating resource availability…</span>
+      </div>
+    );
+  }
+  const d = describeRecommendation(rec, req);
+  const tonePills: Record<AiTone, string> = {
+    good: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    caution: 'bg-amber-100 text-amber-800 border-amber-300',
+    bad: 'bg-rose-100 text-rose-800 border-rose-300',
+    info: 'bg-sky-100 text-sky-800 border-sky-300',
+    neutral: 'bg-slate-100 text-slate-700 border-slate-300',
+  };
+  const pillStyle = tonePills[d.tone] ?? tonePills.neutral;
+
+  const firstReason = rec.reasons?.[0];
+  return (
+    <div className="flex flex-col gap-1 px-3 py-2 bg-slate-50/90 border border-slate-200/90 rounded-lg text-xs">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Sparkles size={13} className="text-blue-600 shrink-0" />
+          <span className="font-bold text-[10px] uppercase tracking-wider text-slate-500 shrink-0">AI Advisory:</span>
+          <span className="font-semibold text-slate-800 truncate">
+            {rec.action ?? d.headline}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${pillStyle}`}>
+            {d.status}
+          </span>
+          {rec.confidence != null && (
+            <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+              {Math.round(rec.confidence)}%
+            </span>
+          )}
+        </div>
+      </div>
+      {firstReason && (
+        <p className="text-[11px] text-slate-500 pl-5 leading-relaxed truncate" title={firstReason}>
+          {firstReason}
+        </p>
+      )}
+    </div>
+  );
 };
 
 /** Depot select for a request created without one; options are the depots stocking the item, best first. */
@@ -143,68 +197,78 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onAp
           const restock = requestFlow(req) === 'replenishment';
           return (
             <div key={req.id} className="px-5 py-3">
-              <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-4 space-y-3">
-                {/* What · how many · who · where, with the decision buttons */}
-                <div className="flex items-start justify-between gap-4 flex-wrap lg:flex-nowrap">
+              <div className="bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs hover:shadow-xs transition-all space-y-3">
+                {/* Header Row: IDs, Urgency & Action Buttons */}
+                <div className="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
                   <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-slate-400">{req.display_id}</span>
+                      <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                        {req.display_id}
+                      </span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${u.pill}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${u.dot}`} />
-                        {req.urgency}
+                        {req.urgency} Urgency
+                      </span>
+                      <span className="text-[10px] font-medium text-slate-400">
+                        {restock ? 'Depot Restock' : 'Incident Requisition'}
                       </span>
                     </div>
                     <h4 className="text-sm font-bold text-slate-900 leading-snug">{req.item_requested}</h4>
-                    <p className="text-xs text-slate-600 flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-blue-700">{req.quantity_requested.toLocaleString()} {req.unit}</span>
-                      <span className="text-slate-400">·</span>
-                      <span>Agency: <strong className="text-slate-800">{req.agency}</strong></span>
-                      <span className="text-slate-400">·</span>
-                      <span>
-                        {restock ? 'Restock: ' : 'Target: '}
-                        <strong className="text-slate-800">{requestRoute(req).to}</strong>
-                      </span>
-                    </p>
                   </div>
-                  <div className="flex flex-row items-center gap-2 shrink-0">
+
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
+                      type="button"
                       onClick={() => onSelectRequest?.(req)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-slate-900 text-xs font-semibold rounded-lg hover:bg-slate-100 cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:text-slate-900 text-xs font-semibold rounded-lg hover:bg-slate-100 border border-slate-200/80 transition-colors cursor-pointer"
                     >
-                      <Eye size={13} /> Details
+                      <Eye size={13} className="text-slate-500" /> Details
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setRejecting(req);
                         setReason('');
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       <XCircle size={14} /> Reject
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setApproving(req);
                         setDepotId('');
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
                     >
                       <CheckCircle2 size={14} /> Approve
                     </button>
                   </div>
                 </div>
 
-                {/* Why it was asked for, then the AI view of whether it can be met;
-                    stacked, each card only as tall as its own content. */}
-                <div className="flex flex-col gap-3">
-                  {req.justification && (
-                    <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-3">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Official justification</p>
-                      <p className="text-xs text-slate-700 leading-relaxed">{req.justification}</p>
-                    </div>
-                  )}
-                  <RecommendationLine req={req} />
+                {/* Structured Metadata Grid with clear useful labelling */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2.5 border-t border-slate-100 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Quantity</span>
+                    <span className="font-bold text-blue-700">{req.quantity_requested.toLocaleString()} {req.unit}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Requesting Agency</span>
+                    <span className="font-semibold text-slate-800 block truncate">{req.agency}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">{restock ? 'Receiving Depot' : 'Target Destination'}</span>
+                    <span className="font-semibold text-slate-800 block truncate">{requestRoute(req).to}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Logged Time</span>
+                    <span className="text-slate-600 block">{formatDateTime(req.requested_at, 'Recent')}</span>
+                  </div>
                 </div>
+
+                {/* 1-Line Streamlined AI Decision Advisory Banner */}
+                <CompactRecommendationBanner req={req} />
               </div>
             </div>
           );
@@ -278,16 +342,18 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onAp
             tone="approve"
             icon={<CheckCircle2 size={20} />}
             title={requestFlow(approving) === 'replenishment' ? 'Authorize Depot Restock' : 'Authorize Resource Dispatch'}
+            subtitle="Confirm stock allocation and commit dispatch authorization"
             onClose={() => setApproving(null)}
             footer={
               <>
-                <button onClick={() => setApproving(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
+                <button type="button" onClick={() => setApproving(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={confirmApprove}
                   disabled={needsDepot && !depotId}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Confirm Authorization
                 </button>
@@ -296,10 +362,10 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onAp
           >
             <RequestSummary req={approving} tone="approve" quantityLabel="Quantity to Allocate" />
             {needsDepot && <DepotPicker req={approving} value={depotId} onChange={setDepotId} />}
-            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 leading-relaxed">
+            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200/70 rounded-xl px-4 py-3 leading-relaxed">
               {requestFlow(approving) === 'replenishment'
-                ? <>Marks the order <strong className="text-slate-900">Approved</strong>. Stock is added when it is received.</>
-                : <>Marks it <strong className="text-slate-900">Approved</strong>, reserves the stock and moves it to the delivery tracker.</>}
+                ? <>Marks the order <strong className="text-slate-900">Approved</strong>. Stock is added to the depot when received.</>
+                : <>Marks it <strong className="text-slate-900">Approved</strong>, reserves the stock and advances to the delivery tracker.</>}
             </p>
           </ResourceDialog>
         )}
@@ -308,22 +374,24 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onAp
             tone="reject"
             icon={<AlertTriangle size={20} />}
             title="Reject Resource Request"
+            subtitle="Specify operational rationale for declining requisition"
             onClose={() => setRejecting(null)}
             footer={
               <>
-                <button onClick={() => setRejecting(null)} className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer">
+                <button type="button" onClick={() => setRejecting(null)} className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={confirmReject}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold shadow-md shadow-red-600/20 cursor-pointer"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors"
                 >
                   Confirm Rejection
                 </button>
               </>
             }
           >
-            <RequestSummary req={rejecting} tone="reject" />
+            <RequestSummary req={rejecting} tone="reject" quantityLabel="Quantity Requested" />
             <label className="block">
               <span className="block text-xs font-bold text-slate-800 mb-1">
                 Rejection reason / operational notes <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
@@ -332,8 +400,8 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onAp
                 rows={3}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Covered by REQ-2026-002"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600 focus:bg-white"
+                placeholder="e.g. Supplies already dispatched under REQ-2026-002, or depot stock exhausted."
+                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600 focus:bg-white resize-none transition-colors"
               />
             </label>
           </ResourceDialog>

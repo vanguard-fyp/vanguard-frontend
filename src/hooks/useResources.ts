@@ -8,11 +8,12 @@ export const RESOURCE_KEYS = {
   advisory: ['resources', 'advisory'] as const,
 };
 
-export function useInventory() {
+export function useInventory(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: RESOURCE_KEYS.inventory,
     queryFn: () => resourceService.getInventory(),
     staleTime: 60_000,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -50,11 +51,12 @@ export function useDeleteInventoryItem() {
   });
 }
 
-export function useResourceRequests() {
+export function useResourceRequests(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: RESOURCE_KEYS.requests,
     queryFn: () => resourceService.getRequests(),
     staleTime: 30_000,
+    enabled: options?.enabled ?? true,
   });
 }
 

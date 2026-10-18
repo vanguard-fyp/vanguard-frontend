@@ -68,6 +68,7 @@ export const StockAdvisoryCard: React.FC<{
       : 'No restock needed; stock covers pending requests and the safety level.';
   return (
     <AiSuggestion
+      tone={tone}
       headline={<AiVerdict tone={tone} verdict={RISK_LABEL[item.risk]}>{headline}</AiVerdict>}
       basis="Computed from stock, safety level and pending requests"
     >
@@ -95,6 +96,7 @@ export const RequestRecommendationCard: React.FC<{ req: ResourceRequest }> = ({ 
   const others = rec.decision === 'choose_depot' ? rec.alternatives.slice(1) : rec.alternatives;
   return (
     <AiSuggestion
+      tone={d.tone}
       headline={<AiVerdict tone={d.tone} verdict={d.status}>{rec.action ?? d.headline}</AiVerdict>}
       basis="Computed from depot stock, the request queue and the incident"
     >

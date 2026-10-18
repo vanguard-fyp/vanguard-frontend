@@ -1,7 +1,7 @@
 import type { Incident, RescueTeam, SeverityLevel } from ".";
 
 export type AgencyFilter = 'All' | 'SMART' | 'BOMBA' | 'APM' | 'PDRM' | 'ATM';
-export type StatusFilter = 'All' | 'Available' | 'Deployed' | 'En Route' | 'Off Duty';
+export type StatusFilter = 'All' | 'Available' | 'Deployed' | 'En Route';
 export type TeamSortBy = 'default' | 'personnel' | 'status';
 
 export interface MissionWizardProps {

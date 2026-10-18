@@ -8,7 +8,8 @@ import { Map as MapLibreMap } from 'react-map-gl/maplibre';
 import { ScatterplotLayer, ColumnLayer } from '@deck.gl/layers';
 
 // ── 2D: react-leaflet ────────────────────────────────────────────────────────
-import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker, useMap } from 'react-leaflet';
+import L from 'leaflet';
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 import {
@@ -259,6 +260,26 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
       }));
     }
   }, [flyToTarget]);
+
+  // Custom Leaflet divIcon for the search pin
+  const searchPinIcon = useMemo(
+    () =>
+      L.divIcon({
+        className: '',
+        html: `<div style="
+          width:28px;height:36px;position:relative;
+          filter:drop-shadow(0 3px 6px rgba(59,130,246,0.7));
+        ">
+          <svg viewBox="0 0 28 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22s14-12.667 14-22C28 6.268 21.732 0 14 0z" fill="#3b82f6"/>
+            <circle cx="14" cy="14" r="6" fill="white"/>
+          </svg>
+        </div>`,
+        iconSize: [28, 36],
+        iconAnchor: [14, 36],
+      }),
+    []
+  );
 
   // Animate camera when toggling between 2D and 3D
   const prevIs3D = React.useRef(is3D);
@@ -555,8 +576,37 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
       );
     }
 
+    // Search pin layer for DeckGL (shown when flyToTarget is active)
+    if (flyToTarget) {
+      out.push(
+        new ScatterplotLayer({
+          id: 'search-pin-halo',
+          data: [flyToTarget],
+          getPosition: (d: any) => [d.lng, d.lat],
+          getRadius: 18000,
+          getFillColor: [59, 130, 246, 40],
+          radiusUnits: 'meters',
+          pickable: false,
+        })
+      );
+      out.push(
+        new ScatterplotLayer({
+          id: 'search-pin',
+          data: [flyToTarget],
+          getPosition: (d: any) => [d.lng, d.lat],
+          getRadius: 7000,
+          getFillColor: [59, 130, 246, 255],
+          getLineColor: [255, 255, 255],
+          lineWidthMinPixels: 2.5,
+          stroked: true,
+          radiusUnits: 'meters',
+          pickable: false,
+        })
+      );
+    }
+
     return out;
-  }, [visibleIncidents, incidentData, visiblePois, is3D, onSelectIncident]);
+  }, [visibleIncidents, incidentData, visiblePois, is3D, onSelectIncident, flyToTarget]);
 
   return (
     <div className="relative w-full h-[580px] bg-slate-950 overflow-hidden rounded-b-xl border border-slate-800">
@@ -669,6 +719,22 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                     </Tooltip>
                   </CircleMarker>
                 ))}
+                {/* Search pin marker — shown when a location is searched */}
+                {flyToTarget && (
+                  <Marker
+                    position={[flyToTarget.lat, flyToTarget.lng]}
+                    icon={searchPinIcon}
+                  >
+                    <Tooltip direction="top" offset={[0, -38]} permanent={false} opacity={1}>
+                      <div className="min-w-[160px] p-0.5">
+                        <p className="text-xs font-bold text-slate-900">{flyToTarget.label}</p>
+                        {flyToTarget.detail && (
+                          <p className="text-[10px] text-slate-500 mt-0.5">{flyToTarget.detail}</p>
+                        )}
+                      </div>
+                    </Tooltip>
+                  </Marker>
+                )}
               </MapContainer>
 
               {/* 2D HUD */}

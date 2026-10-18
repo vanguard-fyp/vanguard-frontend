@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Layout
@@ -9,16 +9,28 @@ import Header from './components/layout/Header';
 import LandingPage from './pages/public/LandingPage';
 import LoginPage from './pages/public/LoginPage';
 
-// Operational Dashboard Pages
-import EOCCommandCenter from './pages/dashboard/EOCCommandCenter';
-import IncidentManagement from './pages/situational/incident-management/IncidentManagement';
-import IncidentDetailPage from './pages/situational/incident-management/IncidentDetailPage';
-import DisasterIntelligence from './pages/situational/disaster-intelligence/DisasterIntelligence';
-import RescueOperations from './pages/coordination/rescue-operations/RescueOperations';
-import ResourceManagement from './pages/coordination/resource-management/ResourceManagement';
-import PublicCommunication from './pages/communication/PublicCommunication';
-import ReportsAnalytics from './pages/analytics/ReportsAnalytics';
-import SystemAdministration from './pages/system/SystemAdministration';
+// Operational pages load when first opened, so signing in does not download
+// every map, chart and 3D view at once.
+const EOCCommandCenter = lazy(() => import('./pages/dashboard/EOCCommandCenter'));
+const IncidentManagement = lazy(() => import('./pages/situational/incident-management/IncidentManagement'));
+const IncidentDetailPage = lazy(() => import('./pages/situational/incident-management/IncidentDetailPage'));
+const DisasterIntelligence = lazy(() => import('./pages/situational/disaster-intelligence/DisasterIntelligence'));
+const RescueOperations = lazy(() => import('./pages/coordination/rescue-operations/RescueOperations'));
+const ResourceManagement = lazy(() => import('./pages/coordination/resource-management/ResourceManagement'));
+const PublicCommunication = lazy(() => import('./pages/communication/PublicCommunication'));
+const ReportsAnalytics = lazy(() => import('./pages/analytics/ReportsAnalytics'));
+const SystemAdministration = lazy(() => import('./pages/system/SystemAdministration'));
+
+/** Shown for the moment a page's code is loading. */
+const PageFallback: React.FC = () => (
+  <div className="space-y-4" aria-busy="true" aria-label="Loading page">
+    <div className="dash-bone h-7 w-56 rounded-lg" />
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      {[0, 1, 2, 3].map((i) => <div key={i} className="dash-bone h-28 rounded-2xl" />)}
+    </div>
+    <div className="dash-bone h-72 rounded-2xl" />
+  </div>
+);
 
 // AI Copilot Sentinel Chatbot
 import EocCopilotChatbot from './components/copilot/EocCopilotChatbot';
@@ -55,6 +67,7 @@ const MainAppLayout: React.FC = () => {
 
         {/* Page content */}
         <main className="flex-1 p-3 sm:p-6 overflow-y-auto" style={{ background: '#f8fafc' }}>
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/dashboard" element={<EOCCommandCenter />} />
             <Route path="/situational/incidents" element={<IncidentManagement />} />
@@ -67,6 +80,7 @@ const MainAppLayout: React.FC = () => {
             <Route path="/system" element={<SystemAdministration />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+          </Suspense>
         </main>
       </div>
 

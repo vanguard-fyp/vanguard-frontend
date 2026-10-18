@@ -1,1 +1,1 @@
-export type ViewMode = 1 | 2 | 3 | 'all';
+export type ViewMode = 1 | 2 | 3 | 'all' | '3d';

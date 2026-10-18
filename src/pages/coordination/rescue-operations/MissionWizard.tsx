@@ -3,13 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
   X, ChevronRight, ChevronLeft, CheckCircle2, AlertTriangle, Sparkles, MapPin, Users, Target, Flag,
-  Clock, FileText, Send, Shield, Loader2, UserPlus, Trash2, Info, BrainCircuit,
+  Clock, FileText, Send, Shield, Loader2, UserPlus, Trash2, BrainCircuit,
 } from 'lucide-react';
-import { DisasterBadge } from '../../../components/ui/dashboard/DisasterBadge';
+import { Tag, StatusTag, SEVERITY_TONE } from '../../../components/ui/shared/Tag';
 import type { Incident, RescueTeam, SeverityLevel } from '../../../types';
 import { steps } from '../../../constants';
 import { useRescueRecommendation } from '../../../hooks';
-import { useAuth } from '../../../context/AuthContext';
 import type { MissionDispatchRequest } from '../../../services/missionService';
 import { ApiError } from '../../../services/apiClient';
 import {
@@ -54,7 +53,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
   defaultIncidentId,
 }) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(defaultIncidentId || null);
   const [selection, setSelection] = useState<TeamSelectionItem[]>([]);
@@ -62,7 +60,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
   const [priority, setPriority] = useState<SeverityLevel>('High');
   const [durationHrs, setDurationHrs] = useState(6);
   const [teamFilter, setTeamFilter] = useState('');
-  const [approved, setApproved] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -98,14 +95,14 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
     if (step === 0) return !!selectedIncidentId;
     if (step === 1) return validation.ok;
     if (step === 2) return objective.trim().length > 3;
-    return validation.ok && approved && !submitting;
+    return validation.ok && !submitting;
   };
 
   const handleNext = () => step < steps.length - 1 && setStep((s) => s + 1);
   const handleBack = () => step > 0 && !submitting && setStep((s) => s - 1);
 
   const handleDispatch = async () => {
-    if (!selectedIncident || !validation.ok || !approved) return;
+    if (!selectedIncident || !validation.ok) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -239,13 +236,18 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                         }`}
                     >
                       <div className="flex items-center justify-between gap-3 mb-1.5">
-                        <span className="text-[11px] font-mono font-bold text-slate-500">
-                          {inc.display_id || inc.id}
-                        </span>
-                        <DisasterBadge type="severity" value={inc.severity} />
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border ml-auto bg-blue-50 text-blue-700 border-blue-200">
-                          {inc.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-600">
+                            {inc.display_id || inc.id}
+                          </span>
+                          <Tag tone={SEVERITY_TONE[inc.severity] ?? 'slate'}>
+                            {inc.severity}
+                          </Tag>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          
+                          <StatusTag status={inc.status} />
+                        </div>
                       </div>
                       <p className="text-sm font-bold text-slate-900">{inc.title}</p>
                       <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-medium">
@@ -575,21 +577,25 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                     </div>
                     <div className="px-4 py-3 flex items-start gap-3">
                       <Flag size={14} className="text-blue-600 mt-0.5 shrink-0" />
-                      <p className="text-xs font-semibold text-slate-800">{priority} priority · {durationHrs} h estimated</p>
+                      <div className="flex items-center gap-2">
+                        <Tag tone={SEVERITY_TONE[priority] ?? 'slate'}>{priority} Priority</Tag>
+                        <span className="text-xs text-slate-500">· {durationHrs} h estimated</span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-                  <p className="text-[11px] text-amber-900 flex items-start gap-1.5">
-                    <Info size={13} className="shrink-0 mt-0.5" />
-                    AI suggestions are advisory. Dispatch is committed only with your approval; capacity is re-checked by the server at the moment of commit and nothing is saved if any team can no longer supply its personnel.
-                  </p>
-                  <label className="flex items-start gap-2 text-xs text-slate-800 cursor-pointer">
-                    <input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} className="mt-0.5" />
-                    <span>I, <strong>{user?.name ?? 'the signed-in officer'}</strong>{user?.role ? ` (${user.role})` : ''}, approve dispatching these teams.</span>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
+                    Operational Note (Optional)
                   </label>
-                  <input value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} maxLength={500} placeholder="Approval note (optional)" className="w-full px-2 py-1.5 text-xs border border-amber-200 rounded-md bg-white" />
+                  <input
+                    value={approvalNote}
+                    onChange={(e) => setApprovalNote(e.target.value)}
+                    maxLength={500}
+                    placeholder="Add operational notes or dispatch instructions..."
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
                 </div>
                 {submitError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">{submitError}</div>
