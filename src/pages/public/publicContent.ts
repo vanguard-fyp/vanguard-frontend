@@ -62,7 +62,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
     ],
   },
   {
-    heading: 'Standard operating procedures',
+    heading: 'SOPs',
     note: 'Peraturan Tetap Operasi for specific hazards.',
     items: [
       {
@@ -92,7 +92,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
     ],
   },
   {
-    heading: 'Preparedness for the public',
+    heading: 'Public preparedness',
     note: 'Material written for households and communities.',
     items: [
       {
