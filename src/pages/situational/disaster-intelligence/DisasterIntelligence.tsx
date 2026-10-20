@@ -342,7 +342,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                       layerPanelOpen ? 'bg-[#1e293b] text-white border-[#1e293b]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
-                    <Globe2 size={13} /> Layers <span className="tabular-nums opacity-70">{Object.values(layers).filter(Boolean).length}</span>
+                    <Globe2 size={13} /> Filters <span className="tabular-nums opacity-70">{Object.values(layers).filter(Boolean).length}</span>
                   </button>
                 )}
               </div>

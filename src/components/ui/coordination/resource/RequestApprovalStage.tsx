@@ -394,7 +394,7 @@ export const RequestApprovalStage: React.FC<RequestApprovalStageProps> = ({ onAp
             <RequestSummary req={rejecting} tone="reject" quantityLabel="Quantity Requested" />
             <label className="block">
               <span className="block text-xs font-bold text-slate-800 mb-1">
-                Rejection reason / operational notes <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
+                Rejection Reason / Operational Notes <span className="text-[10px] text-slate-400 font-normal">(optional)</span>
               </span>
               <textarea
                 rows={3}

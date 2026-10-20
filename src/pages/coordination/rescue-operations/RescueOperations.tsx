@@ -650,7 +650,7 @@ const RescueOperations: React.FC = () => {
                   <h3 className="text-base font-bold text-slate-900">Decommission Rescue Unit</h3>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                     Are you sure you want to decommission and remove{' '}
-                    <strong className="text-slate-900">{teamToDelete.name}</strong> ({teamToDelete.agency})? This will archive the unit and remove it from active field dispatch.
+                    <strong className="text-slate-900">{teamToDelete.name}</strong> ({teamToDelete.agency})? 
                   </p>
                 </div>
 

@@ -173,10 +173,10 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                 <div className="flex flex-col items-center gap-1">
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-all ${i < step
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : i === step
-                          ? 'bg-white border-blue-600 text-blue-700'
-                          : 'bg-white border-slate-300 text-slate-400'
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : i === step
+                        ? 'bg-white border-blue-600 text-blue-700'
+                        : 'bg-white border-slate-300 text-slate-400'
                       }`}
                   >
                     {i < step ? '✓' : i + 1}
@@ -231,8 +231,8 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                       key={inc.id}
                       onClick={() => { setSelectedIncidentId(inc.id); setSelection([]); setObjective(''); }}
                       className={`w-full text-left rounded-xl border p-4 transition-all cursor-pointer ${selectedIncidentId === inc.id
-                          ? 'border-blue-500 bg-blue-50/60 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                        ? 'border-blue-500 bg-blue-50/60 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
                         }`}
                     >
                       <div className="flex items-center justify-between gap-3 mb-1.5">
@@ -245,7 +245,7 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                           </Tag>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          
+
                           <StatusTag status={inc.status} />
                         </div>
                       </div>
@@ -336,8 +336,8 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                                 disabled={selected || !feasible}
                                 onClick={() => team && setSelection((sel) => addTeam(sel, team, 'ai', Math.min(s.recommended_personnel, s.available_now ?? s.recommended_personnel)))}
                                 className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selected
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
-                                    : 'bg-violet-600 hover:bg-violet-700 text-white shadow-xs'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                                  : 'bg-violet-600 hover:bg-violet-700 text-white shadow-xs'
                                   } disabled:opacity-40 disabled:cursor-not-allowed`}
                               >
                                 {selected ? '✓ Added' : '+ Add Team'}
@@ -617,7 +617,7 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
               </button>
             ) : (
               <button onClick={handleDispatch} disabled={!canProceed()} className="flex items-center gap-1.5 px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg cursor-pointer">
-                {submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Approve &amp; dispatch
+                {submitting ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} Approve &amp; Dispatch
               </button>
             )}
           </div>

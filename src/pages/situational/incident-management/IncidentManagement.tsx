@@ -712,7 +712,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors cursor-pointer"
           >
             <Plus size={15} />
-            <span>Report incident</span>
+            <span>Report Incident</span>
           </button>
         </div>
       </motion.div>
@@ -1103,7 +1103,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       <FormModal
         open={reportModalOpen}
         onClose={() => setReportModalOpen(false)}
-        title="Report incident"
+        title="Report Incident"
         icon={Siren}
         subtitle={prefillSource ? `Pre-filled from ${prefillSource}. Check each field before submitting.` : 'National EOC register'}
         width="max-w-2xl"
@@ -1130,7 +1130,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
           </Field>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Disaster type" required>
+            <Field label="Disaster Type" required>
               <select value={newType} onChange={(e) => setNewType(e.target.value as DisasterType)} className={`${inputCls} cursor-pointer`}>
                 <option value="Flood">Flood</option>
                 <option value="Flash Flood">Flash Flood</option>
@@ -1143,7 +1143,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 <option value="Other">Other</option>
               </select>
             </Field>
-            <Field label="Reported through" required>
+            <Field label="Reported Through" required>
               <select value={newSourceType} onChange={(e) => setNewSourceType(e.target.value as typeof newSourceType)} className={`${inputCls} cursor-pointer`}>
                 <option value="Agency Patrol">Agency patrol / field team</option>
                 <option value="Emergency 999">Emergency 999 call</option>
@@ -1159,7 +1159,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 <option value="Low">Low (advisory)</option>
               </select>
             </Field>
-            <Field label="Disaster level" required>
+            <Field label="Disaster Level" required>
               <select value={newDisasterLevel} onChange={(e) => setNewDisasterLevel(e.target.value as DisasterLevel)} className={`${inputCls} cursor-pointer`}>
                 <option value="Level 1: District">Level 1: District</option>
                 <option value="Level 2: State">Level 2: State</option>
@@ -1201,7 +1201,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         </FormSection>
 
         <FormSection>
-          <Field label="What is happening" required error={formErrors.description}>
+          <Field label="Observation/ Description" required error={formErrors.description}>
             <textarea
               rows={3}
               value={newDescription}
@@ -1221,7 +1221,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
               {hasPin && (
                 <Field
                   className={needsReporterContact ? '' : 'sm:col-span-2'}
-                  label="Weather at the pin"
+                  label="Pinned Location Weather"
                   optional={!weatherAutoLoaded && !fetchingWeather}
                   aside={fetchingWeather
                     ? <span className="text-[11px] text-slate-400 flex items-center gap-1"><Loader2 size={11} className="animate-spin" />Checking</span>
@@ -1250,7 +1250,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         <FormSection>
           <div className="space-y-2">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Field label="People affected">
+              <Field label="People Affected">
                 <input type="number" min={0} value={newAffected} onChange={(e) => setNewAffected(e.target.value)} placeholder="Unknown" className={`${inputCls} tabular-nums`} />
               </Field>
               <Field label="Casualties">
@@ -1261,7 +1261,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <option value="">Unknown</option><option>None</option><option>Minor</option><option>Moderate</option><option>Severe</option>
                 </select>
               </Field>
-              <Field label="Road access" note="0–100">
+              <Field label="Road Access" note="0–100">
                 <input type="number" min={0} max={100} value={newAccess} onChange={(e) => setNewAccess(e.target.value)} placeholder="Unknown" className={`${inputCls} tabular-nums`} />
               </Field>
             </div>
@@ -1281,24 +1281,24 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       <FormModal
         open={showDuplicateModal && !!duplicateMatch}
         onClose={() => setShowDuplicateModal(false)}
-        title="Possible duplicate"
+        title="Possible Duplicate"
         icon={CopyCheck}
         subtitle={duplicateMatch ? `An active ${duplicateMatch.type.toLowerCase()} is already open in ${duplicateMatch.district}, ${duplicateMatch.state}.` : undefined}
         width="max-w-2xl"
         footer={<>
-          <GhostButton onClick={handleDuplicateConfirmAndReturn} className="mr-auto">Discard my report</GhostButton>
+          <GhostButton onClick={handleDuplicateConfirmAndReturn} className="mr-auto">Discard My Report</GhostButton>
           <button type="button" onClick={handleDuplicateUpdateExisting}
             className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer">
-            Update existing
+            Update Existing
           </button>
-          <PrimaryButton onClick={handleDuplicateProceedAsNew} pending={createIncidentMutation.isPending}>Create as new</PrimaryButton>
+          <PrimaryButton onClick={handleDuplicateProceedAsNew} pending={createIncidentMutation.isPending}>Create As New</PrimaryButton>
         </>}
       >
         {duplicateMatch && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {[
               {
-                label: 'Already open',
+                label: 'Existing Active Record',
                 id: getCleanDisplayId(duplicateMatch.id, duplicateMatch.display_id),
                 title: duplicateMatch.title,
                 place: formatFullLocation(duplicateMatch.location, duplicateMatch.district, duplicateMatch.state, duplicateMatch.administrative_district),
@@ -1308,7 +1308,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 text: duplicateMatch.description,
               },
               {
-                label: 'Your report',
+                label: 'Your Report',
                 id: 'Not saved',
                 title: newTitle,
                 place: [newLocation, newDistrict, newState].filter(Boolean).join(', '),
@@ -1346,7 +1346,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       <FormModal
         open={editModalOpen && !!editingIncident}
         onClose={() => setEditModalOpen(false)}
-        title="Update incident"
+        title="Update Incident"
         icon={PencilLine}
         subtitle={editingIncident ? `${getCleanDisplayId(editingIncident.id, editingIncident.display_id)} · ${editingIncident.type}` : undefined}
         onSubmit={handleSaveEdit}
@@ -1386,7 +1386,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 <option value="Low">Low</option>
               </select>
             </Field>
-            <Field label="Disaster level" required error={editErrors.disasterLevel}>
+            <Field label="Disaster Level" required error={editErrors.disasterLevel}>
               <select
                 value={editDisasterLevel}
                 onChange={(e) => {
@@ -1404,7 +1404,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         </FormSection>
 
         <FormSection>
-          <Field label="Situation notes" required error={editErrors.description}>
+          <Field label="Situation Notes" required error={editErrors.description}>
             <textarea
               rows={3}
               value={editDescription}
@@ -1420,7 +1420,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         <FormSection>
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="People affected">
+              <Field label="People Affected">
                 <input type="number" min={0} value={editAffectedPopulation}
                   onChange={(e) => setEditAffectedPopulation(parseInt(e.target.value, 10) || 0)} className={`${inputCls} tabular-nums`} />
               </Field>
@@ -1428,7 +1428,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 <input type="number" min={0} value={editCasualtiesCount}
                   onChange={(e) => setEditCasualtiesCount(parseInt(e.target.value, 10) || 0)} className={`${inputCls} tabular-nums`} />
               </Field>
-              <Field label="Infrastructure damage">
+              <Field label="Infrastructure Damage">
                 <select value={editInfrastructureDamage} onChange={(e) => setEditInfrastructureDamage(e.target.value as typeof editInfrastructureDamage)} className={`${inputCls} cursor-pointer`}>
                   <option value="None">None</option>
                   <option value="Minor">Minor</option>
@@ -1436,7 +1436,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <option value="Severe">Severe</option>
                 </select>
               </Field>
-              <Field label="Road access" note="0–100">
+              <Field label="Road Access" note="0–100">
                 <input type="number" min={0} max={100} value={editAccessibilityScore}
                   onChange={(e) => setEditAccessibilityScore(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))} className={`${inputCls} tabular-nums`} />
               </Field>
@@ -1472,7 +1472,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         danger
       >
         {incidentToDelete && (
-          <><span className="font-semibold text-slate-800">{getCleanDisplayId(incidentToDelete.id, incidentToDelete.display_id)}</span> will leave the active incident list.</>
+          <>Are you sure you want to remove <span className="font-semibold text-slate-800">{getCleanDisplayId(incidentToDelete.id, incidentToDelete.display_id)}</span>?</>
         )}
       </ConfirmModal>
     </motion.div>

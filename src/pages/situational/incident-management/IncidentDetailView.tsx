@@ -353,10 +353,10 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     { key: 'export', label: 'Export' },
   ];
   const IMPACT: { field: FactField; title: string; caption: string; color: string; Icon: typeof Users; render: (v: NonNullable<Incident[FactField]>) => React.ReactNode; small?: boolean }[] = [
-    { field: 'affected_population', title: 'People affected', caption: 'Field report', color: TONE.indigo, Icon: Users, render: (v) => Number(v).toLocaleString() },
+    { field: 'affected_population', title: 'People Affected', caption: 'Field report', color: TONE.indigo, Icon: Users, render: (v) => Number(v).toLocaleString() },
     { field: 'casualties_count', title: 'Casualties', caption: 'Needing immediate aid', color: TONE.red, Icon: AlertTriangle, render: (v) => Number(v).toLocaleString() },
-    { field: 'infrastructure_damage', title: 'Infrastructure damage', caption: 'Primary impact', color: TONE.blue, Icon: Building2, render: (v) => String(v), small: true },
-    { field: 'accessibility_score', title: 'Access score', caption: 'Ground access', color: TONE.cyan, Icon: Navigation, render: (v) => <>{String(v)}<span className="text-sm text-slate-400 font-semibold">/100</span></> },
+    { field: 'infrastructure_damage', title: 'Infrastructure Damage', caption: 'Primary impact', color: TONE.blue, Icon: Building2, render: (v) => String(v), small: true },
+    { field: 'accessibility_score', title: 'Access Score', caption: 'Ground access', color: TONE.cyan, Icon: Navigation, render: (v) => <>{String(v)}<span className="text-sm text-slate-400 font-semibold">/100</span></> },
   ];
   const hasConditions = factState(incident, 'weather_condition') !== 'unknown' && !!incident.weather_condition?.trim()
     || weatherStatus === 'loading' || !!liveWeather;
@@ -444,7 +444,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <Edit3 size={13} style={{ color: TONE.blue }} />
-            Update impact
+            Update Impact
           </button>
           <button
             type="button"
@@ -452,7 +452,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <BrainCircuit size={14} style={{ color: TONE.indigo }} />
-            Intelligence assessment
+            Intelligence Assessment
           </button>
         </div>
       </div>
@@ -632,13 +632,13 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               {activeCommandTab === 'verify' && (
                 incident.status === 'Unverified' ? (
                   <>
-                    <Note tone="amber" title="Waiting for verification">Confirm the report is real before sending teams.</Note>
+                    <Note tone="amber" title="Waiting for Verification">Confirm the report is real before sending teams.</Note>
                     <button
                       onClick={() => setShowVerifyModal(true)}
                       disabled={updateIncident.isPending}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                     >
-                      <CheckCircle size={14} /> Verify report
+                      <CheckCircle size={14} /> Verify Report
                     </button>
                     <button
                       onClick={() => {
@@ -648,7 +648,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                       disabled={updateIncident.isPending}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-60 text-red-700 bg-red-50 hover:bg-red-100"
                     >
-                      <XCircle size={14} /> Reject or mark duplicate
+                      <XCircle size={14} /> Reject/ Mark Duplicate
                     </button>
                   </>
                 ) : (
@@ -690,13 +690,13 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                   </Note>
                 ) : (
                   <>
-                    <Note tone="slate" title="Close this incident">Closes its missions, releases assigned teams and files the closing record.</Note>
+                    <Note tone="slate" title="Incident Completion">Closes its missions, releases assigned teams and files the closing record.</Note>
                     <button
                       onClick={() => setShowResolveModal(true)}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
                       style={{ background: NAVY }}
                     >
-                      <CheckSquare size={14} /> Mark resolved
+                      <CheckSquare size={14} /> Mark Resolved
                     </button>
                   </>
                 )
@@ -705,8 +705,8 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               {activeCommandTab === 'export' && (
                 <ul className="space-y-2">
                   {[
-                    { label: 'Situation report (SITREP)', hint: 'Official PDF', Icon: Download, run: () => incidentService.downloadSitrepPdf(incident.id, incident.display_id) },
-                    { label: 'Public warning poster', hint: 'Printable PDF', Icon: Printer, run: () => incidentService.downloadSitrepPoster(incident.id, incident.display_id) },
+                    { label: 'Situation Report (SITREP)', hint: 'Official PDF', Icon: Download, run: () => incidentService.downloadSitrepPdf(incident.id, incident.display_id) },
+                    { label: 'Public Warning Poster', hint: 'Printable PDF', Icon: Printer, run: () => incidentService.downloadSitrepPoster(incident.id, incident.display_id) },
                   ].map(({ label, hint, Icon, run }) => (
                     <li key={label}>
                       <button onClick={run}
@@ -732,7 +732,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             </header>
             <dl className="px-5 py-2 divide-y divide-slate-100 text-xs">
               <div className="flex items-center justify-between gap-3 py-2.5">
-                <dt className="text-slate-500 shrink-0">Disaster level</dt>
+                <dt className="text-slate-500 shrink-0">Disaster Level</dt>
                 <dd><LevelTag level={incident.disaster_level} /></dd>
               </div>
               <div className="flex items-center justify-between gap-3 py-2.5">
@@ -799,13 +799,13 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       <FormModal
         open={showResolveModal}
         onClose={() => setShowResolveModal(false)}
-        title="Resolve incident"
+        title="Resolve Incident"
         icon={CheckSquare}
         subtitle={`${idLabel} · Closes Missions`}
         width="max-w-md"
         footer={<>
           <GhostButton onClick={() => setShowResolveModal(false)}>Cancel</GhostButton>
-          <PrimaryButton onClick={handleResolve} pending={resolveIncident.isPending}>Mark resolved</PrimaryButton>
+          <PrimaryButton onClick={handleResolve} pending={resolveIncident.isPending}>Mark Resolved</PrimaryButton>
         </>}
       >
         <Field label="Closing officer">
@@ -839,16 +839,16 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       <FormModal
         open={showRejectModal}
         onClose={() => setShowRejectModal(false)}
-        title="Reject report"
+        title="Reject Report"
         icon={XCircle}
-        subtitle={`${idLabel} · leaves the active list, the reason is logged`}
+        subtitle={`${idLabel} · removes from active list`}
         width="max-w-md"
         footer={<>
           <GhostButton onClick={() => setShowRejectModal(false)}>Cancel</GhostButton>
           <PrimaryButton danger onClick={handleConfirmReject} pending={updateIncident.isPending} disabled={!rejectReason.trim()}>Reject</PrimaryButton>
         </>}
       >
-        <Field label="Reason" required error={rejectReasonError}>
+        <Field label="Reason for Rejection" required error={rejectReasonError}>
           <textarea
             value={rejectReason}
             onChange={(e) => {
@@ -866,9 +866,9 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
       <FormModal
         open={showAssessmentModal}
         onClose={() => setShowAssessmentModal(false)}
-        title="Update impact"
+        title="Update Impact"
         icon={Gauge}
-        subtitle={`${idLabel} · ${incident.title}`}
+        subtitle={`Impact updates for ${idLabel}`}
         width="max-w-md"
         footer={<>
           <GhostButton onClick={() => setShowAssessmentModal(false)}>Cancel</GhostButton>
@@ -876,7 +876,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         </>}
       >
         <div className="grid grid-cols-2 gap-3">
-          <Field label="People affected">
+          <Field label="People Affected">
             <input type="number" min={0} value={assessmentPop}
               onChange={(e) => setAssessmentPop(parseInt(e.target.value, 10) || 0)} className={`${inputCls} tabular-nums`} />
           </Field>
@@ -884,7 +884,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             <input type="number" min={0} value={assessmentCas}
               onChange={(e) => setAssessmentCas(parseInt(e.target.value, 10) || 0)} className={`${inputCls} tabular-nums`} />
           </Field>
-          <Field label="Infrastructure damage">
+          <Field label="Infrastructure Damage">
             <select value={assessmentInfra} onChange={(e) => setAssessmentInfra(e.target.value as typeof assessmentInfra)} className={`${inputCls} cursor-pointer`}>
               <option value="None">None</option>
               <option value="Minor">Minor</option>
@@ -892,7 +892,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <option value="Severe">Severe</option>
             </select>
           </Field>
-          <Field label="Road access" note="0–100">
+          <Field label="Road Access" note="0–100">
             <input type="number" min={0} max={100} value={assessmentAccess}
               onChange={(e) => setAssessmentAccess(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))} className={`${inputCls} tabular-nums`} />
           </Field>

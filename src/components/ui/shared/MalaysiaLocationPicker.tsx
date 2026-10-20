@@ -271,7 +271,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Postcode <span className="font-normal text-slate-400 ml-1">optional</span>
+            Postcode <span className="font-normal text-slate-400 ml-1">(optional)</span>
           </label>
           <div className="relative">
             <input
@@ -342,7 +342,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       {/* 1. Address search → moves the pin */}
       <div className="relative">
         <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-          Specific location / address <span className="text-red-600">*</span>
+          Specific Location / Address <span className="text-red-600">*</span>
         </label>
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -359,7 +359,7 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
           />
           {searching && <Loader2 size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />}
         </div>
-        <p className="text-[10px] text-slate-500 mt-0.5">Pick a result to move the pin, or click the map — the fields below follow the pin.</p>
+        {/* <p className="text-[10px] text-slate-500 mt-0.5">Pick a result to move the pin, or click the map — the fields below follow the pin.</p> */}
         {suggestions.length > 0 && (
           <div className="absolute top-full left-0 right-0 z-[500] mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
             {suggestions.map((p, i) => (
@@ -384,12 +384,12 @@ export const MalaysiaLocationPicker: React.FC<MalaysiaLocationPickerProps> = ({
       </div>
 
       {/* 2. Map — the source of truth */}
-      <div>
+      <div className='mt-5'>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs font-semibold text-slate-700">
-            Incident pin <span className="text-red-600">*</span>
+            Incident Pin <span className="text-red-600">*</span>
           </label>
-          <span className="text-[10px] text-slate-500">Click or drag to adjust</span>
+          <span className="text-[10px] text-slate-500">Click or drag pin to auto-fill address</span>
         </div>
         <div className="relative rounded-xl overflow-hidden border border-slate-200 shadow-xs h-56">
           <div ref={mapEl} className="w-full h-full" />

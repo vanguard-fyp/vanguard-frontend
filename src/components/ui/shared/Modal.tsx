@@ -193,8 +193,8 @@ export const Field: React.FC<{
         <label htmlFor={id} className={labelCls}>
           {label}
           {required && <span className="text-red-600 ml-0.5">*</span>}
-          {optional && <span className="font-normal text-slate-400 ml-1.5">optional</span>}
-          {note && <span className="font-normal text-slate-400 ml-1.5">{note}</span>}
+          {optional && <span className="font-normal text-slate-400 ml-1.5">(optional)</span>}
+          {note && <span className="font-normal text-slate-400 ml-1.5">({note})</span>}
         </label>
         {aside && <span className="mb-1.5">{aside}</span>}
       </div>

@@ -224,15 +224,15 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-blue-200 overflow-hidden"
+          className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
         >
           {/* Header */}
-          <div className="px-6 py-3.5 bg-blue-600 text-white flex items-center justify-between">
+          <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <PackagePlus size={18} />
+              <div className='bg-blue-600 p-2 rounded-xl'><PackagePlus size={18} /></div>
               <div>
-                <h3 className="text-sm font-bold">New resource request</h3>
-                <p className="text-xs text-blue-100">Sent to the review queue for approval</p>
+                <h3 className="text-sm font-bold">New Resource Request</h3>
+                <p className="text-xs text-slate-300">Sent to the review queue for approval</p>
               </div>
             </div>
             <button

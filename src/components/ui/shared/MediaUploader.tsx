@@ -152,7 +152,7 @@ export const MediaUploader: React.FC<MediaUploaderProps> = ({ items, onChange, e
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-700">
-          Photos and videos <span className="font-normal text-slate-400 ml-1.5">optional</span>
+          Photos and Videos <span className="font-normal text-slate-400 ml-1">(optional)</span>
         </span>
         {total > 0 && <span className="text-[11px] text-slate-400 tabular-nums">{total} of {MAX_ATTACHMENTS}</span>}
       </div>

@@ -92,10 +92,10 @@ const SummaryTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   const score = isNum(incident.ai_priority_score) ? Math.round(incident.ai_priority_score) : null;
   const band = score == null ? TONE.slate : score >= 80 ? TONE.red : score >= 60 ? TONE.orange : TONE.blue;
   const figures = [
-    { label: 'People affected', Icon: Users, color: TONE.indigo, value: factText(incident, 'affected_population', (v) => Number(v).toLocaleString()) },
+    { label: 'People Affected', Icon: Users, color: TONE.indigo, value: factText(incident, 'affected_population', (v) => Number(v).toLocaleString()) },
     { label: 'Casualties', Icon: HeartPulse, color: TONE.red, value: factText(incident, 'casualties_count', (v) => Number(v).toLocaleString()) },
-    { label: 'Road access', Icon: Route, color: TONE.teal, value: factText(incident, 'accessibility_score', (v) => `${v}/100`) },
-    { label: 'Infrastructure damage', Icon: Building2, color: TONE.amber, value: factText(incident, 'infrastructure_damage', (v) => String(v)) },
+    { label: 'Road Access', Icon: Route, color: TONE.teal, value: factText(incident, 'accessibility_score', (v) => `${v}/100`) },
+    { label: 'Infrastructure Damage', Icon: Building2, color: TONE.amber, value: factText(incident, 'infrastructure_damage', (v) => String(v)) },
   ];
 
   return (
@@ -259,7 +259,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({ incident, onClose, onV
             <motion.aside
               role="dialog"
               aria-modal="true"
-              aria-label={`Situation report: ${incident.title}`}
+              aria-label={`Situation Report: ${incident.title}`}
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
               className="absolute right-0 top-0 h-dvh w-full max-w-[460px] bg-white shadow-[-24px_0_60px_-24px_rgba(15,23,42,.35)] flex flex-col"
@@ -268,7 +268,7 @@ export const SitrepPanel: React.FC<SitrepPanelProps> = ({ incident, onClose, onV
                 <span className="absolute inset-x-0 top-0 h-1" style={{ background: SEVERITY_HEX[incident.severity] ?? TONE.slate }} aria-hidden="true" />
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs text-slate-400 tabular-nums">Situation report · {incident.display_id || incident.id}</p>
+                    <p className="text-xs text-slate-400 tabular-nums">Situation Report · {incident.display_id || incident.id}</p>
                     <h2 className="text-lg font-bold text-white leading-snug mt-1">{incident.title}</h2>
                     <p className="text-[13px] text-slate-300 mt-1 truncate">{[incident.location, incident.district, incident.state].filter(Boolean).join(', ')}</p>
                     <div className="mt-3 flex items-center gap-1.5">

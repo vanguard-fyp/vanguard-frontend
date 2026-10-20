@@ -116,24 +116,24 @@ const EOCCommandCenter: React.FC = () => {
 
       {/* ─── Row 1: headline numbers with trends ─────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
-        <StatCard title="Active incidents" value={activeIncidents.length} icon={AlertTriangle} accent={ACCENT.incident}
+        <StatCard title="Active Incidents" value={activeIncidents.length} icon={AlertTriangle} accent={ACCENT.incident}
           loading={incLoading || kpiLoading}
           pill={criticalCount > 0 ? { text: `${criticalCount} critical`, tone: 'bad', trend: 'up' } : undefined}
           detail={severityLine || undefined}
           spark={{ data: kpiTrends?.incidents, labels: kpiTrends?.labels, kind: 'area', caption: sparkCaption('New') }}
         />
-        <StatCard title="People affected" value={totalAffected.toLocaleString()} icon={Users} accent={ACCENT.people}
+        <StatCard title="People Affected" value={totalAffected.toLocaleString()} icon={Users} accent={ACCENT.people}
           loading={incLoading || kpiLoading}
           detail={`Across ${uniqueDistricts.length} ${uniqueDistricts.length === 1 ? 'area' : 'areas'}`}
           spark={{ data: kpiTrends?.population, labels: kpiTrends?.labels, kind: 'bar', caption: sparkWindow ? `Running total · ${sparkWindow}` : undefined }}
         />
-        <StatCard title="Teams deployed" value={`${deployedTeams.length}/${onDutyTeams.length}`} icon={ShieldCheck} accent={ACCENT.team}
+        <StatCard title="Teams Deployed" value={`${deployedTeams.length}/${onDutyTeams.length}`} icon={ShieldCheck} accent={ACCENT.team}
           loading={teamsLoading || capLoading}
           detail={[deployedAgencies, offDutyTeamCount > 0 ? `${offDutyTeamCount} off duty` : ''].filter(Boolean).join(' · ') || 'No teams deployed'}
           segments={teamCapacity.map((t) => ({ label: t.name, filled: t.deployed ?? 0, total: (t.deployed ?? 0) + (t.available ?? 0) }))}
           progressCaption={capacityTotals.onDuty > 0 ? `${capacityTotals.deployed} of ${capacityTotals.onDuty} on-duty crew deployed (${capacityPct}%)` : undefined}
         />
-        <StatCard title="Active missions" value={activeMissions.length} icon={Route} accent={ACCENT.mission}
+        <StatCard title="Active Missions" value={activeMissions.length} icon={Route} accent={ACCENT.mission}
           loading={misLoading || kpiLoading}
           pill={inProgressCount > 0 ? { text: `${inProgressCount} in progress`, tone: 'neutral' } : undefined}
           detail={`${pendingCount} queued`}
