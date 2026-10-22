@@ -1,7 +1,7 @@
 import React, { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, X, type LucideIcon } from 'lucide-react';
+import { Loader2, Trash, X, type LucideIcon } from 'lucide-react';
 
 /* ============================================================
    Modals in the operations app.
@@ -92,20 +92,23 @@ interface FormModalProps {
   onSubmit?: (e: React.FormEvent) => void;
   footer: React.ReactNode;
   children: React.ReactNode;
+  reject?: boolean;
 }
 
 /** Form modal: navy header with icon, scrolling body, fixed footer. */
-export const FormModal: React.FC<FormModalProps> = ({ open, onClose, title, icon, subtitle, width, onSubmit, footer, children }) => {
+export const FormModal: React.FC<FormModalProps> = ({ open, onClose, title, icon, subtitle, width, onSubmit, footer, children, reject }) => {
   const id = `modal-${title.replace(/\W+/g, '-').toLowerCase()}`;
   const Body = onSubmit ? 'form' : 'div';
   return (
     <Shell open={open} onClose={onClose} width={width} labelledBy={id}>
-      <header className="px-6 py-4 flex items-center justify-between gap-4 text-white shrink-0" style={{ background: NAVY }}>
+      <header className="px-6 py-4 flex items-center justify-between gap-4 text-white shrink-0" style={{ background: reject ? `#dc2626` : NAVY }}>
         <div className="flex items-center gap-3 min-w-0">
-          <NavyIcon icon={icon} />
+          {reject ? <div className="w-9 h-9 rounded-lg bg-white ring-1 ring-inset ring-white/10 flex items-center justify-center shrink-0 text-red-600">
+            <Trash size={17} strokeWidth={2} />
+          </div> : <NavyIcon icon={icon} />}
           <div className="min-w-0">
-            <h3 id={id} className="text-[15px] font-bold leading-snug">{title}</h3>
-            {subtitle && <p className="text-xs text-slate-400 mt-0.5 truncate">{subtitle}</p>}
+            <h3 id={id} className={`text-[15px] font-bold leading-snug ${reject ? 'text-slate-100' : 'text-white'}`}>{title}</h3>
+            {subtitle && <p className={`text-xs ${reject ? 'text-slate-100' : 'text-slate-400'} mt-0.5 truncate`}>{subtitle}</p>}
           </div>
         </div>
         <button type="button" onClick={onClose} aria-label="Close"

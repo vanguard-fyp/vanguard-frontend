@@ -847,6 +847,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
           <GhostButton onClick={() => setShowRejectModal(false)}>Cancel</GhostButton>
           <PrimaryButton danger onClick={handleConfirmReject} pending={updateIncident.isPending} disabled={!rejectReason.trim()}>Reject</PrimaryButton>
         </>}
+        reject={true}
       >
         <Field label="Reason for Rejection" required error={rejectReasonError}>
           <textarea
