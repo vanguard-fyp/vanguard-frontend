@@ -115,7 +115,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
         teams: toDispatchTeams(selection),
         approval: { confirmed: true, note: approvalNote.trim() || undefined },
         idempotency_key: dispatchKey,
-        source_assessment_id: rec.data?.assessment_id ?? null,
         recommended_personnel: required ?? null,
       });
       onClose();

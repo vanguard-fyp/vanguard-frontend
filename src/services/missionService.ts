@@ -16,7 +16,6 @@ export interface MissionDispatchRequest {
   teams: TeamSelection[];
   approval: { confirmed: boolean; note?: string };
   idempotency_key?: string;
-  source_assessment_id?: string | null;
   recommended_personnel?: number | null;
 }
 
