@@ -23,6 +23,9 @@ interface CommunicationCardProps {
   onToggleExpand: () => void;
   onToggleActive: (id: string) => void;
   onDelete?: (id: string) => void;
+  /** Push this announcement to citizens' phones again, as an update. */
+  onResend?: (id: string) => void;
+  isResending?: boolean;
 }
 
 export const CommunicationCard: React.FC<CommunicationCardProps> = ({
@@ -31,6 +34,8 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
   onToggleExpand,
   onToggleActive,
   onDelete,
+  onResend,
+  isResending = false,
 }) => {
 
   return (
@@ -157,13 +162,17 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
                     Reactivate Announcement
                   </button>
                 )}
-                <button
-                  onClick={() => alert(`Resending broadcast for ${announcement.title} across active channels.`)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer"
-                >
-                  <Send size={13} />
-                  Resend Broadcast
-                </button>
+                {announcement.active && onResend && (
+                  <button
+                    onClick={() => onResend(announcement.id)}
+                    disabled={isResending}
+                    title="Send it to citizens' phones in the target area again, marked as an update"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <Send size={13} />
+                    {isResending ? 'Sending…' : 'Resend to Phones'}
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>

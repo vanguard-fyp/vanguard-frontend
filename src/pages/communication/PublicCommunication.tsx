@@ -116,6 +116,24 @@ const PublicCommunication: React.FC = () => {
     }
   };
 
+  const pushNote = (ann: PublicAnnouncement) => {
+    if (!ann.push_job) return 'No push was queued (no valid target area).';
+    return ann.push_job.mode === 'off'
+      ? 'Push queued. It is sent once the push worker is connected.'
+      : "Push handed to the worker for citizens' phones in the target area.";
+  };
+
+  const handleResend = (id: string) => {
+    updateMutation.mutate(
+      { id, updates: { notify_citizens: true } },
+      {
+        onSuccess: (ann) => toast.success('Update queued for phones', pushNote(ann)),
+        onError: (err) =>
+          toast.error('Resend failed', err instanceof Error ? err.message : 'Please try again.'),
+      },
+    );
+  };
+
   const handleDelete = (id: string) => {
     const ann = allAnnouncements.find((a) => a.id === id);
     setAnnouncementToDelete({ id, title: ann?.title ?? 'this announcement' });
@@ -139,9 +157,9 @@ const PublicCommunication: React.FC = () => {
   const toast = useToast();
   // Errors propagate to the modal, which stays open with the officer's text.
   const handlePublish = async (data: Partial<PublicAnnouncement>) => {
-    await createMutation.mutateAsync(data);
+    const created = await createMutation.mutateAsync(data);
     setShowComposeModal(false);
-    toast.success('Broadcast published', data.title ?? undefined);
+    toast.success('Broadcast published', data.notify_citizens ? pushNote(created) : data.title ?? undefined);
   };
 
   return (
@@ -252,6 +270,8 @@ const PublicCommunication: React.FC = () => {
                   }
                   onToggleActive={handleToggleActive}
                   onDelete={handleDelete}
+                  onResend={handleResend}
+                  isResending={updateMutation.isPending && updateMutation.variables?.id === ann.id}
                 />
               </motion.div>
             ))

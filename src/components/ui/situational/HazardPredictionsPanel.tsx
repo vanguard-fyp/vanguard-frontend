@@ -126,6 +126,7 @@ const SOURCE_LABEL: Record<string, string> = {
   fire_satellite: 'satellite fire detections',
   air_quality: 'air-quality forecast',
   gdacs: 'GDACS alerts',
+  jps_gauges: 'JPS river & rain gauges',
 };
 
 /** The scan's signals as labelled readings, each formatted with its unit. */
@@ -135,6 +136,18 @@ const readings = (p: HazardPrediction): { label: string; value: string }[] => {
   const out: { label: string; value: string }[] = [];
   const add = (label: string, v: number | null, fmt: (v: number) => string) => { if (v != null) out.push({ label, value: fmt(v) }); };
   if (s.alert_level) out.push({ label: 'GDACS alert', value: String(s.alert_level) });
+  // Measured now by JPS gauges (not a forecast).
+  if (s.basis === 'observed') out.push({ label: 'Basis', value: 'Measured now · JPS gauges' });
+  if (s.worst_indicator) {
+    out.push({
+      label: 'River level',
+      value: `${s.worst_indicator} · ${n('river_level_m')} m (alert ${n('alert_level_m')} m)`,
+    });
+    if (s.worst_station) out.push({ label: 'Station', value: String(s.worst_station) });
+  }
+  add('Stations at alert+', n('stations_at_alert'), (v) => String(v));
+  add('Gauge rain, last hour', n('gauge_rain_last_hour_mm'), (v) => `${v} mm`);
+  add('Gauge rain, today', n('gauge_rain_today_mm'), (v) => `${v} mm`);
   if (p.hazard_type === 'Haze') {
     add('PM2.5 (24 h peak)', n('peak_pm25_24h_ugm3'), (v) => `${v} µg/m³`);
     if (s.peak_aqi != null) out.push({ label: 'Air quality', value: `AQI ${s.peak_aqi}${s.aqi_category ? ` · ${s.aqi_category}` : ''}` });
@@ -237,6 +250,13 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
     watching.current = false;
     qc.invalidateQueries({ queryKey: INTEL_KEYS.predictions });
     const r = scanStatus.result;
+    if (r?.status === 'partial') {
+      toast.warning(
+        'Scan finished with gaps',
+        `${r.written ?? 0} new/updated · ${(r.failed ?? []).length} could not be saved (${(r.failed ?? []).join(', ')}). Run it again to retry.`
+      );
+      return;
+    }
     if (!r || r.status !== 'ok') {
       toast.warning('Scan not completed', r?.reason ?? 'The prediction scan did not finish.');
       return;

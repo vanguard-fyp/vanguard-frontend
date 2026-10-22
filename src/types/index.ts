@@ -362,6 +362,17 @@ export interface PublicAnnouncement {
   issued_at?: string;
   expires_at?: string;
   active: boolean;
+  /** Request only: queue a push to citizens' phones in the target area. */
+  notify_citizens?: boolean;
+  /** Response only: the push queued by this create/update (sent by the push worker). */
+  push_job?: PushJobRef | null;
+}
+
+export interface PushJobRef {
+  id: string;
+  status: string;
+  /** off = queued until the push worker is connected; http / pubsub = handed to the worker */
+  mode: 'off' | 'http' | 'pubsub';
 }
 
 export interface UserAccount {

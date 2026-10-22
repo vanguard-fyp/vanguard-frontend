@@ -13,7 +13,10 @@ export function useAnnouncements() {
   return useQuery({
     queryKey: ANNOUNCEMENT_KEYS.all,
     queryFn: () => announcementService.getAnnouncements(),
-    staleTime: 30_000,
+    staleTime: 10_000,
+    // Other officers' publishes and edits appear without a reload.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 }
 

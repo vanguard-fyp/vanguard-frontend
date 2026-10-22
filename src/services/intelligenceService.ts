@@ -17,8 +17,37 @@ export interface PredictionScanStatus {
   running: boolean;
   scanned_at?: string;
   /** whether each data source answered in the last scan */
-  sources?: Partial<Record<'forecast' | 'river' | 'fire_satellite' | 'air_quality' | 'gdacs', boolean>>;
-  result?: { status: string; candidates?: number; written?: number; expired?: number; reason?: string; scanned_at?: string };
+  sources?: Partial<Record<'forecast' | 'river' | 'fire_satellite' | 'air_quality' | 'gdacs' | 'jps_gauges', boolean>>;
+  /** status: ok | partial (some predictions could not be saved, see failed) | failed | skipped */
+  result?: { status: string; candidates?: number; written?: number; expired?: number; failed?: string[]; reason?: string; scanned_at?: string };
+}
+
+/** Counts and rates for one slice of the accuracy report. */
+export interface AccuracyScore {
+  warnings: number;
+  hits: number;
+  misses: number;
+  false_alarms: number;
+  dismissed: number;
+  pending: number;
+  /** hits / (hits + misses); null when nothing to judge */
+  detection_rate: number | null;
+  /** false alarms / (hits + false alarms) */
+  false_alarm_rate: number | null;
+  /** median hours from first warning to the event (negative = warned after it began) */
+  median_lead_hours: number | null;
+}
+
+/** How early warnings compared with confirmed incidents (GET /intelligence/predictions/accuracy). */
+export interface PredictionAccuracy {
+  days: number;
+  window_hours: number;
+  generated_at: string;
+  overall: AccuracyScore;
+  by_hazard: (AccuracyScore & { hazard: string })[];
+  by_source: (AccuracyScore & { source: string })[];
+  recent_misses: { incident_id: string; title: string; hazard: string; state: string; occurred_at: string }[];
+  recent_false_alarms: { prediction_key: string; hazard: string; state: string; started_at: string; max_score: number; dismissed: boolean }[];
 }
 
 export const intelligenceService = {
@@ -53,6 +82,9 @@ export const intelligenceService = {
   runPredictionScan: () => apiClient.post<{ status: string }>('/intelligence/predictions/scan'),
 
   getPredictionScanStatus: () => apiClient.get<PredictionScanStatus>('/intelligence/predictions/scan'),
+
+  getPredictionAccuracy: (days = 30) =>
+    apiClient.get<PredictionAccuracy>('/intelligence/predictions/accuracy', { days }),
 
   dismissPrediction: (id: string) => apiClient.post<HazardPrediction>(`/intelligence/predictions/${id}/dismiss`),
 

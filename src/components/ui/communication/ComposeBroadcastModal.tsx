@@ -35,6 +35,7 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
   const [postcodeScopeInput, setPostcodeScopeInput] = useState('');
   const [postcodeMatchMsg, setPostcodeMatchMsg] = useState('');
   const [content, setContent] = useState('');
+  const [notifyCitizens, setNotifyCitizens] = useState(true);
   // AI drafting is only on click; the hints below are instant and free.
   const [drafting, setDrafting] = useState(false);
   const [draftInfo, setDraftInfo] = useState<BroadcastDraft | null>(null);
@@ -190,6 +191,7 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
         target_state: targetState,
         target_districts: selectedDistricts,
         content: content.trim(),
+        notify_citizens: notifyCitizens,
       });
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'The broadcast could not be published. Please retry.');
@@ -524,6 +526,19 @@ export const ComposeBroadcastModal: React.FC<ComposeBroadcastModalProps> = ({
               </p>
             )}
           </div>
+
+          <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyCitizens}
+              onChange={(e) => setNotifyCitizens(e.target.checked)}
+              className="mt-0.5 accent-blue-600 cursor-pointer"
+            />
+            <span>
+              <span className="font-bold">Send push notification</span>
+              <span className="text-slate-500"> to citizens' phones in the target area</span>
+            </span>
+          </label>
 
           {/* Footer Actions */}
           {submitError && (

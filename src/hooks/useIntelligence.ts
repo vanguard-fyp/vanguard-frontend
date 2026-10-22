@@ -10,7 +10,17 @@ export const INTEL_KEYS = {
   predictions: ['intelligence', 'predictions'] as const,
   events: ['intelligence', 'events'] as const,
   scan: ['intelligence', 'predictions', 'scan'] as const,
+  accuracy: (days: number) => ['intelligence', 'predictions', 'accuracy', days] as const,
 };
+
+/** Early-warning hits, misses and false alarms over the last `days`. */
+export function usePredictionAccuracy(days: number) {
+  return useQuery({
+    queryKey: INTEL_KEYS.accuracy(days),
+    queryFn: () => intelligenceService.getPredictionAccuracy(days),
+    staleTime: 5 * 60_000,
+  });
+}
 
 /** Wider events (related incidents scored together). */
 export function useWiderEvents() {

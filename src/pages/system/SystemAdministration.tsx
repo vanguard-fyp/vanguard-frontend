@@ -5,6 +5,7 @@ import { useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks';
 import { UserManagementTable } from '../../components/ui/system/UserManagementTable';
 import { UserEditModal } from '../../components/ui/system/UserEditModal';
 import { SystemSettingsPanel } from '../../components/ui/system/SystemSettingsPanel';
+import { PredictionAccuracyPanel } from '../../components/ui/system/PredictionAccuracyPanel';
 import type { AdminSection, UserAccount } from '../../types';
 import { adminTabs, containerAnim, itemAnim } from '../../constants';
 
@@ -137,7 +138,10 @@ const SystemAdministration: React.FC = () => {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
           >
-            <SystemSettingsPanel />
+            <div className="space-y-5">
+              <SystemSettingsPanel />
+              <PredictionAccuracyPanel />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
