@@ -1,6 +1,7 @@
 /**
  * Unified Date & Time Formatter Utility
  * Provides consistent, localized (en-MY / standard) time strings across all Vanguard modules.
+ * Every time is shown in Malaysia time (Asia/Kuala_Lumpur), whatever the browser's timezone.
  */
 
 export function formatDateTime(
@@ -22,13 +23,13 @@ export function formatDateTime(
       return String(dateInput);
     }
 
-    const dateStr = d.toLocaleDateString('en-MY', {
+    const dateStr = d.toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur',
       day: '2-digit',
       month: 'short',
       year: 'numeric',
     });
 
-    const timeStr = d.toLocaleTimeString('en-MY', {
+    const timeStr = d.toLocaleTimeString('en-MY', { timeZone: 'Asia/Kuala_Lumpur',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -48,7 +49,7 @@ export function formatDateOnly(
   try {
     const d = typeof dateInput === 'string' ? new Date(dateInput.trim().replace(' ', 'T')) : new Date(dateInput);
     if (isNaN(d.getTime())) return String(dateInput);
-    return d.toLocaleDateString('en-MY', {
+    return d.toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur',
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -66,7 +67,7 @@ export function formatTimeOnly(
   try {
     const d = typeof dateInput === 'string' ? new Date(dateInput.trim().replace(' ', 'T')) : new Date(dateInput);
     if (isNaN(d.getTime())) return String(dateInput);
-    return d.toLocaleTimeString('en-MY', {
+    return d.toLocaleTimeString('en-MY', { timeZone: 'Asia/Kuala_Lumpur',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,

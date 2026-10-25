@@ -10,7 +10,7 @@ const AXIS_TICK = { fill: '#64748b', fontSize: 11, fontFamily: 'inherit' };
 /** Axis label: day and time only ("1 Aug, 22:00"); the tooltip has the full date. */
 const shortTick = (v: string) => {
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
 const TimelineTooltip = ({ active, payload, label }: any) => {

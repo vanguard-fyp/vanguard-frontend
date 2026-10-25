@@ -31,7 +31,7 @@ const GUARDRAIL_LABEL: Record<string, string> = {
 /** "fallback:google/gemma-4-31b-it:free" -> "gemma-4-31b-it" */
 const modelLabel = (m?: string | null) => (m ? m.replace(/^(gemini|fallback):/, '').replace(/:free$/, '').split('/').pop() : null);
 
-const timeNow = () => new Date().toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' });
+const timeNow = () => new Date().toLocaleTimeString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit' });
 
 /** Starter questions shown before the first message. */
 const STARTERS = [

@@ -186,11 +186,11 @@ const SummaryTab: React.FC<{ incident: Incident }> = ({ incident }) => {
 
 const dayKey = (iso?: string | null) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Date unknown';
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date unknown';
 };
 const timeOf = (iso?: string | null) => {
   const d = iso ? new Date(iso) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
 };
 
 /** Activity grouped by day: a long log reads as a few short lists, newest first. */

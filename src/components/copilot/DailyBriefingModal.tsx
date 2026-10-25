@@ -33,7 +33,7 @@ export const DailyBriefingModal: React.FC<DailyBriefingModalProps> = ({
     return () => document.removeEventListener('keydown', onKey);
   }, [show, onClose]);
 
-  const today = new Date().toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long' });
+  const today = new Date().toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', weekday: 'long', day: 'numeric', month: 'long' });
   const counts = ['Critical', 'High', 'Medium']
     .map((p) => ({ p, n: tasks.filter((t) => t.priority === p).length }))
     .filter((c) => c.n > 0);

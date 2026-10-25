@@ -58,7 +58,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const CURRENT_YEAR = new Date().getFullYear();
+// Current year in Malaysia time (the browser may be in another timezone).
+const CURRENT_YEAR = Number(new Intl.DateTimeFormat('en-MY', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric' }).format(new Date()));
 const YEAR_OPTIONS = [CURRENT_YEAR, CURRENT_YEAR - 1].map(String);
 
 const SEVERITY_PILL: Record<string, string> = {

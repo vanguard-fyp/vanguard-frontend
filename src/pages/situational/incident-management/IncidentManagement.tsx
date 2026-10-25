@@ -1039,7 +1039,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         <Tag tone={ALERT_TONE[gEvent.alertLevel] ?? 'slate'}>{gEvent.alertLevel} alert</Tag>
                         <Tag variant="outline" dot={false}>{gEvent.hazardType}</Tag>
                         <span className="ml-auto text-[11px] font-semibold text-slate-400 tabular-nums">
-                          {gEvent.date ? new Date(gEvent.date).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Date unknown'}
+                          {gEvent.date ? new Date(gEvent.date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date unknown'}
                         </span>
                       </div>
 
