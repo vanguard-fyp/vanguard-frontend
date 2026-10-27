@@ -1068,7 +1068,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                           className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors"
                         >
                           <ExternalLink size={13} />
-                          GDACS page
+                          GDACS Portal
                         </a>
                         <button
                           onClick={() => handleEscalateGdacs(gEvent)}
