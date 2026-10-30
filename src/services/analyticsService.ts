@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient';
+import { apiClient, downloadBlob } from './apiClient';
 import type { ActivityEvent, AnalyticsSummary, KpiTrends } from '../types';
 
 type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
@@ -103,10 +103,7 @@ export const analyticsService = {
    * Export all analytics as CSV file download
    */
   exportCSV: async (year: string = '2026'): Promise<void> => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    const res = await fetch(`${baseUrl}/analytics/export/csv?year=${encodeURIComponent(year)}`);
-    if (!res.ok) throw new Error('Failed to export CSV');
-    const blob = await res.blob();
+    const blob = await downloadBlob(`/analytics/export/csv?year=${encodeURIComponent(year)}`);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -121,10 +118,7 @@ export const analyticsService = {
    * Export all analytics as structured PDF report download
    */
   exportPDF: async (year: string = '2026'): Promise<void> => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    const res = await fetch(`${baseUrl}/analytics/export/pdf?year=${encodeURIComponent(year)}`);
-    if (!res.ok) throw new Error('Failed to export PDF');
-    const blob = await res.blob();
+    const blob = await downloadBlob(`/analytics/export/pdf?year=${encodeURIComponent(year)}`);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -138,10 +132,7 @@ export const analyticsService = {
    * Export all analytics as formatted Excel workbook (.xlsx)
    */
   exportExcel: async (year: string = '2026'): Promise<void> => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    const res = await fetch(`${baseUrl}/analytics/export/excel?year=${encodeURIComponent(year)}`);
-    if (!res.ok) throw new Error('Failed to export Excel');
-    const blob = await res.blob();
+    const blob = await downloadBlob(`/analytics/export/excel?year=${encodeURIComponent(year)}`);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -156,10 +147,7 @@ export const analyticsService = {
    * Export State Disaster Summary as CSV (State Summary section)
    */
   exportStateSummaryCSV: async (year: string = '2026'): Promise<void> => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    const res = await fetch(`${baseUrl}/analytics/export/state-summary-csv?year=${encodeURIComponent(year)}`);
-    if (!res.ok) throw new Error('Failed to export State Summary CSV');
-    const blob = await res.blob();
+    const blob = await downloadBlob(`/analytics/export/state-summary-csv?year=${encodeURIComponent(year)}`);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

@@ -1,3 +1,4 @@
+import { DataRegion } from '../../../components/common/DataRegion';
 import React, { useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -118,7 +119,8 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
   const navigate = useNavigate();
   const toast = useToast();
   const { hasPermission } = useAuth();
-  const { data: incident, isLoading: isLoadingIncident, isError: isIncidentError } = useIncident(incidentId);
+  const incidentQuery = useIncident(incidentId);
+  const { data: incident, isLoading: isLoadingIncident } = incidentQuery;
   const { data: envelope, isLoading: isLoadingAssessment, isError: isAssessmentError, refetch } = useIncidentAssessment(incidentId);
   const reassess = useReassessIncident();
   // One key per re-assess intent: retries reuse it, so the backend never starts a duplicate run.
@@ -150,7 +152,8 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
     );
 
   if (isLoadingIncident) return <InsightSkeleton onBack={onBack} />;
-  if (isIncidentError || !incident) {
+  // A failed refresh with a cached incident still renders it (DataRegion warns).
+  if (!incident) {
     return (
       <div className="max-w-6xl mx-auto space-y-3">
         <button onClick={onBack} className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
@@ -183,7 +186,6 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
     decision.urgency === 'Immediate' || decision.urgency === 'Within 6h' ? 'red' : decision.urgency === 'Monitor' ? 'slate' : 'amber';
   const urgencyText = decision.urgency === 'Immediate' ? 'Act now' : decision.urgency === 'Monitor' ? 'Monitor' : decision.urgency ? `Act ${decision.urgency.toLowerCase()}` : null;
 
-  // Key points: one short line each, built only from stored values.
   const points: { tone: Tone; text: React.ReactNode }[] = [];
   if (score != null) points.push({ tone: 'blue', text: <>Priority <strong>{score}/100</strong>{rank ? <> · ranked <strong>#{rank}</strong> of {envelope!.ranked_incidents} active incidents</> : null}.</> });
   if (reportedAffected != null) points.push({ tone: 'indigo', text: <><strong>{fmtNumber(reportedAffected)}</strong> people reported affected.</> });
@@ -195,7 +197,7 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
   const rationale = decision.rationale ? sentences(decision.rationale) : [];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto space-y-5 pb-12">
+    <DataRegion queries={[incidentQuery]} label="Page data"><motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto space-y-5 pb-12">
       {/* Top bar */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">
@@ -500,6 +502,6 @@ export const AIInsightDetailView: React.FC<AIInsightDetailViewProps> = ({ incide
           <span className="font-semibold" style={{ color: TONE.red }}>The analysis failed</span> and there is no earlier result.{canReassess ? ' Try Re-assess.' : ''}
         </div>
       )}
-    </motion.div>
+    </motion.div></DataRegion>
   );
 };

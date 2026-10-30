@@ -1,3 +1,4 @@
+import { DataRegion } from '../../common/DataRegion';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Bell, Clock, Loader2, RotateCcw, Save, ShieldAlert, Sliders, Undo2 } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
@@ -17,7 +18,8 @@ const fmt = (s: SystemSetting, v: number) =>
 
 
 export const SystemSettingsPanel: React.FC = () => {
-  const { data, isLoading, isError, refetch } = useSystemSettings();
+  const settingsQuery = useSystemSettings();
+  const { data, isLoading, isError, refetch } = settingsQuery;
   const { hasPermission } = useAuth();
   const canEdit = hasPermission('SYSTEM_ADMIN') && !!data?.storage_available;
 
@@ -270,7 +272,7 @@ export const SystemSettingsPanel: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5">
+    <DataRegion queries={[settingsQuery]} label="Operational thresholds"><div className="space-y-5">
       {/* Header bar with Unified Save Button */}
       <div className="bg-white border border-slate-200 rounded-xl px-5 py-4 shadow-xs flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -330,8 +332,8 @@ export const SystemSettingsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Error state */}
-      {isError && (
+      {/* Error state (only when nothing was loaded; stale data shows under the banner) */}
+      {isError && settingsQuery.data === undefined && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3 shadow-xs">
           <AlertTriangle size={15} className="text-red-600 shrink-0" />
           <p className="text-sm text-red-700 flex-1">Failed to load system thresholds from server.</p>
@@ -370,6 +372,6 @@ export const SystemSettingsPanel: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </div></DataRegion>
   );
 };

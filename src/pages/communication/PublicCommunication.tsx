@@ -1,3 +1,4 @@
+import { DataRegion } from '../../components/common/DataRegion';
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Megaphone, AlertTriangle, Shield, CheckCircle2, Bell, EyeOff } from 'lucide-react';
@@ -27,7 +28,8 @@ const isActiveAnnouncement = (val: any): boolean => {
 };
 
 const PublicCommunication: React.FC = () => {
-  const { data: allAnnouncements = [], isLoading, isError, refetch } = useAnnouncements();
+  const announcementsQuery = useAnnouncements();
+  const { data: allAnnouncements = [], isLoading, isError, refetch } = announcementsQuery;
   const createMutation = useCreateAnnouncement();
   const updateMutation = useUpdateAnnouncement();
   const deleteMutation = useDeleteAnnouncement();
@@ -35,7 +37,6 @@ const PublicCommunication: React.FC = () => {
   const [showComposeModal, setShowComposeModal] = useState(false);
   const [announcementToDelete, setAnnouncementToDelete] = useState<{ id: string; title: string } | null>(null);
 
-  // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<CommunicationCategoryFilter>('All');
   const [severityFilter, setSeverityFilter] = useState<string>('All');
@@ -44,13 +45,11 @@ const PublicCommunication: React.FC = () => {
   const [pageIndex, setPageIndex] = useState(0);
   const PAGE_SIZE = 10;
 
-  // Header counts: exact totals computed in-memory with zero network overhead
   const totalCount = allAnnouncements.length;
   const activeCount = useMemo(() => allAnnouncements.filter((a) => isActiveAnnouncement(a.active)).length, [allAnnouncements]);
   const evacuationCount = useMemo(() => allAnnouncements.filter((a) => a.category === 'Evacuation Order').length, [allAnnouncements]);
   const emergencyCount = useMemo(() => allAnnouncements.filter((a) => a.category === 'Emergency Alert').length, [allAnnouncements]);
 
-  // Instant client-side filtering & sorting (0ms latency)
   const filteredAnnouncements = useMemo(() => {
     let list = [...allAnnouncements];
     const q = searchQuery.trim().toLowerCase();
@@ -91,14 +90,12 @@ const PublicCommunication: React.FC = () => {
     } else if (sortBy === 'oldest') {
       list.sort((a, b) => parseTime(a.issued_at) - parseTime(b.issued_at));
     } else {
-      // 'latest'
       list.sort((a, b) => parseTime(b.issued_at) - parseTime(a.issued_at));
     }
 
     return list;
   }, [allAnnouncements, searchQuery, categoryFilter, severityFilter, statusFilter, sortBy]);
 
-  // Reset to first page when search or filters change
   useEffect(() => {
     setPageIndex(0);
   }, [searchQuery, categoryFilter, severityFilter, statusFilter, sortBy]);
@@ -155,7 +152,6 @@ const PublicCommunication: React.FC = () => {
   };
 
   const toast = useToast();
-  // Errors propagate to the modal, which stays open with the officer's text.
   const handlePublish = async (data: Partial<PublicAnnouncement>) => {
     const created = await createMutation.mutateAsync(data);
     setShowComposeModal(false);
@@ -163,7 +159,7 @@ const PublicCommunication: React.FC = () => {
   };
 
   return (
-    <motion.div
+    <DataRegion queries={[announcementsQuery]} label="Page data"><motion.div
       variants={containerAnim}
       initial="hidden"
       animate="show"
@@ -187,7 +183,6 @@ const PublicCommunication: React.FC = () => {
         </button>
       </motion.div>
 
-      {/* Top Quick Stats Bar (Clean White Cards + Dedicated Accent Icon Box matching other modules) */}
       <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { icon: Megaphone, label: 'Total Broadcasts', value: totalCount, sub: 'Unified registry', accent: 'blue' as const },
@@ -232,7 +227,7 @@ const PublicCommunication: React.FC = () => {
         />
       </motion.div>
 
-      {/* Unified Public Communication Master List */}
+      {/* Public Communication Master List */}
       <motion.div variants={itemAnim} className="space-y-2.5">
         <AnimatePresence>
           {isLoading ? (
@@ -240,7 +235,7 @@ const PublicCommunication: React.FC = () => {
              <Bell size={18} className="text-slate-300 mx-auto mb-2" />
              <p className="text-sm font-bold text-slate-500">Loading broadcasts…</p>
             </div>
-          ) : isError ? (
+          ) : isError && announcementsQuery.data === undefined ? (
             <div className="bg-white border border-red-200 rounded-xl px-5 py-8 text-center shadow-xs">
               <p className="text-sm font-bold text-red-700">Broadcasts could not be loaded</p>
               <button onClick={() => refetch()} className="text-xs font-bold text-blue-700 underline mt-1 cursor-pointer">
@@ -359,7 +354,7 @@ const PublicCommunication: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </motion.div></DataRegion>
   );
 };
 

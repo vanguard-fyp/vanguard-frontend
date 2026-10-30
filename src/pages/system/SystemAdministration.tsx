@@ -18,7 +18,6 @@ const SystemAdministration: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
-  // User CRUD Handlers
   const handleOpenCreateUser = () => {
     setSelectedUser(null);
     setIsUserModalOpen(true);
@@ -56,7 +55,6 @@ const SystemAdministration: React.FC = () => {
 
   return (
     <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-6">
-      {/* Page Header */}
       <motion.div variants={itemAnim} className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900">System Administration</h1>
@@ -78,7 +76,6 @@ const SystemAdministration: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Segmented Tab Bar */}
       <motion.div variants={itemAnim} className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/80 inline-flex w-auto">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {adminTabs.map((tab) => {

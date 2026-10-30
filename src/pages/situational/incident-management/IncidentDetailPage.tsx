@@ -1,3 +1,4 @@
+import { DataRegion } from '../../../components/common/DataRegion';
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIncident } from '../../../hooks';
@@ -8,7 +9,8 @@ import { AlertCircle, ArrowLeft } from 'lucide-react';
 const IncidentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: incident, isLoading, isError } = useIncident(id || null);
+  const incidentQuery = useIncident(id || null);
+  const { data: incident, isLoading } = incidentQuery;
 
   // IncidentDetailView already persists the verification (verifier taken from the
   // signed-in user); a second update here would overwrite it.
@@ -37,9 +39,9 @@ const IncidentDetailPage: React.FC = () => {
     );
   }
 
-  if (isError || !incident) {
+  if (!incident) {
     return (
-      <div className="max-w-xl mx-auto mt-12 bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4 shadow-sm">
+      <DataRegion queries={[incidentQuery]} label="Page data"><div className="max-w-xl mx-auto mt-12 bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4 shadow-sm">
         <AlertCircle size={40} className="text-red-500 mx-auto" />
         <h2 className="text-lg font-bold text-slate-800">Incident Record Not Found</h2>
         <p className="text-xs text-slate-500">
@@ -52,17 +54,17 @@ const IncidentDetailPage: React.FC = () => {
           <ArrowLeft size={14} />
           Return to Incident Management
         </button>
-      </div>
+      </div></DataRegion>
     );
   }
 
   return (
-    <IncidentDetailView
+    <DataRegion queries={[incidentQuery]} label="Incident record"><IncidentDetailView
       incident={incident}
       onBack={handleBack}
       onVerify={handleVerify}
       onTrackInIntelligence={handleTrackInIntelligence}
-    />
+    /></DataRegion>
   );
 };
 

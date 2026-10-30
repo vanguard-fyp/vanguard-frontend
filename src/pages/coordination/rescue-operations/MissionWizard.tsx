@@ -63,7 +63,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
   const [approvalNote, setApprovalNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // One idempotency key per wizard session: retries cannot create a second mission.
   const [dispatchKey] = useState(() => newIdempotencyKey('dispatch'));
 
   const selectedIncident = incidents.find((i) => i.id === selectedIncidentId) || null;
@@ -195,7 +194,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
           </div>
         </div>
 
-        {/* Step Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
             {/* Step 0: Select Incident */}
@@ -265,7 +263,7 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
               </motion.div>
             )}
 
-            {/* Step 1: Team selection — AI-recommended vs officer-selected */}
+            {/* Step 1: Team selection */}
             {step === 1 && (
               <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
                 {submitError && (
@@ -303,7 +301,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                     <div className="space-y-2">
                       {required != null && (
                         <p className="text-[11px] text-slate-600">
-                          {/* Planning need: <strong>{required}</strong> personnel */}
                           {rec.data.shortfall_personnel ? ` · shortfall ${rec.data.shortfall_personnel} after suggested teams` : ''}
 
                         </p>
@@ -343,7 +340,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                               </button>
                             </div>
 
-                            {/* Standardized labeled telemetry metrics with distinct weights */}
                             <div className="grid grid-cols-3 gap-2 bg-slate-50/80 rounded-lg p-2 border border-slate-100 text-center">
                               <div>
                                 <span className="block text-[9px] uppercase tracking-wider font-bold text-slate-400">Suggested Force</span>
@@ -361,7 +357,6 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                               </div>
                             </div>
 
-                            {/* Standardized labeled rationale */}
                             {s.rationale && (
                               <div className="text-[11px] text-slate-600 bg-violet-50/40 rounded-lg p-2 border border-violet-100/60 leading-relaxed">
                                 <span className="text-[9px] uppercase font-bold text-violet-700 tracking-wider block mb-0.5">
@@ -479,6 +474,7 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
               </motion.div>
             )}
 
+            {/* Step 2: Mission objectives */}
             {step === 2 && (
               <motion.div
                 key="step2"
@@ -539,7 +535,7 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
               </motion.div>
             )}
 
-            {/* Step 3: Review & explicit approval */}
+            {/* Step 3: Review & approval */}
             {step === 3 && (
               <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
                 <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">

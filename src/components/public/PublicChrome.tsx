@@ -13,7 +13,7 @@ export const Wordmark: React.FC = () => (
   </Link>
 );
 
-interface HeaderProps { variant?: 'landing' | 'auth' }
+interface HeaderProps { variant?: 'landing' | 'auth' | 'minimal' }
 
 export const PublicHeader: React.FC<HeaderProps> = ({ variant = 'landing' }) => {
   const [scrolled, setScrolled] = useState(false);
@@ -29,9 +29,11 @@ export const PublicHeader: React.FC<HeaderProps> = ({ variant = 'landing' }) => 
     <header className="lf-header" data-scrolled={scrolled}>
       <div className="lf-wrap lf-header__row">
         <Wordmark />
-        <nav className="lf-nav" aria-label="Public site">
-          {variant === 'auth' && <Link to="/" className="lf-nav__back">Back to public site</Link>}
-        </nav>
+        {variant !== 'minimal' && (
+          <nav className="lf-nav" aria-label="Public site">
+            {variant === 'auth' && <Link to="/" className="lf-nav__back">Back to public site</Link>}
+          </nav>
+        )}
       </div>
     </header>
   );

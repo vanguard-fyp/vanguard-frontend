@@ -20,7 +20,8 @@ interface ExtendedSidebarProps extends SidebarProps {
 }
 
 const isNavPathAllowed = (path: string, role?: string): boolean => {
-  if (!role || role === 'NADMA Lead Officer') return true;
+  if (!role) return false;
+  if (role === 'NADMA Lead Officer') return true;
   if (role === 'Disaster Management Officer') {
     return path !== '/system';
   }
@@ -387,17 +388,18 @@ const Sidebar: React.FC<ExtendedSidebarProps> = ({ collapsed, setCollapsed, mobi
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-semibold truncate group-hover:underline" style={{ color: C.profileName }}>
-                        {user?.name || "Dato' Ir. Ahmad Rosli"}
+                        {user?.name || 'Signed-in officer'}
                       </p>
                       <p className="text-[10px] font-medium truncate" style={{ color: C.profileRole }}>
-                        {user?.role || 'NADMA Lead Officer'}
+                        {user?.role || ''}
                       </p>
                     </div>
                   </button>
                   <button
                     onClick={async () => {
-                      await logout();
-                      navigate('/');
+                      const signingOut = logout();
+                      navigate('/', { replace: true });
+                      await signingOut;
                     }}
                     className="p-1 rounded transition-colors shrink-0 cursor-pointer text-slate-400 hover:text-red-400"
                     title="Sign Out to Portal"

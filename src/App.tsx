@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Layout
 import Sidebar from './components/layout/Sidebar';
@@ -8,6 +8,8 @@ import Header from './components/layout/Header';
 // Public Pages
 import LandingPage from './pages/public/LandingPage';
 import LoginPage from './pages/public/LoginPage';
+import UnauthorizedPage from './pages/public/UnauthorizedPage';
+import { WEB_ADMIN_ROLES } from './services/authService';
 
 // Operational pages load when first opened, so signing in does not download
 // every map, chart and 3D view at once.
@@ -40,6 +42,20 @@ import { ToastProvider } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 
+const ProtectedOperations: React.FC = () => {
+  const { user, isAuthenticated, isLoading, sessionError, validateSession } = useAuth();
+  const location = useLocation();
+  if (isLoading) return <PageFallback />;
+  if (sessionError) return <UnauthorizedPage unavailable onRetry={() => void validateSession()} />;
+  if (!isAuthenticated || !user || !WEB_ADMIN_ROLES.has(user.role)) {
+    return <Navigate to="/unauthorized" replace state={{ denied: isAuthenticated, from: location.pathname }} />;
+  }
+  if (location.pathname === '/system' && user.role !== 'NADMA Lead Officer') {
+    return <Navigate to="/unauthorized" replace state={{ denied: true }} />;
+  }
+  return <MainAppLayout />;
+};
+
 const MainAppLayout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -60,7 +76,7 @@ const MainAppLayout: React.FC = () => {
         }`}
       >
         <Header
-          currentRole={user?.role || 'NADMA Lead Officer'}
+          currentRole={user!.role}
           onRoleChange={() => {}}
           onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
         />
@@ -99,7 +115,8 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/*" element={<MainAppLayout />} />
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
+              <Route path="/*" element={<ProtectedOperations />} />
             </Routes>
           </Router>
         </ToastProvider>

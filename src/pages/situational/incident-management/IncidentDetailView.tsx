@@ -163,13 +163,11 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
-  // Assessment edit fields
   const [assessmentPop, setAssessmentPop] = useState(incident.affected_population || 0);
   const [assessmentCas, setAssessmentCas] = useState(incident.casualties_count || 0);
   const [assessmentInfra, setAssessmentInfra] = useState(incident.infrastructure_damage || 'None');
   const [assessmentAccess, setAssessmentAccess] = useState(incident.accessibility_score ?? 50);
 
-  // Lightbox (signed URL of the enlarged item)
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
   const navigate = useNavigate();
   const hasMedia = (incident.media_urls?.length ?? 0) > 0;
@@ -221,7 +219,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     return () => ctrl.abort();
   }, [hasPin, lat, lng]);
 
-  // Sync assessment states when incident changes
   useEffect(() => {
     setAssessmentPop(incident.affected_population || 0);
     setAssessmentCas(incident.casualties_count || 0);
@@ -229,7 +226,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     setAssessmentAccess(incident.accessibility_score ?? 50);
   }, [incident]);
 
-  // Determine if this incident originates from hydrological / telemetry monitoring (hide triggers if Citizen/SOS)
   const isSensorSource =
     incident.source === 'Metrological / Sensor' ||
     (incident.source &&
@@ -457,7 +453,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         </div>
       </div>
 
-      {/* ── 1. What and where: a slim navy identity bar ── */}
+      {/* ── 1. What and where ── */}
       <section className="rounded-2xl text-white px-6 py-5 sm:px-7" style={{ background: NAVY }}>
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -479,7 +475,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         </p>
       </section>
 
-      {/* ── 2. How bad: all four figures, "Not reported" when unknown ── */}
+      {/* ── 2. Impact Figures ── */}
       <dl className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         {IMPACT.map(({ field, title, Icon, render, small }) => {
           const alarm = field === 'casualties_count' && factState(incident, field) !== 'unknown' && (incident.casualties_count ?? 0) > 0;
@@ -497,7 +493,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         })}
       </dl>
 
-      {/* ── 3. The story (one reading column) and what to do (slim sticky panel) ── */}
+      {/* ── 3. The readings ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
         <div className="space-y-5 min-w-0">
           {incident.description?.trim() && (
@@ -603,7 +599,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
           {!isCredibilityShown && activitySection}
         </div>
 
-        {/* ── Slim panel: stays in view while reading ── */}
         <aside className={`space-y-5 ${isCredibilityShown ? '' : 'lg:sticky lg:top-4'}`}>
           <section className="bg-white border border-slate-200/80 rounded-2xl">
             <header className="px-5 pt-5 pb-3.5 mb-4 border-b border-slate-100 flex items-center justify-between gap-3">
@@ -901,7 +896,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         {assessmentChanged && <p className="text-[11px] text-slate-400">Saving re-runs the AI assessment.</p>}
       </FormModal>
 
-      {/* ── Field evidence lightbox ── */}
       <Overlay>
       <AnimatePresence>
         {selectedMediaUrl && (

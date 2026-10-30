@@ -57,10 +57,8 @@ export const LandingPage: React.FC = () => {
 
   const stage = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: stage, offset: ['start start', 'end end'] });
-  // Camera moves into the plate's centre while the introduction rises over it.
   const fieldOpacity = useTransform(scrollYProgress, (v) => lerp(v, 0.1, 0.36, 1, 0.22));
 
-  // Arriving from /login's links with a hash.
   useEffect(() => {
     if (!location.hash) return;
     const el = document.getElementById(location.hash.slice(1));
@@ -80,8 +78,6 @@ export const LandingPage: React.FC = () => {
       <RadarRoamer scene={scene} still={reduced} />
 
       <main>
-        {/* Monitoring cover; the introduction scrolls up over it */}
-        {/* Monitoring cover; the introduction scrolls up over it */}
         <div ref={stage} className="lf-stage" data-static={reduced}>
           <section id="about" className="lf-intro" aria-labelledby="about-title">
             <motion.div
@@ -92,7 +88,6 @@ export const LandingPage: React.FC = () => {
             </motion.div>
 
             <div className="lf-wrap lf-intro__grid">
-              {/* Left: Introduction text */}
               <div className="lf-intro__head">
                 <h2
                   id="about-title"
@@ -121,7 +116,6 @@ export const LandingPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right: Monitoring plate */}
 
               <motion.div
                 className="lf-stage__plate"

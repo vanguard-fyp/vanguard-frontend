@@ -1,3 +1,4 @@
+import { DataRegion } from '../../../components/common/DataRegion';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,18 +26,21 @@ import type { ResourceItem, ResourceRequest, ViewMode } from '../../../types';
 import { containerAnim, itemAnim } from '../../../constants';
 
 const ResourceManagement: React.FC = () => {
-  const { data: inventory = [], isLoading: isInventoryLoading } = useInventory();
-  const { data: requests = [], isLoading: isRequestsLoading } = useResourceRequests();
-  const { data: warehouses = [] } = useWarehouses();
+  const inventoryQuery = useInventory();
+  const { data: inventory = [], isLoading: isInventoryLoading } = inventoryQuery;
+  const requestsQuery = useResourceRequests();
+  const { data: requests = [], isLoading: isRequestsLoading } = requestsQuery;
+  const warehousesQuery = useWarehouses();
+  const { data: warehouses = [] } = warehousesQuery;
   const approveMutation = useApproveResourceRequest();
   const rejectMutation = useRejectResourceRequest();
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
   // Incident locations are only needed by the 3D view.
-  const { data: incidents = [] } = useIncidents(undefined, { enabled: activeStep === '3d' });
+  const incidentsQuery = useIncidents(undefined, { enabled: activeStep === '3d' });
+  const { data: incidents = [] } = incidentsQuery;
 
-  // Modal states
   const [selectedRequestForModal, setSelectedRequestForModal] = useState<ResourceRequest | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAddInventoryModal, setShowAddInventoryModal] = useState(false);
@@ -64,7 +68,6 @@ const ResourceManagement: React.FC = () => {
     if (linkItem) setActiveStep(1);
   }, [linkItem]);
 
-  // Dynamic approver linked to current logged-in user
   const currentApprover = user?.name ? `${user.name} (${user.role} - ${user.agency || 'NADMA'})` : 'NADMA Incident Commander';
   const currentUserId = user?.id;
 
@@ -144,8 +147,7 @@ const ResourceManagement: React.FC = () => {
   }
 
   return (
-    <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-6">
-      {/* Page Header */}
+    <DataRegion queries={[inventoryQuery, requestsQuery]} label="Stock and requests"><DataRegion queries={[warehousesQuery]} label="Depot list" keepContent><motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-6">
       <motion.div variants={itemAnim} className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Resource Management</h1>
@@ -236,7 +238,6 @@ const ResourceManagement: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Sleek Segmented Pipeline Navigation Bar (Hidden when in Full Pipeline Flow view) */}
       {typeof activeStep === 'number' && (
         <motion.div variants={itemAnim} className="bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
@@ -336,7 +337,7 @@ const ResourceManagement: React.FC = () => {
         )}
 
         {activeStep === '3d' && (
-          <motion.div
+          <DataRegion queries={[incidentsQuery]} label="Incident locations for the 3D view"><motion.div
             key="flow3d"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -350,7 +351,7 @@ const ResourceManagement: React.FC = () => {
               onOpenRequest={(req) => setSelectedRequestForModal(req)}
               onReview={(req) => { setActiveStep(2); setSelectedRequestForModal(req); }}
             />
-          </motion.div>
+          </motion.div></DataRegion>
         )}
 
         {activeStep === 'all' && (
@@ -394,7 +395,7 @@ const ResourceManagement: React.FC = () => {
         isOpen={showAddInventoryModal}
         onClose={() => setShowAddInventoryModal(false)}
       />
-    </motion.div>
+    </motion.div></DataRegion></DataRegion>
   );
 };
 

@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ApiError, clearSession } from '../services/apiClient';
 import type { UserRole, DisasterLevel } from '../types';
 import { authService, WEB_ADMIN_ROLES, type UserProfile } from '../services/authService';
 
@@ -8,6 +10,8 @@ interface AuthContextType {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  sessionError: string | null;
+  validateSession: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -24,14 +28,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(() => authService.getStoredUser());
   const [token, setToken] = useState<string | null>(() => authService.getToken());
   const [refreshToken, setRefreshToken] = useState<string | null>(() => authService.getRefreshToken());
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const identityRef = useRef(user?.id);
 
-  // Keep React state in sync with what's in localStorage on mount.
+  const validateSession = useCallback(async () => {
+    setIsLoading(true);
+    setSessionError(null);
+    if (!authService.getToken()) {
+      setUser(null); setToken(null); setRefreshToken(null);
+      setSessionChecked(true); setIsLoading(false);
+      return;
+    }
+    try {
+      let profile: UserProfile;
+      try {
+        profile = await authService.getCurrentUser();
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 401 || !authService.getRefreshToken()) throw error;
+        await authService.refreshToken();
+        profile = await authService.getCurrentUser();
+      }
+      localStorage.setItem('vanguard_user', JSON.stringify(profile));
+      setUser(profile); setToken(authService.getToken()); setRefreshToken(authService.getRefreshToken());
+      setSessionChecked(true);
+    } catch (error) {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        clearSession(); setUser(null); setToken(null); setRefreshToken(null); queryClient.clear();
+      } else {
+        setSessionError('Your session could not be checked because the server is unavailable.');
+      }
+      setSessionChecked(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [queryClient]);
+
   useEffect(() => {
-    setUser(authService.getStoredUser());
-    setToken(authService.getToken());
-    setRefreshToken(authService.getRefreshToken());
-  }, []);
+    void validateSession();
+    const sync = () => {
+      const next = authService.getStoredUser();
+      if (identityRef.current !== next?.id) queryClient.clear();
+      identityRef.current = next?.id;
+      setUser(next); setToken(authService.getToken()); setRefreshToken(authService.getRefreshToken());
+      if (!authService.getToken()) { setSessionChecked(false); queryClient.clear(); }
+    };
+    window.addEventListener('vanguard:session-change', sync);
+    return () => window.removeEventListener('vanguard:session-change', sync);
+  }, [validateSession, queryClient]);
 
   // Proactive token refresh every 10 minutes to avoid mid-session expiry.
   useEffect(() => {
@@ -60,6 +106,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await authService.login(email, password);
+      queryClient.clear();
+      setSessionChecked(true);
+      setSessionError(null);
       setUser(res.user);
       setToken(res.access_token);
       if (res.refresh_token) setRefreshToken(res.refresh_token);
@@ -70,11 +119,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     setIsLoading(true);
+    clearSession();
+    setUser(null);
+    setToken(null);
+    setRefreshToken(null);
+    setSessionChecked(false);
+    queryClient.clear();
     try {
       await authService.logout();
-      setUser(null);
-      setToken(null);
-      setRefreshToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -103,8 +155,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   /**
    * Permission check driven by the role returned from the backend.
-   * The full permission set is in security.py; this mirrors only the checks
-   * the frontend UI actually needs to gate actions.
    */
   const hasPermission = useCallback(
     (permission: string): boolean => {
@@ -113,11 +163,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Lead Officer is superadmin — always granted.
       if (user.role === 'NADMA Lead Officer') return true;
 
-      // Use server-returned permissions list when available.
       if (user.permissions?.includes(permission)) return true;
 
       // Fallback: hardcoded rules for Disaster Management Officer
-      // (covers everything the removed roles used to do).
       if (user.role === 'Disaster Management Officer') {
         const officerPerms = new Set([
           'MANAGE_INCIDENTS',
@@ -149,15 +197,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const isLeadOfficer = user?.role === 'NADMA Lead Officer';
-  // isCommander is true for both web admin roles.
   const isCommander = user?.role === 'Disaster Management Officer' || isLeadOfficer;
 
-  // Consider authenticated only when we have a stored profile AND a token.
-  const isAuthenticated =
-    Boolean(user && token) ||
-    // Tolerate a brief re-hydration window where token is set but state hasn't
-    // been applied yet — check localStorage directly.
-    Boolean(authService.getStoredUser() && authService.getToken());
+  const isAuthenticated = sessionChecked && Boolean(user && token);
 
   return (
     <AuthContext.Provider
@@ -167,6 +209,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshToken,
         isAuthenticated,
         isLoading,
+        sessionError,
+        validateSession,
         login,
         logout,
         refreshSession,

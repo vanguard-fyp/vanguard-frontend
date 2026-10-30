@@ -21,7 +21,6 @@ export const LoginPage: React.FC = () => {
 
   const checkCaps = (e: React.KeyboardEvent<HTMLInputElement>) => setCapsOn(e.getModifierState?.('CapsLock') ?? false);
 
-  // Validate email format without relying on the browser's native bubble.
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const showEmailError = emailTouched && email.length > 0 && !emailValid;
 
@@ -32,8 +31,6 @@ export const LoginPage: React.FC = () => {
       await login(email.trim(), password);
       navigate('/dashboard');
     } catch (err: any) {
-      // Surface the backend error message directly — it already distinguishes
-      // between wrong credentials and role-gate rejections.
       const detail = err?.response?.data?.detail;
       const unreachable =
         !detail && (err instanceof TypeError || /failed to fetch|network/i.test(err?.message ?? ''));

@@ -1,3 +1,5 @@
+import { useAuth } from '../../../context/AuthContext';
+import { DataRegion } from '../../../components/common/DataRegion';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -42,10 +44,14 @@ import { containerAnim, itemAnim } from '../../../constants';
 import { formatDateTime } from '../../../utils/dateFormatter';
 
 const RescueOperations: React.FC = () => {
-  const { data: teams = [], isLoading: isTeamsLoading } = useRescueTeams();
-  const { data: missions = [] } = useMissions();
-  const { data: incidents = [] } = useIncidents();
-  const { data: assistanceRequests = [], isLoading: isAssistanceLoading } = useAssistanceRequests();
+  const teamsQuery = useRescueTeams();
+  const { data: teams = [], isLoading: isTeamsLoading } = teamsQuery;
+  const missionsQuery = useMissions();
+  const { data: missions = [] } = missionsQuery;
+  const incidentsQuery = useIncidents();
+  const { data: incidents = [] } = incidentsQuery;
+  const sosQuery = useAssistanceRequests();
+  const { data: assistanceRequests = [], isLoading: isAssistanceLoading } = sosQuery;
   const dispatchMutation = useDispatchMission();
   const deleteTeamMutation = useDeleteRescueTeam();
   const updateAssistanceMutation = useUpdateAssistanceStatus();
@@ -57,6 +63,22 @@ const RescueOperations: React.FC = () => {
   const [showWizard, setShowWizard] = useState(false);
   const [wizardIncidentId, setWizardIncidentId] = useState<string | null>(null);
   const [wizardSourceSos, setWizardSourceSos] = useState<any | null>(null);
+  const { user } = useAuth();
+  const syncKey = `vanguard:sos-sync:${user?.id ?? ''}`;
+  const [pendingSosSync, setPendingSosSync] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(sessionStorage.getItem(syncKey) || '{}'); } catch { return {}; }
+  });
+  useEffect(() => { sessionStorage.setItem(syncKey, JSON.stringify(pendingSosSync)); }, [syncKey, pendingSosSync]);
+  const retrySosSync = async (requestId: string) => {
+    try {
+      await updateAssistanceMutation.mutateAsync({ requestId, status: 'Dispatched' });
+      setPendingSosSync((previous) => { const next = { ...previous }; delete next[requestId]; return next; });
+      toastSuccess('SOS updated', 'The existing mission is now reflected in the SOS status.');
+    } catch (error) {
+      toastError('SOS status not updated', (error as Error).message || 'Retry the status update; do not dispatch another mission.');
+    }
+  };
+
   const [showRegisterSlideOver, setShowRegisterSlideOver] = useState(false);
   const [showClosedSos, setShowClosedSos] = useState(false);
   const [sosSearch, setSosSearch] = useState('');
@@ -65,7 +87,6 @@ const RescueOperations: React.FC = () => {
   const [editingTeam, setEditingTeam] = useState<RescueTeam | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Deep link from Disaster Intelligence: /response/rescue?incidentId=… opens the wizard preselected.
   useEffect(() => {
     const linked = searchParams.get('incidentId');
     if (!linked) return;
@@ -87,13 +108,11 @@ const RescueOperations: React.FC = () => {
     setShowRegisterSlideOver(true);
   };
 
-  // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAgency, setFilterAgency] = useState<AgencyFilter>('All');
   const [filterStatus, setFilterStatus] = useState<StatusFilter>('All');
   const [sortBy, setSortBy] = useState<TeamSortBy>('default');
 
-  // Same capacity rule as the dashboard (backend capacity_service).
   const availableCount = teams.filter((t) => t.eligible !== false && (t.available_personnel ?? (t.status?.toLowerCase() === 'available' ? 1 : 0)) > 0).length;
   const deployedCount = teams.filter((t) => (t.active_assignment_count ?? 0) > 0 || ['deployed', 'en route'].includes(t.status?.toLowerCase() || '')).length;
   const pendingSosCount = assistanceRequests.filter((a: any) => a.status === 'Pending' || a.status === 'Acknowledged').length;
@@ -137,10 +156,12 @@ const RescueOperations: React.FC = () => {
       `${mission.display_id ?? 'Mission'} approved with ${req.teams.length} team(s), ${req.teams.reduce((a, t) => a + t.personnel, 0)} personnel.`
     );
     if (wizardSourceSos) {
-      updateAssistanceMutation.mutate(
-        { requestId: wizardSourceSos.id, status: 'Dispatched' },
-        { onError: () => toastError('SOS status not updated', 'The mission was dispatched, but the SOS request status could not be updated.') }
-      );
+      try {
+        await updateAssistanceMutation.mutateAsync({ requestId: wizardSourceSos.id, status: 'Dispatched' });
+      } catch {
+        setPendingSosSync((previous) => ({ ...previous, [wizardSourceSos.id]: mission.display_id || mission.id }));
+        toastError('Mission dispatched; SOS update failed', 'Use Retry SOS update to repair the status. The mission must not be dispatched again.');
+      }
     }
     setWizardIncidentId(null);
     setWizardSourceSos(null);
@@ -174,6 +195,7 @@ const RescueOperations: React.FC = () => {
       { requestId: sos.id, status: 'Acknowledged' },
       {
         onSuccess: () => toastSuccess('SOS Acknowledged', `Request ${sos.display_id || sos.id} acknowledged by EOC.`),
+        onError: (error) => toastError('SOS not acknowledged', error.message),
       }
     );
   };
@@ -208,7 +230,7 @@ const RescueOperations: React.FC = () => {
   };
 
   return (
-    <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
+    <DataRegion queries={[missionsQuery, incidentsQuery]} label="Mission and incident details" keepContent><motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
       {/* Page Header */}
       <motion.div variants={itemAnim} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -240,7 +262,7 @@ const RescueOperations: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Analytics Strip (Blue / Slate Palette) */}
+      {/* Analytics Strip */}
       <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { icon: Users, label: 'Registered Squads', value: teams.length, sub: 'SMART / BOMBA / APM / PDRM', color: 'text-slate-800', bg: 'bg-white' },
@@ -263,11 +285,10 @@ const RescueOperations: React.FC = () => {
       <motion.div variants={itemAnim} className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => setActiveTab('teams')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'teams'
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'teams'
               ? 'bg-blue-600 text-white shadow-2xs'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
+            }`}
         >
           <ShieldCheck size={14} />
           <span>Rescue Squads Fleet ({teams.length})</span>
@@ -275,11 +296,10 @@ const RescueOperations: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('assistance')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-            activeTab === 'assistance'
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'assistance'
               ? 'bg-blue-600 text-white shadow-2xs'
               : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-          }`}
+            }`}
         >
           <LifeBuoy size={14} />
           <span>Citizen SOS Assistance ({assistanceRequests.length})</span>
@@ -293,7 +313,7 @@ const RescueOperations: React.FC = () => {
 
       {/* TAB 1: Rescue Squads Fleet */}
       {activeTab === 'teams' && (
-        <div className="space-y-4">
+        <DataRegion queries={[teamsQuery]} label="Rescue teams"><div className="space-y-4">
           <motion.div variants={itemAnim}>
             <TeamListFilters
               searchQuery={searchQuery}
@@ -347,13 +367,13 @@ const RescueOperations: React.FC = () => {
               </AnimatePresence>
             )}
           </motion.div>
-        </div>
+        </div></DataRegion>
       )}
 
       {/* TAB 2: Citizen SOS Assistance Requests Feed */}
-      {activeTab === 'assistance' && (() => {
+      {activeTab === 'assistance' && (<DataRegion queries={[sosQuery]} label="SOS requests">{(() => {
         const filteredAssistance = assistanceRequests.filter((sos: any) => {
-          const closed = ['Dispatched', 'Resolved', 'Cancelled'].includes(sos.status);
+          const closed = ['Resolved', 'Cancelled'].includes(sos.status);
           if (!showClosedSos && closed && sosStatusFilter === 'All') return false;
           if (sosStatusFilter !== 'All' && sos.status !== sosStatusFilter) return false;
           if (sosSearch.trim()) {
@@ -379,7 +399,6 @@ const RescueOperations: React.FC = () => {
 
         return (
           <motion.div variants={itemAnim} className="space-y-4">
-            {/* Search and Filters Toolbar */}
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="relative flex-1 min-w-[220px]">
@@ -403,7 +422,6 @@ const RescueOperations: React.FC = () => {
                 </button>
               </div>
 
-              {/* Status Filter Pills */}
               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mr-1">Status:</span>
                 {(['All', 'Pending', 'Acknowledged', 'Dispatched'] as const).map((st) => {
@@ -414,16 +432,14 @@ const RescueOperations: React.FC = () => {
                       key={st}
                       type="button"
                       onClick={() => setSosStatusFilter(st)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                        active
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${active
                           ? 'bg-blue-600 text-white shadow-2xs'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
+                        }`}
                     >
                       <span>{st}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                        active ? 'bg-blue-700/60 text-white' : 'bg-slate-200 text-slate-600'
-                      }`}>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${active ? 'bg-blue-700/60 text-white' : 'bg-slate-200 text-slate-600'
+                        }`}>
                         {count}
                       </span>
                     </button>
@@ -452,14 +468,13 @@ const RescueOperations: React.FC = () => {
                   const isDispatched = sos.status === 'Dispatched';
                   const isResolved = sos.status === 'Resolved';
                   const isCancelled = sos.status === 'Cancelled';
-                  const isClosed = isDispatched || isResolved || isCancelled;
+                  const isClosed = isResolved || isCancelled;
 
                   return (
                     <div
                       key={sos.id}
-                      className={`bg-white border rounded-xl p-4 shadow-2xs transition-all space-y-3 ${
-                        isClosed ? 'opacity-65 border-slate-200' : 'border-slate-200 hover:border-slate-300'
-                      }`}
+                      className={`bg-white border rounded-xl p-4 shadow-2xs transition-all space-y-3 ${isClosed ? 'opacity-65 border-slate-200' : 'border-slate-200 hover:border-slate-300'
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -471,17 +486,16 @@ const RescueOperations: React.FC = () => {
                               {sos.request_type || sos.requestType || 'Rescue'}
                             </span>
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                isPending
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPending
                                   ? 'bg-amber-50 text-amber-800 border-amber-200'
                                   : isAcknowledged
-                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                  : isDispatched
-                                  ? 'bg-purple-50 text-purple-800 border-purple-200'
-                                  : isCancelled
-                                  ? 'bg-slate-100 text-slate-600 border-slate-200'
-                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              }`}
+                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                    : isDispatched
+                                      ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                      : isCancelled
+                                        ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                }`}
                             >
                               {sos.status}
                             </span>
@@ -507,7 +521,6 @@ const RescueOperations: React.FC = () => {
                         {sos.description}
                       </p>
 
-                      {/* Citizen Submitted Photos / Videos Gallery */}
                       {(() => {
                         const mediaList: string[] = sos.media_urls || sos.mediaUrls || [];
                         if (mediaList.length === 0) return null;
@@ -584,7 +597,24 @@ const RescueOperations: React.FC = () => {
                                 </button>
                               </>
                             )}
-                            {isAcknowledged && (
+                            {isAcknowledged && pendingSosSync[sos.id] && (
+                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => void retrySosSync(sos.id)} className="px-3 py-2 border border-amber-600 rounded-lg text-amber-900 font-semibold">
+                                Retry SOS update · {pendingSosSync[sos.id]}
+                              </button>
+                            )}
+                            {(isAcknowledged || isDispatched) && (
+                              <button type="button" onClick={() => handleCancelAssistance(sos)} className="px-3 py-2 text-red-700 border border-red-200 rounded-lg">Cancel SOS</button>
+                            )}
+                            {isDispatched && (
+                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => {
+                                if (!window.confirm('Confirm that this SOS no longer needs assistance? This does not close its mission.')) return;
+                                updateAssistanceMutation.mutate({ requestId: sos.id, status: 'Resolved' }, {
+                                  onSuccess: () => toastSuccess('SOS resolved', 'The request is closed. Any shared mission remains unchanged.'),
+                                  onError: (error) => toastError('SOS not resolved', error.message),
+                                });
+                              }} className="px-3 py-2 bg-blue-700 text-white rounded-lg">Mark resolved</button>
+                            )}
+                            {isAcknowledged && !pendingSosSync[sos.id] && (
                               <button
                                 type="button"
                                 onClick={() => handleDeploySosSquad(sos)}
@@ -604,7 +634,7 @@ const RescueOperations: React.FC = () => {
             )}
           </motion.div>
         );
-      })()}
+      })()}</DataRegion>)}
 
       {/* Team Detail Slide-Over */}
       <AnimatePresence>
@@ -650,7 +680,7 @@ const RescueOperations: React.FC = () => {
                   <h3 className="text-base font-bold text-slate-900">Decommission Rescue Unit</h3>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                     Are you sure you want to decommission and remove{' '}
-                    <strong className="text-slate-900">{teamToDelete.name}</strong> ({teamToDelete.agency})? 
+                    <strong className="text-slate-900">{teamToDelete.name}</strong> ({teamToDelete.agency})?
                   </p>
                 </div>
 
@@ -755,7 +785,6 @@ const RescueOperations: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Citizen Attachment Lightbox Modal */}
       <AnimatePresence>
         {selectedMediaModal && (
           <div
@@ -802,7 +831,7 @@ const RescueOperations: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </motion.div></DataRegion>
   );
 };
 

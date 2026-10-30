@@ -1,3 +1,4 @@
+import { DataRegion } from '../../components/common/DataRegion';
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -106,12 +107,18 @@ const ReportsAnalytics: React.FC = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
 
-  const { data: summaryData, isLoading: isSummaryLoading } = useAnalyticsSummary({ year: dateRange });
-  const { data: monthlyIncidentTrend = [], isLoading: isTrendsLoading } = useMonthlyTrends({ year: dateRange });
-  const { data: disasterTypeDistribution = [], isLoading: isTypesLoading } = useDisasterTypeDistribution({ year: dateRange });
-  const { data: responseTimeData = [], isLoading: isRespLoading } = useAgencyResponseTimes({ year: dateRange });
-  const { data: rawResourceUtilization = [], isLoading: isResLoading } = useResourceUtilization();
-  const { data: stateIncidentHeatmap = [] } = useStateHeatmap({ year: dateRange });
+  const summaryQuery = useAnalyticsSummary({ year: dateRange });
+  const { data: summaryData, isLoading: isSummaryLoading } = summaryQuery;
+  const trendsQuery = useMonthlyTrends({ year: dateRange });
+  const { data: monthlyIncidentTrend = [], isLoading: isTrendsLoading } = trendsQuery;
+  const typesQuery = useDisasterTypeDistribution({ year: dateRange });
+  const { data: disasterTypeDistribution = [], isLoading: isTypesLoading } = typesQuery;
+  const responseTimesQuery = useAgencyResponseTimes({ year: dateRange });
+  const { data: responseTimeData = [], isLoading: isRespLoading } = responseTimesQuery;
+  const utilizationQuery = useResourceUtilization();
+  const { data: rawResourceUtilization = [], isLoading: isResLoading } = utilizationQuery;
+  const heatmapQuery = useStateHeatmap({ year: dateRange });
+  const { data: stateIncidentHeatmap = [] } = heatmapQuery;
 
   const [expandedStates, setExpandedStates] = useState<Record<string, boolean>>({});
   const [showAllStates, setShowAllStates] = useState(false);
@@ -152,7 +159,6 @@ const ReportsAnalytics: React.FC = () => {
     stock: r.stock,
   }));
 
-  // Every figure comes from the backend; missing data is shown as such, never estimated.
   const totalIncidents = summaryData?.total_incidents ?? 0;
   const resolutionRate = summaryData?.resolution_rate ?? null;
   const totalAffected = summaryData?.total_affected_reported ?? 0;
@@ -161,7 +167,6 @@ const ReportsAnalytics: React.FC = () => {
   // Only disaster types that occurred in the year get a legend row.
   const occurredTypes = disasterTypeDistribution.filter((d) => d.value > 0);
   const statesWithIncidents = stateIncidentHeatmap.filter((s) => s.count > 0).length;
-  // States without incidents add 10+ empty rows; they are hidden unless asked for.
   const visibleStates = showAllStates
     ? stateIncidentHeatmap
     : [...stateIncidentHeatmap].filter((s) => s.count > 0).sort((a, b) => b.count - a.count);
@@ -224,28 +229,27 @@ const ReportsAnalytics: React.FC = () => {
 
       {/* Summary KPIs */}
       <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={<AlertTriangle size={16} className="text-orange-600" />} label="Total Incidents"
+        <DataRegion queries={[summaryQuery]} label="Total Incidents"><StatCard icon={<AlertTriangle size={16} className="text-orange-600" />} label="Total Incidents"
           value={String(totalIncidents)} valueCls="text-slate-900">
           <DeltaPill value={summaryData?.incident_trend_pct} unit="%" goodWhen="down" vs={prior} />
-        </StatCard>
-        <StatCard icon={<Activity size={16} className="text-emerald-600" />} label="Resolution Rate"
+        </StatCard></DataRegion>
+        <DataRegion queries={[summaryQuery]} label="Resolution Rate"><StatCard icon={<Activity size={16} className="text-emerald-600" />} label="Resolution Rate"
           value={resolutionRate != null ? `${resolutionRate}%` : '—'} valueCls="text-emerald-700">
           <DeltaPill value={summaryData?.resolution_rate_improvement_pct} unit=" pts" goodWhen="up" vs={prior} />
-        </StatCard>
-        <StatCard icon={<Clock size={16} className="text-blue-600" />} label="Avg Response Time"
+        </StatCard></DataRegion>
+        <DataRegion queries={[summaryQuery]} label="Avg Response Time"><StatCard icon={<Clock size={16} className="text-blue-600" />} label="Avg Response Time"
           value={avgResponseTimeMin != null ? `${avgResponseTimeMin} min` : '—'} valueCls="text-blue-700">
           <DeltaPill value={summaryData?.response_time_delta_min} unit=" min" goodWhen="down" vs={prior} />
-        </StatCard>
-        <StatCard icon={<Users size={16} className="text-purple-600" />} label="People Affected"
+        </StatCard></DataRegion>
+        <DataRegion queries={[summaryQuery]} label="People Affected"><StatCard icon={<Users size={16} className="text-purple-600" />} label="People Affected"
           value={totalAffected.toLocaleString()} valueCls="text-purple-700">
           <p className="text-[11px] font-medium text-slate-400">Reported, all districts ({dateRange})</p>
-        </StatCard>
+        </StatCard></DataRegion>
       </motion.div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Monthly Incident Trend */}
-        <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <DataRegion queries={[trendsQuery]} label="Monthly Incident & Resolution Trend"><motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">Monthly Incident & Resolution Trend</h3>
@@ -271,10 +275,10 @@ const ReportsAnalytics: React.FC = () => {
               <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#16a34a" fill="url(#resGrad)" strokeWidth={2.5} />
             </AreaChart>
           </ResponsiveContainer>
-        </motion.div>
+        </motion.div></DataRegion>
 
         {/* Disaster Type Distribution */}
-        <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <DataRegion queries={[typesQuery]} label="Disaster Type Breakdown"><motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">Disaster Type Breakdown (%)</h3>
@@ -307,18 +311,16 @@ const ReportsAnalytics: React.FC = () => {
                   <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: d.color }} />
                   <span className="text-xs font-semibold text-slate-700 flex-1">{d.name}</span>
                   <span className="text-sm font-bold text-slate-900">{d.percent}%</span>
-                  {/* <span className="text-[11px] font-semibold text-slate-500 w-12 text-right">{d.percent}%</span> */}
                 </div>
               ))}
             </div>
           </div>
-        </motion.div>
+        </motion.div></DataRegion>
       </div>
 
-      {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Response Time by Agency */}
-        <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <DataRegion queries={[responseTimesQuery]} label="Avg Response Time by Agency"><motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">Avg Response Time by Agency (min)</h3>
@@ -343,14 +345,14 @@ const ReportsAnalytics: React.FC = () => {
               {responseTimeData.filter((d) => (d.excluded ?? 0) > 0).map((d) => `${d.agency} ×${d.excluded}`).join(', ')}
             </p>
           )}
-        </motion.div>
+        </motion.div></DataRegion>
 
         {/* Resource Utilization */}
-        <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+        <DataRegion queries={[utilizationQuery]} label="Resource Utilization Rate"><motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
           <div className="flex items-center gap-2 mb-4">
             <Package size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-slate-800">Resource Utilization Rate (%)</h3>
-            
+
           </div>
           {resourceUtilization.length === 0 && <p className="text-xs text-slate-500">No stock or approved requisitions recorded.</p>}
           <div className="space-y-4">
@@ -358,28 +360,26 @@ const ReportsAnalytics: React.FC = () => {
               <div key={res.category}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-semibold text-slate-800">{res.category}</span>
-                  <span className={`text-xs font-bold ${
-                    res.used > 80 ? 'text-red-600' : res.used > 50 ? 'text-amber-600' : 'text-emerald-600'
-                  }`}>
+                  <span className={`text-xs font-bold ${res.used > 80 ? 'text-red-600' : res.used > 50 ? 'text-amber-600' : 'text-emerald-600'
+                    }`}>
                     {res.used}% allocated
                   </span>
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      res.used > 80 ? 'bg-red-500' : res.used > 50 ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`}
+                    className={`h-full rounded-full transition-all ${res.used > 80 ? 'bg-red-500' : res.used > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
                     style={{ width: `${res.used}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
-        </motion.div>
+        </motion.div></DataRegion>
       </div>
 
       {/* Historical Incident by State */}
-      <motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+      <DataRegion queries={[heatmapQuery]} label="State Disaster Impact & Performance Summary"><motion.div variants={itemAnim} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
         <div className="px-5 py-4 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-blue-600" />
@@ -439,9 +439,8 @@ const ReportsAnalytics: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          state.severity ? SEVERITY_PILL[state.severity] : 'bg-slate-100 text-slate-500 border border-slate-200'
-                        }`}>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${state.severity ? SEVERITY_PILL[state.severity] : 'bg-slate-100 text-slate-500 border border-slate-200'
+                          }`}>
                           {state.severity ?? (hasIncidents ? 'Not set' : '—')}
                         </span>
                       </td>
@@ -493,9 +492,8 @@ const ReportsAnalytics: React.FC = () => {
                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
                                       {d.count} {d.count === 1 ? 'incident' : 'incidents'}
                                     </span>
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                                      d.severity ? SEVERITY_PILL[d.severity] : 'bg-slate-100 text-slate-500'
-                                    }`}>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${d.severity ? SEVERITY_PILL[d.severity] : 'bg-slate-100 text-slate-500'
+                                      }`}>
                                       {d.severity ?? 'Not set'}
                                     </span>
                                   </div>
@@ -512,7 +510,7 @@ const ReportsAnalytics: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </motion.div>
+      </motion.div></DataRegion>
     </motion.div>
   );
 };

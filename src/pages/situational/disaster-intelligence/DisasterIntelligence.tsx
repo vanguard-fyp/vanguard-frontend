@@ -1,3 +1,4 @@
+import { DataRegion } from '../../../components/common/DataRegion';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -95,12 +96,14 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   };
   const [sitrepOpen, setSitrepOpen] = useState(false);
 
-  const { data: incidents = [] } = useIncidents();
+  const incidentsQuery = useIncidents();
+  const { data: incidents = [] } = incidentsQuery;
   const activeIncidents = useMemo(
     () => incidents.filter((inc) => inc.status !== 'Resolved' && inc.status !== 'Rejected'),
     [incidents]
   );
-  const { data: warehouses = [] } = useWarehouses();
+  const warehousesQuery = useWarehouses();
+  const { data: warehouses = [] } = warehousesQuery;
 
   const combinedPOIs = useMemo(() => {
     const list: MapPOI[] = [];
@@ -125,11 +128,9 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   const handleSelectAllLayers = () =>
     setLayers(Object.fromEntries(Object.keys(defaultLayers).map((k) => [k, true])) as unknown as GISLayerState);
 
-  // Local matches first (incidents, depots), then real places from OpenStreetMap.
   const local = useMemo<Result[]>(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    // Every typed word must appear somewhere ("flood pahang" finds a Pahang flood).
     const words = q.split(/\s+/);
     const matches = (text: string) => words.every((w) => text.includes(w));
     const out: Result[] = [];
@@ -222,7 +223,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
   return (
     <>
-      <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
+      <DataRegion queries={[incidentsQuery]} label="Incidents"><DataRegion queries={[warehousesQuery]} label="Depot locations" keepContent><motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
         <motion.div variants={itemAnim} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
           <div>
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Disaster Intelligence</h1>
@@ -244,7 +245,6 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
         {activeTab === 'map' && (
           <motion.div variants={itemAnim} className="relative bg-white border border-slate-200/80 rounded-2xl overflow-hidden">
-            {/* Toolbar */}
             <div className="px-4 sm:px-5 py-3 border-b border-slate-100 flex flex-wrap items-center gap-3">
               <div ref={searchRef} className="relative flex-1 min-w-[220px] max-w-md">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -385,7 +385,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
         )}
 
         {activeTab === 'overview' && <IntelligenceOverview onSelectInsight={setActiveInsightId} />}
-      </motion.div>
+      </motion.div></DataRegion></DataRegion>
 
       <SitrepPanel
         incident={sitrepOpen ? selectedIncident : null}

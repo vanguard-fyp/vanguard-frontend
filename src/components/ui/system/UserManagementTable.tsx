@@ -1,3 +1,4 @@
+import { DataRegion } from '../../common/DataRegion';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Users, Search, Edit2, Trash2, SlidersHorizontal } from 'lucide-react';
 import type { UserAccount, UserManagementTableProps } from '../../../types';
@@ -20,7 +21,8 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   const PAGE_SIZE = 15;
 
   // Cached user accounts query — fast, zero-delay instant search in client memory
-  const { data: allUsers = [], isLoading, isError, refetch, isFetching } = useUsers();
+  const usersQuery = useUsers();
+  const { data: allUsers = [], isLoading, isError, refetch, isFetching } = usersQuery;
   const { user: currentUser } = useAuth();
 
   const filteredUsers = useMemo(() => {
@@ -70,7 +72,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs space-y-0">
+    <DataRegion queries={[usersQuery]} label="User directory"><div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs space-y-0">
       {/* Header & Filter Controls */}
       <div className="px-5 py-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
@@ -132,7 +134,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
               <tr>
                 <td colSpan={7} className="px-5 py-8 text-center text-xs text-slate-400 font-medium">Loading user accounts…</td>
               </tr>
-            ) : isError ? (
+            ) : isError && usersQuery.data === undefined ? (
               <tr>
                 <td colSpan={7} className="px-5 py-8 text-center text-xs text-red-700 font-medium">
                   User accounts could not be loaded.{' '}
@@ -258,6 +260,6 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
         onConfirm={handleConfirmDelete}
         onCancel={() => setUserToDelete(null)}
       />
-    </div>
+    </div></DataRegion>
   );
 };

@@ -1,14 +1,8 @@
-/**
- * Vanguard API Client
- * Centralized HTTP client with automatic JWT token attachment, refresh interceptor, and error handling.
- */
-
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export class ApiError extends Error {
   status: number;
-  data: any;
-
+  data?: any;
   constructor(message: string, status: number, data?: any) {
     super(message);
     this.name = 'ApiError';
@@ -19,134 +13,110 @@ export class ApiError extends Error {
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
+  timeoutMs?: number;
   _retry?: boolean;
+  responseType?: 'json' | 'blob';
 }
 
-let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
-
-function subscribeTokenRefresh(cb: (token: string) => void) {
-  refreshSubscribers.push(cb);
+export function clearSession() {
+  for (const key of ['vanguard_token', 'vanguard_refresh_token', 'vanguard_user']) localStorage.removeItem(key);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('vanguard:session-change'));
 }
 
-function onRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
-  refreshSubscribers = [];
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), ms);
+  return controller.signal;
+}
+
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals);
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) { controller.abort(signal.reason); break; }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
+}
+
+async function boundedFetch(url: string, options: RequestInit, timeoutMs: number) {
+  const signals = [timeoutSignal(timeoutMs)];
+  if (options.signal) signals.push(options.signal);
+  try {
+    return await fetch(url, { ...options, signal: anySignal(signals) });
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new ApiError((error as Error).name === 'TimeoutError'
+      ? 'The server took too long to respond. Please try again.'
+      : 'The server is unavailable. Check your connection and try again.', 0);
+  }
+}
+
+let refreshFlight: Promise<string> | null = null;
+async function refreshedToken(): Promise<string> {
+  if (!refreshFlight) {
+    refreshFlight = (async () => {
+      const refreshToken = localStorage.getItem('vanguard_refresh_token');
+      if (!refreshToken) {
+        clearSession();
+        throw new ApiError('Please sign in again.', 401);
+      }
+      const response = await boundedFetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      }, 30_000);
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) clearSession();
+        throw new ApiError('Your session could not be refreshed. Please sign in again.', response.status);
+      }
+      const data = await response.json();
+      if (!data.access_token) {
+        clearSession();
+        throw new ApiError('Invalid session response. Please sign in again.', 401);
+      }
+      localStorage.setItem('vanguard_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('vanguard_refresh_token', data.refresh_token);
+      if (data.user) localStorage.setItem('vanguard_user', JSON.stringify(data.user));
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('vanguard:session-change'));
+      return data.access_token as string;
+    })().finally(() => { refreshFlight = null; });
+  }
+  return refreshFlight;
 }
 
 export async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { params, headers, _retry, ...customConfig } = options;
-
+  const { params, headers, _retry, timeoutMs, responseType, ...config } = options;
   let url = `${BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-
-  if (params) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        searchParams.append(key, String(value));
-      }
-    });
-    const queryString = searchParams.toString();
-    if (queryString) {
-      url += (url.includes('?') ? '&' : '?') + queryString;
-    }
-  }
-
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params ?? {})) if (value != null) search.append(key, String(value));
+  const query = search.toString();
+  if (query) url += `${url.includes('?') ? '&' : '?'}${query}`;
   const token = localStorage.getItem('vanguard_token');
-
-  const isFormData = typeof FormData !== 'undefined' && customConfig.body instanceof FormData;
-  const defaultHeaders: HeadersInit = {
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...headers,
-  };
-
-  try {
-    const response = await fetch(url, {
-      ...customConfig,
-      headers: defaultHeaders,
-    });
-
-    // Handle 401 & attempt refresh token exchange once
-    if (response.status === 401 && !_retry && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
-      const refreshToken = localStorage.getItem('vanguard_refresh_token');
-      if (refreshToken) {
-        if (!isRefreshing) {
-          isRefreshing = true;
-          try {
-            const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refresh_token: refreshToken }),
-            });
-
-            if (refreshRes.ok) {
-              const refreshData = await refreshRes.json();
-              localStorage.setItem('vanguard_token', refreshData.access_token);
-              if (refreshData.refresh_token) {
-                localStorage.setItem('vanguard_refresh_token', refreshData.refresh_token);
-              }
-              if (refreshData.user) {
-                localStorage.setItem('vanguard_user', JSON.stringify(refreshData.user));
-              }
-              isRefreshing = false;
-              onRefreshed(refreshData.access_token);
-              return request<T>(endpoint, { ...options, _retry: true });
-            } else {
-              isRefreshing = false;
-              // Clear invalid session
-              localStorage.removeItem('vanguard_token');
-              localStorage.removeItem('vanguard_refresh_token');
-              localStorage.removeItem('vanguard_user');
-            }
-          } catch {
-            isRefreshing = false;
-          }
-        } else {
-          // Wait for token refresh
-          return new Promise<T>((resolve) => {
-            subscribeTokenRefresh(() => {
-              resolve(request<T>(endpoint, { ...options, _retry: true }));
-            });
-          });
-        }
-      }
-    }
-
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { message: response.statusText };
-      }
-      const detail = errorData.detail;
-      const message =
-        typeof detail === 'string'
-          ? detail
-          : detail && typeof detail === 'object' && 'message' in detail
-            ? String((detail as { message: unknown }).message)
-            : Array.isArray(detail)
-              ? detail.map((d: { msg?: string }) => d?.msg).filter(Boolean).join('; ')
-              : errorData.message || 'API Request Failed';
-      throw new ApiError(message, response.status, errorData);
-    }
-
-    // Return empty object for 204 No Content
-    if (response.status === 204) {
-      return {} as T;
-    }
-
-    return await response.json();
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    if ((error as Error)?.name === 'AbortError') {
-      throw error;
-    }
-    throw new ApiError((error as Error).message || 'Network connection failed', 0);
+  const multipart = typeof FormData !== 'undefined' && config.body instanceof FormData;
+  const longRunning = /(?:export|sitrep|assessment|copilot|agents|explain|draft)/.test(endpoint);
+  const response = await boundedFetch(url, {
+    ...config,
+    headers: { ...(!multipart ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+  }, timeoutMs ?? (longRunning ? 120_000 : 30_000));
+  if (response.status === 401 && !_retry && !endpoint.startsWith('/auth/')) {
+    if (token === localStorage.getItem('vanguard_token')) await refreshedToken();
+    // A mutation may already have reached the server; let its caller decide whether to repeat it.
+    if (!config.method || config.method === 'GET') return request<T>(endpoint, { ...options, _retry: true });
+    throw new ApiError('Your session was refreshed. Please retry this action; it was not repeated automatically.', 401);
   }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const detail = data.detail;
+    const message = typeof detail === 'string' ? detail
+      : Array.isArray(detail) ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join('; ')
+      : detail?.message || data.message || `Request failed (${response.status}).`;
+    if (response.status === 401 && !endpoint.startsWith('/auth/')) clearSession();
+    throw new ApiError(message, response.status, data);
+  }
+  if (response.status === 204) return {} as T;
+  return (responseType === 'blob' ? response.blob() : response.json()) as Promise<T>;
 }
 
 export const apiClient = {
@@ -158,10 +128,10 @@ export const apiClient = {
     request<T>(endpoint, { method: 'PUT', body: body ? JSON.stringify(body) : undefined, headers }),
   patch: <T>(endpoint: string, body?: any, headers?: HeadersInit) =>
     request<T>(endpoint, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined, headers }),
-  delete: <T>(endpoint: string, headers?: HeadersInit) =>
-    request<T>(endpoint, { method: 'DELETE', headers }),
+  delete: <T>(endpoint: string, headers?: HeadersInit) => request<T>(endpoint, { method: 'DELETE', headers }),
 };
 
-/** POST multipart/form-data through the same auth + refresh pipeline. */
 export const postForm = <T>(endpoint: string, form: FormData) =>
   request<T>(endpoint, { method: 'POST', body: form });
+
+export const downloadBlob = (endpoint: string) => request<Blob>(endpoint, { method: 'GET', responseType: 'blob', timeoutMs: 120_000 });

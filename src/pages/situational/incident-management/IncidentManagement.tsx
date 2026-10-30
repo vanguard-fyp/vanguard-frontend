@@ -1,3 +1,4 @@
+import { DataRegion } from '../../../components/common/DataRegion';
 import { incidentTypeForHazard } from '../../../utils/hazardType';
 import { predictionToDraft } from '../../../utils/predictionDraft';
 import type { HazardPrediction } from '../../../types/intelligence';
@@ -75,14 +76,14 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const navigate = useNavigate();
 
   const toast = useToast();
+  const incidentsQuery = useIncidents();
   const {
     data: incidents = [],
     isLoading: isIncidentsLoading,
     isError: isIncidentsError,
     refetch: refetchIncidents,
-  } = useIncidents();
+  } = incidentsQuery;
 
-  // Scope Switcher: National EOC DB vs Global Live GDACS
   const [viewScope, setViewScope] = useState<'national' | 'global'>('national');
 
   // Only fetch external GDACS feed if the officer activates the Global view
@@ -103,18 +104,15 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [visibleCount, setVisibleCount] = useState<number>(6);
 
-  // Global filters
   const [globalSearch, setGlobalSearch] = useState('');
   const [globalAlertLevel, setGlobalAlertLevel] = useState<string>('All');
   const [globalHazardType, setGlobalHazardType] = useState<string>('All');
   const [globalPage, setGlobalPage] = useState(0);
 
-  // New Incident Modal State
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<DisasterType>('Flood');
   const [newLocation, setNewLocation] = useState('');
-  // No default place: state/district come from the pin.
   const [newState, setNewState] = useState('');
   const [newDistrict, setNewDistrict] = useState('');
   const [newPostcode, setNewPostcode] = useState('');
@@ -176,7 +174,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     };
   }, [newLat, newLng]);
 
-  // Form Validation Errors (inline red span)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Duplicate Detection Workflow State
@@ -184,7 +181,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState<any>(null);
 
-  // Edit Incident State (includes Disaster Management Authority Impact Assessment updates)
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -202,22 +198,18 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const [editExistingMedia, setEditExistingMedia] = useState<string[]>([]);
   const [editMedia, setEditMedia] = useState<MediaItem[]>([]);
 
-  // Saved attachments shown as thumbnails in the update form (signed URLs).
   const { data: editMediaResolved = [] } = useIncidentMedia(editingIncident?.id, editModalOpen && (editingIncident?.media_urls?.length ?? 0) > 0);
   const editPreviews = useMemo(
     () => Object.fromEntries(editMediaResolved.filter((m) => m.status === 'available' && m.url).map((m) => [m.ref, { url: m.url as string, kind: m.kind }])),
     [editMediaResolved]
   );
 
-  // Delete / Archive Incident State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Prediction the report form was opened from (null for a normal report).
   const [promotingPredictionId, setPromotingPredictionId] = useState<string | null>(null);
   const promotePrediction = usePromotePrediction();
   const [incidentToDelete, setIncidentToDelete] = useState<Incident | null>(null);
 
-  // Count active incidents (excluding resolved, rejected, and archived)
   const activeIncidentsCount = useMemo(() => {
     return incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected' && i.status !== 'Archived').length;
   }, [incidents]);
@@ -239,13 +231,11 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     }
   }, [dynamicDisasterTypes, selectedCategory]);
 
-  // Client-side filtering: instant 0ms latency with zero network round-trip overhead
   const [nationalPage, setNationalPage] = useState(0);
   const NATIONAL_PAGE_SIZE = 10;
 
   const filteredIncidents = useMemo(() => {
     return incidents.filter((incident) => {
-      // Status filter
       if (filterStatus === 'All') {
         if (incident.status === 'Resolved' || incident.status === 'Rejected' || incident.status === 'Archived') {
           return false;
@@ -254,17 +244,14 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
         return false;
       }
 
-      // Severity filter
       if (filterSeverity !== 'All' && incident.severity !== filterSeverity) {
         return false;
       }
 
-      // Category / Disaster type filter
       if (selectedCategory !== 'All' && incident.type !== selectedCategory) {
         return false;
       }
 
-      // Search query filter (matches title, location, district, state, display_id, description)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchTitle = (incident.title || '').toLowerCase().includes(q);
@@ -282,7 +269,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     });
   }, [incidents, filterStatus, filterSeverity, selectedCategory, searchQuery]);
 
-  // Reset to first page when any filter or search changes
   useEffect(() => {
     setNationalPage(0);
   }, [filterSeverity, filterStatus, selectedCategory, searchQuery]);
@@ -296,7 +282,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   void visibleCount;
   void setVisibleCount;
 
-  // Global Disasters Filter
   const filteredGlobalDisasters = useMemo(() => {
     return (globalDisasters as GdacsEvent[]).filter((g) => {
       const matchSearch =
@@ -310,11 +295,9 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
       const matchHazard = globalHazardType === 'All' || (hazardDef ? hazardDef.matches(g.hazardType) : true);
       return matchSearch && matchAlert && matchHazard;
     })
-      // Most severe first: Red → Orange → Green (feed order kept within a level).
       .sort((a, b) => (ALERT_RANK[a.alertLevel] ?? 9) - (ALERT_RANK[b.alertLevel] ?? 9));
   }, [globalDisasters, globalSearch, globalAlertLevel, globalHazardType]);
 
-  // GDACS events are client-side (one feed); paged like the national list.
   const GLOBAL_PAGE_SIZE = 10;
   const globalPageCount = Math.max(1, Math.ceil(filteredGlobalDisasters.length / GLOBAL_PAGE_SIZE));
   const safeGlobalPage = Math.min(globalPage, globalPageCount - 1);
@@ -340,7 +323,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     return counts;
   }, [globalDisasters, availableGdacsHazards]);
 
-  // If the active hazard filter no longer has data, reset to All.
   useEffect(() => {
     if (globalHazardType !== 'All' && !availableGdacsHazards.some((d) => d.id === globalHazardType)) {
       setGlobalHazardType('All');
@@ -359,7 +341,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   const handleEscalateGdacs = (gdacs: GdacsEvent) => {
     setPromotingPredictionId(null);
     setNewTitle(`[GDACS] ${gdacs.title}`);
-    // Disaster type follows the GDACS hazard (cyclone → Severe Storm, wildfire → Forest Fire, …).
     setNewType(incidentTypeForHazard(gdacs.hazardType));
     setNewLocation(`${gdacs.country} (Regional Transboundary Monitoring)`);
     setNewState('Regional / Transboundary');
@@ -386,7 +367,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   }, [reportModalOpen]);
 
   const handlePromotePrediction = (prediction: HazardPrediction) => {
-    // Everything the prediction carries is pre-filled; the officer reviews and submits.
     const d = predictionToDraft(prediction);
     setPromotingPredictionId(prediction.id ?? null);
     setNewTitle(d.title);
@@ -652,7 +632,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     if (!duplicateMatch) return;
     setShowDuplicateModal(false);
     setReportModalOpen(false);
-    // Open edit modal on existing record
     setEditingIncident(duplicateMatch);
     setEditTitle(duplicateMatch.title);
     setEditSeverity(duplicateMatch.severity);
@@ -675,7 +654,6 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
     toast.info('Duplicate creation prevented. Returned to Incident Management.');
   };
 
-  // Step 3.2: Determined different -> proceed with creating new incident
   const handleDuplicateProceedAsNew = async () => {
     if (pendingPayload) {
       await executeCreation(pendingPayload);
@@ -694,15 +672,13 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
   );
 
   return (
-    <motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
-      {/* Page title + primary action */}
+    <DataRegion queries={[incidentsQuery]} label="Page data"><motion.div variants={containerAnim} initial="hidden" animate="show" className="space-y-5">
       <motion.div variants={itemAnim} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
           <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Incident Management</h1>
           <p className="text-xs text-slate-500 mt-0.5">Malaysia's incident register and the global GDACS alert feed.</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-          {/* Forecast hazards that are not incidents yet: opened in a side drawer */}
           <EarlyWarningsTrigger onClick={() => setWarningsOpen(true)} active={warningsOpen} />
           <button
             onClick={() => {
@@ -1475,7 +1451,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
           <>Are you sure you want to remove <span className="font-semibold text-slate-800">{getCleanDisplayId(incidentToDelete.id, incidentToDelete.display_id)}</span>?</>
         )}
       </ConfirmModal>
-    </motion.div>
+    </motion.div></DataRegion>
   );
 };
 

@@ -1,3 +1,4 @@
+import { DataRegion } from '../../components/common/DataRegion';
 import React, { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -26,22 +27,28 @@ const VIEWS = [
 
 const axisTick = { fill: DASH.inkFaint, fontSize: 10 };
 
-// ─── Component ──────────────────────────────────────────────────────
 const EOCCommandCenter: React.FC = () => {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [view, setView] = useState<'map' | 'chain'>('map');
   const [stockHover, setStockHover] = useState<number | null>(null);
   const navigate = useNavigate();
 
-  // ── API Data ───────────────────────────────────────────────────────
-  const { data: incidents = [], isPending: incLoading } = useIncidents();
-  const { data: rescueTeams = [], isPending: teamsLoading } = useRescueTeams();
-  const { data: missions = [], isPending: misLoading } = useMissions();
-  const { data: kpiTrends, isPending: kpiLoading } = useKpiTrends();
-  const { data: severityDist = [] } = useSeverityDist();
-  const { data: responseTrend = [], isPending: respLoading } = useResponseTrends();
-  const { data: teamCapacity = [], isPending: capLoading } = useTeamCapacity();
-  const { data: resourceUtil = [], isPending: stockLoading } = useResourceUtilization();
+  const incidentsQuery = useIncidents();
+  const { data: incidents = [], isPending: incLoading } = incidentsQuery;
+  const teamsQuery = useRescueTeams();
+  const { data: rescueTeams = [], isPending: teamsLoading } = teamsQuery;
+  const missionsQuery = useMissions();
+  const { data: missions = [], isPending: misLoading } = missionsQuery;
+  const kpiQuery = useKpiTrends();
+  const { data: kpiTrends, isPending: kpiLoading } = kpiQuery;
+  const severityQuery = useSeverityDist();
+  const { data: severityDist = [] } = severityQuery;
+  const responseTrendQuery = useResponseTrends();
+  const { data: responseTrend = [], isPending: respLoading } = responseTrendQuery;
+  const capacityQuery = useTeamCapacity();
+  const { data: teamCapacity = [], isPending: capLoading } = capacityQuery;
+  const utilizationQuery = useResourceUtilization();
+  const { data: resourceUtil = [], isPending: stockLoading } = utilizationQuery;
 
   // ── Derived Values: Only show ACTIVE/UNRESOLVED items ─────────────────────
   const activeIncidents = incidents.filter((i) => i.status !== 'Resolved' && i.status !== 'Rejected');
@@ -76,10 +83,8 @@ const EOCCommandCenter: React.FC = () => {
   const inProgressCount = activeMissions.filter((m) => m.status === 'In Progress').length;
   const pendingCount = activeMissions.filter((m) => m.status === 'Pending').length;
   const severityLine = severityDist.filter((s) => s.value > 0 && s.name !== 'Critical').map((s) => `${s.value} ${s.name.toLowerCase()}`).join(' · ');
-  // Per-category colours from the API are replaced by the dashboard's palette.
   const stockData = resourceUtil.map((r, i) => ({ ...r, fill: CATEGORY[i % CATEGORY.length] }));
 
-  // Sparklines show NEW records per bucket (hour or day, chosen by the backend).
   const perUnit = kpiTrends?.bucket === 'hour' ? 'hour' : 'day';
   const lastLabel = kpiTrends?.labels?.[kpiTrends.labels.length - 1];
   const sparkWindow = kpiTrends?.window_end
@@ -89,7 +94,6 @@ const EOCCommandCenter: React.FC = () => {
     : undefined;
   const sparkCaption = (what: string) => (sparkWindow ? `${what}/${perUnit} · ${sparkWindow}` : undefined);
 
-  // Set first active incident as default selection when loaded
   React.useEffect(() => {
     if (activeIncidents.length > 0 && !selectedIncident) {
       setSelectedIncident(activeIncidents[0]);
@@ -97,7 +101,6 @@ const EOCCommandCenter: React.FC = () => {
   }, [incidents]);
 
   // ── Response time ────────────────────────────────────────────────
-  // No default response time is assumed: with no measurements the panel says so.
   const respAt = (i: number): number | null => responseTrend[i]?.response_min ?? responseTrend[i]?.responseMin ?? null;
   const latestResp = responseTrend.length > 0 ? respAt(responseTrend.length - 1) : null;
   const firstResp = responseTrend.length > 0 ? respAt(0) : null;
@@ -116,35 +119,34 @@ const EOCCommandCenter: React.FC = () => {
 
       {/* ─── Row 1: headline numbers with trends ─────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
-        <StatCard title="Active Incidents" value={activeIncidents.length} icon={AlertTriangle} accent={ACCENT.incident}
+        <DataRegion queries={[incidentsQuery]} label="Active Incidents"><StatCard title="Active Incidents" value={activeIncidents.length} icon={AlertTriangle} accent={ACCENT.incident}
           loading={incLoading || kpiLoading}
           pill={criticalCount > 0 ? { text: `${criticalCount} critical`, tone: 'bad', trend: 'up' } : undefined}
           detail={severityLine || undefined}
           spark={{ data: kpiTrends?.incidents, labels: kpiTrends?.labels, kind: 'area', caption: sparkCaption('New') }}
-        />
-        <StatCard title="People Affected" value={totalAffected.toLocaleString()} icon={Users} accent={ACCENT.people}
+        /></DataRegion>
+        <DataRegion queries={[incidentsQuery]} label="People Affected"><StatCard title="People Affected" value={totalAffected.toLocaleString()} icon={Users} accent={ACCENT.people}
           loading={incLoading || kpiLoading}
           detail={`Across ${uniqueDistricts.length} ${uniqueDistricts.length === 1 ? 'area' : 'areas'}`}
           spark={{ data: kpiTrends?.population, labels: kpiTrends?.labels, kind: 'bar', caption: sparkWindow ? `Running total · ${sparkWindow}` : undefined }}
-        />
-        <StatCard title="Teams Deployed" value={`${deployedTeams.length}/${onDutyTeams.length}`} icon={ShieldCheck} accent={ACCENT.team}
+        /></DataRegion>
+        <DataRegion queries={[teamsQuery]} label="Teams Deployed"><StatCard title="Teams Deployed" value={`${deployedTeams.length}/${onDutyTeams.length}`} icon={ShieldCheck} accent={ACCENT.team}
           loading={teamsLoading || capLoading}
           detail={[deployedAgencies, offDutyTeamCount > 0 ? `${offDutyTeamCount} off duty` : ''].filter(Boolean).join(' · ') || 'No teams deployed'}
           segments={teamCapacity.map((t) => ({ label: t.name, filled: t.deployed ?? 0, total: (t.deployed ?? 0) + (t.available ?? 0) }))}
           progressCaption={capacityTotals.onDuty > 0 ? `${capacityTotals.deployed} of ${capacityTotals.onDuty} on-duty crew deployed (${capacityPct}%)` : undefined}
-        />
-        <StatCard title="Active Missions" value={activeMissions.length} icon={Route} accent={ACCENT.mission}
+        /></DataRegion>
+        <DataRegion queries={[missionsQuery, incidentsQuery]} label="Active Missions"><StatCard title="Active Missions" value={activeMissions.length} icon={Route} accent={ACCENT.mission}
           loading={misLoading || kpiLoading}
           pill={inProgressCount > 0 ? { text: `${inProgressCount} in progress`, tone: 'neutral' } : undefined}
           detail={`${pendingCount} queued`}
           spark={{ data: kpiTrends?.missions, labels: kpiTrends?.labels, kind: 'area', caption: sparkCaption('New') }}
-        />
+        /></DataRegion>
       </motion.div>
 
-      {/* ─── Row 2: performance and supply. Two halves that line up with
-           the four cards above (team capacity already lives on the Teams card). ── */}
+      {/* ─── Row 2: performance and supply. ── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
-        <Panel title="Avg response time" bodyClassName="@container px-6 pb-6 flex-1"
+        <DataRegion queries={[responseTrendQuery]} label="Avg response time"><Panel title="Avg response time" bodyClassName="@container px-6 pb-6 flex-1"
           action={respDeltaPct != null ? (
             <TrendPill pill={respDeltaPct === 0
               ? { text: 'No change', tone: 'neutral' }
@@ -189,10 +191,9 @@ const EOCCommandCenter: React.FC = () => {
             </div>
           </div>
           )}
-        </Panel>
+        </Panel></DataRegion>
 
-        {/* Share of each supply type assigned to approved requests (backend: resource utilisation). */}
-        <Panel title="Supplies allocated" bodyClassName="@container px-6 pb-6 flex-1 flex flex-col justify-center">
+        <DataRegion queries={[utilizationQuery]} label="Supplies allocated"><Panel title="Supplies allocated" bodyClassName="@container px-6 pb-6 flex-1 flex flex-col justify-center">
           {stockLoading ? (
             <div className="flex flex-col items-center gap-4 @sm:flex-row @sm:gap-8" aria-busy="true" aria-label="Loading supplies">
               <Bone className="w-[120px] h-[120px] shrink-0" style={{ borderRadius: '50%' }} />
@@ -226,12 +227,12 @@ const EOCCommandCenter: React.FC = () => {
             <p className="mt-4 text-[11px] text-slate-400">% of each supply type sent to approved requests · hover for units</p>
             </>
           )}
-        </Panel>
+        </Panel></DataRegion>
       </motion.div>
 
       {/* ─── Row 3: command view ─────────────────────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item}>
-        <Panel title="Command view"
+        <DataRegion queries={[incidentsQuery, teamsQuery]} label="Command view"><Panel title="Command view"
           action={<Segmented label="Command view" value={view} options={VIEWS} onChange={setView} />}
           bodyClassName="h-[340px] sm:h-[380px]"
         >
@@ -247,14 +248,14 @@ const EOCCommandCenter: React.FC = () => {
             <DashboardMap incidents={incidents} selectedIncident={selectedIncident}
               onSelectIncident={openIncident} />
           )}
-        </Panel>
+        </Panel></DataRegion>
       </motion.div>
 
       {/* ─── Row 4: AI priority ──────────────────────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item}>
-        <Panel title="AI priority score" action={<span className="text-[10px] font-medium text-slate-400">by incident, 0–100</span>}>
+        <DataRegion queries={[incidentsQuery]} label="AI priority score"><Panel title="AI priority score" action={<span className="text-[10px] font-medium text-slate-400">by incident, 0–100</span>}>
           <PriorityList incidents={activeIncidents} selectedIncidentId={selectedIncident?.id} onSelectIncident={selectIncident} loading={incLoading} />
-        </Panel>
+        </Panel></DataRegion>
       </motion.div>
     </motion.div>
   );

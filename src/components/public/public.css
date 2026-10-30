@@ -764,3 +764,55 @@
 .lf-intro > .lf-intro__grid { position: relative; z-index: 1; }
 .lf-loader[data-leaving='true'] { pointer-events: none; }
 .lf-roamer[data-big='true'] { outline-color: transparent; box-shadow: none; background: transparent; }
+
+/* Access / session status page: one centred message and one action. */
+.lf-status {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 2rem var(--lf-gutter) 6rem;
+}
+.lf-status__mark {
+  position: relative; width: 3.5rem; height: 3.5rem; display: grid; place-items: center; margin-bottom: 1.5rem;
+  border-radius: 50%; background: var(--lf-spot-tint); color: var(--lf-spot);
+  cursor: default; transition: transform 300ms var(--lf-ease);
+}
+/* Radar-style pings, the same language as the monitoring plate. */
+.lf-status__mark::before, .lf-status__mark::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid currentColor; opacity: 0; pointer-events: none;
+  animation: lf-status-ping 2.8s var(--lf-ease) infinite;
+}
+.lf-status__mark::after { animation-delay: 1.4s; }
+@keyframes lf-status-ping {
+  0% { transform: scale(1); opacity: 0.45; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+.lf-status__mark:hover { transform: scale(1.06); }
+
+/* Sign-in: the shackle tugs as if tried, and lifts open on hover. */
+.lf-lock__shackle { transform-box: fill-box; transform-origin: 50% 100%; animation: lf-lock-tug 3.2s ease-in-out infinite; }
+.lf-lock__shackle-hover { transform-box: fill-box; transform-origin: 20% 100%; transition: transform 350ms var(--lf-ease); }
+.lf-status__mark:hover .lf-lock__shackle { animation-play-state: paused; }
+.lf-status__mark:hover .lf-lock__shackle-hover { transform: translateY(-3px) rotate(-14deg); }
+.lf-lock__keyhole { animation: lf-lock-key 3.2s ease-in-out infinite; }
+@keyframes lf-lock-tug {
+  0%, 60%, 100% { transform: translateY(0); }
+  66% { transform: translateY(-2.5px); }
+  72% { transform: translateY(0); }
+  78% { transform: translateY(-1.5px); }
+  84% { transform: translateY(0); }
+}
+@keyframes lf-lock-key { 0%, 60%, 88%, 100% { opacity: 1; } 72% { opacity: 0.35; } }
+
+/* Denied: a short refusal shake. Server down: the signal fades in and out. */
+.lf-status__mark--denied .lf-status__icon { animation: lf-status-shake 3.2s ease-in-out infinite; }
+.lf-status__mark--unavailable .lf-status__icon { animation: lf-status-fade 2s ease-in-out infinite; }
+@keyframes lf-status-shake {
+  0%, 70%, 100% { transform: translateX(0); }
+  74% { transform: translateX(-3px); } 78% { transform: translateX(3px); }
+  82% { transform: translateX(-2px); } 86% { transform: translateX(2px); }
+}
+@keyframes lf-status-fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.lf-status__mark--alarm { background: #fbeef0; color: var(--lf-alarm); }
+.lf-status__title { font-size: clamp(1.9rem, 3vw, 2.4rem); margin: 0; }
+.lf-status__body { margin: 0.6rem 0 1.75rem; font-size: 1rem; }
+.lf-status .lf-btn { border-radius: 10px; }

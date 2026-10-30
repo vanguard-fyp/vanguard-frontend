@@ -1,3 +1,4 @@
+import { DataRegion } from '../../common/DataRegion';
 import React, { useState } from 'react';
 import { AlertTriangle, Target } from 'lucide-react';
 import { usePredictionAccuracy } from '../../../hooks/useIntelligence';
@@ -46,11 +47,12 @@ const Row: React.FC<{ label: string; s: AccuracyScore }> = ({ label, s }) => (
  */
 export const PredictionAccuracyPanel: React.FC = () => {
   const [days, setDays] = useState<number>(30);
-  const { data, isLoading, isError, refetch } = usePredictionAccuracy(days);
+  const accuracyQuery = usePredictionAccuracy(days);
+  const { data, isLoading, isError, refetch } = accuracyQuery;
   const o = data?.overall;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-xs">
+    <DataRegion queries={[accuracyQuery]} label="Warning accuracy"><div className="bg-white border border-slate-200 rounded-xl shadow-xs">
       <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between gap-3 bg-slate-50/40 rounded-t-xl flex-wrap">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
@@ -77,7 +79,7 @@ export const PredictionAccuracyPanel: React.FC = () => {
       </div>
 
       {isLoading && <p className="px-4 py-6 text-xs text-slate-400">Loading…</p>}
-      {isError && (
+      {isError && accuracyQuery.data === undefined && (
         <div className="px-4 py-4 flex items-center gap-2 text-xs text-red-700">
           <AlertTriangle size={13} /> Accuracy could not be loaded.
           <button onClick={() => refetch()} className="font-bold underline cursor-pointer">Retry</button>
@@ -147,6 +149,6 @@ export const PredictionAccuracyPanel: React.FC = () => {
           </p>
         </div>
       )}
-    </div>
+    </div></DataRegion>
   );
 };
