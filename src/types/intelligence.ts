@@ -347,6 +347,31 @@ export interface HazardPrediction {
   advisory_source: 'llm' | 'rule_fallback' | null;
   status: string;
   generated_at: string;
+  /** Read-only context: confirmed past incidents of this hazard in the area. Never part of the score. null = could not be read. */
+  history?: PredictionHistory | null;
+  /** Official MET Malaysia warnings in force for this hazard and area. Context only. null = feed unreachable. */
+  official_warnings?: OfficialWarning[] | null;
+}
+
+export interface OfficialWarning {
+  title: string;
+  issued: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  source: string;
+  /** Districts of this prediction named in the warning; null when the whole state is named. */
+  districts: string[] | null;
+  scope: 'district' | 'state';
+}
+
+export interface PredictionHistory {
+  years: number;
+  confirmed_events: number;
+  scope: 'district' | 'state';
+  area: string | null;
+  last_event_at: string | null;
+  prone: boolean;
+  label: string | null;
 }
 
 export interface Page<T> {

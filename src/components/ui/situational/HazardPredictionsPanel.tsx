@@ -14,6 +14,22 @@ import type { HazardPrediction } from '../../../types/intelligence';
 import { IconTile, LevelTag, Tag, TONE, type Tone } from '../shared/Tag';
 import { NavyIcon, Overlay } from '../shared/Modal';
 import { FormattedMessageText } from '../../../utils/messageFormatter';
+import { formatDateTime } from '../../../utils/dateFormatter';
+
+/** History behind the "historically …-prone" tag: context only, never part of the score. */
+const historyText = (p: HazardPrediction): string => {
+  const h = p.history;
+  if (!h) return '';
+  const where = h.scope === 'district' ? 'this district' : 'this state';
+  const last = h.last_event_at ? `, latest ${relativeTime(h.last_event_at)}` : '';
+  return `${h.confirmed_events} confirmed events in ${where} in the last ${h.years} years${last}. Context only, not part of the score.`;
+};
+
+/** Official MET warning(s) behind the "MET warning" tag: context only, never part of the score. */
+const warningText = (p: HazardPrediction): string =>
+  (p.official_warnings ?? [])
+    .map((w) => `${w.title} for ${w.districts?.join(', ') ?? 'the whole state'}${w.valid_to ? `, until ${formatDateTime(w.valid_to)}` : ''}`)
+    .join('; ') + ' (MET Malaysia, official). Context only, not part of the score.';
 
 /**
  * Emerging-hazard predictions from the scheduled scan: the forecast watch
@@ -153,20 +169,54 @@ const readings = (p: HazardPrediction): { label: string; value: string }[] => {
     if (s.peak_aqi != null) out.push({ label: 'Air quality', value: `AQI ${s.peak_aqi}${s.aqi_category ? ` · ${s.aqi_category}` : ''}` });
   }
   add('Rain, 24 h', n('rainfall_24h_mm'), (v) => `${v} mm`);
+  add('How rare (24 h)', n('rain_24h_return_period_years'), (v: number) => (v >= 1000 ? 'rarer than 1 in 1000 years' : v < 2 ? 'common here (under 1 in 2 years)' : `about 1 in ${Math.round(v)} years here`));
   add('Rain, 72 h', n('rainfall_72h_mm'), (v) => `${v} mm`);
+  add('How rare (72 h)', n('rain_72h_return_period_years'), (v: number) => (v >= 1000 ? 'rarer than 1 in 1000 years' : v < 2 ? 'common here (under 1 in 2 years)' : `about 1 in ${Math.round(v)} years here`));
+  add('Local 1-in-2-year day', n('rain_24h_1in2y_mm'), (v) => `${v} mm`);
   add('Heaviest hour', n('heaviest_hour_mm'), (v) => `${v} mm`);
   if (p.hazard_type === 'Landslide') add('Rain, past 7 days', n('rain_past_7d_mm'), (v) => `${v} mm`);
+  add('Slope', n('slope_deg'), (v) => `${v}°`);
+  if (typeof s.slope_basis === 'string') out.push({ label: 'Slope', value: s.slope_basis });
   add('Rain, 7 d + forecast', n('rain_past_7d_plus_forecast_mm'), (v) => `${v} mm`);
   add('Rain, past 30 days', n('rain_past_30d_mm'), (v) => `${v} mm`);
   add('River peak', n('river_peak_vs_today'), (v) => `${v}× today`);
+  if (n('river_peak_m3s') != null) {
+    out.push({ label: 'River peak', value: `${n('river_peak_m3s')} m³/s (2-year flood level ${n('river_1in2y_m3s')} m³/s)` });
+  }
+  add('How rare (river)', n('river_return_period_years'), (v: number) => (v >= 1000 ? 'rarer than 1 in 1000 years' : v < 2 ? 'common here (under 1 in 2 years)' : `about 1 in ${Math.round(v)} years here`));
   add('River vs usual', n('river_vs_usual'), (v) => `${Math.round(v * 100)}%`);
+  add('River vs usual for the month', n('river_vs_month_median'), (v) => `${Math.round(v * 100)}%`);
+  add('Driest-10% month here', n('rain_30d_dry_p10_mm'), (v) => `${v} mm in 30 days`);
+  if (typeof s.threshold_basis === 'string') out.push({ label: 'Danger line', value: String(s.threshold_basis) });
   add('Wind gusts', n('max_gust_kmh'), (v) => `${Math.round(v)} km/h`);
   const fires = n('fire_detections_24h');
   if (fires != null && fires > 0) out.push({ label: 'Fire detections', value: `${fires} in 24 h` });
   add('Hot, dry hours', n('hot_dry_hours'), (v) => `${v} h`);
   const districts = Array.isArray(s.districts_affected) ? s.districts_affected.length : 0;
-  if (districts > 1) out.push({ label: 'Districts affected', value: String(districts) });
+  // The per-district list replaces this count when the scan sent one.
+  if (districts > 1 && !districtScores(p).length) out.push({ label: 'Districts affected', value: String(districts) });
+  const points = n('rain_points_checked');
+  if (points != null && points > 1 && typeof s.rain_point === 'string') {
+    out.push({ label: 'Wettest point', value: s.rain_point === 'district centre' ? `district centre (of ${points} checked)` : `${s.rain_point} (of ${points} checked)` });
+  }
+  if (typeof s.river_point === 'string') out.push({ label: 'River read at', value: s.river_point });
   return out;
+};
+
+type DistrictScore = { district: string; score: number; population: number | null };
+
+/** Each affected district with its own score, worst first (state-level warnings only). */
+const districtScores = (p: HazardPrediction): DistrictScore[] => {
+  const rows = p.signals?.district_scores;
+  return Array.isArray(rows) ? (rows as DistrictScore[]).filter((r) => r && typeof r.district === 'string' && isNum(r.score)) : [];
+};
+
+type BacktestFigure = { band: string; alarms: number; followed_by_flood: number; region?: string; period?: string; source?: string; note?: string };
+
+/** How often a flood alarm of this strength was followed by a recorded flood in the back-test. */
+const backtestOf = (p: HazardPrediction): BacktestFigure | null => {
+  const b = (p.signals ?? {}).backtest as BacktestFigure | undefined;
+  return b && isNum(b.alarms) && b.alarms > 0 && isNum(b.followed_by_flood) ? b : null;
 };
 
 /** "administrative_areas" -> "Administrative areas" */
@@ -242,7 +292,10 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
   const scanning = scan.isPending || !!scanStatus?.running;
   const downSources = Object.entries(scanStatus?.sources ?? {})
     .filter(([, ok]) => ok === false)
-    .map(([k]) => SOURCE_LABEL[k] ?? k);
+    .map(([k]) => {
+      const note = scanStatus?.source_notes?.[k];
+      return `${SOURCE_LABEL[k] ?? k}${note ? ` (${note})` : ''}`;
+    });
   // When a scan we started finishes, refresh the list and report the result once.
   const watching = React.useRef(false);
   React.useEffect(() => {
@@ -402,6 +455,12 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                     <span className="block text-xs text-slate-500 truncate mt-0.5">
                                       {p.state ? `${p.state} · ` : ''}{whenText(p)}{isNum(p.exposed_population) ? ` · ${fmtNumber(p.exposed_population)} exposed` : ''}
                                     </span>
+                                    {(p.history?.label || !!p.official_warnings?.length) && (
+                                      <span className="flex flex-wrap gap-1.5 mt-1">
+                                        {!!p.official_warnings?.length && <Tag tone="red" title={warningText(p)}>MET warning</Tag>}
+                                        {p.history?.label && <Tag tone="amber" title={historyText(p)}>{p.history.label}</Tag>}
+                                      </span>
+                                    )}
                                   </span>
                                   <span className="flex flex-col items-end gap-1 w-14 shrink-0" title="Hazard score (0–100)">
                                     <span className="text-sm font-bold tabular-nums" style={{ color: (p.hazard_score ?? 0) >= 65 ? color : '#0f172a' }}>{isNum(p.hazard_score) ? p.hazard_score : 'n/a'}</span>
@@ -442,6 +501,18 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                   {fmtText(p.hazard_type, 'Hazard')} · {fmtText(p.district, 'Unknown district')}
                                 </h3>
                                 {p.state && <p className="text-xs text-slate-500 mt-0.5">{p.state}</p>}
+                                {!!p.official_warnings?.length && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <Tag tone="red">MET warning</Tag>
+                                    <span className="text-[11px] text-slate-500">{warningText(p)}</span>
+                                  </div>
+                                )}
+                                {p.history?.label && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <Tag tone="amber">{p.history.label}</Tag>
+                                    <span className="text-[11px] text-slate-500">{historyText(p)}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
 
@@ -471,6 +542,38 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                 </dl>
                               </div>
                             )}
+
+                            {(() => {
+                              const ds = districtScores(p);
+                              return ds.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Districts</p>
+                                  <dl className="rounded-xl border border-slate-200/80 divide-y divide-slate-100">
+                                    {ds.map((d) => (
+                                      <div key={d.district} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                                        <dt className="text-xs text-slate-700">{d.district}</dt>
+                                        <dd className="text-xs text-slate-500 tabular-nums">
+                                          {isNum(d.population) && <span className="mr-3">{fmtNumber(d.population)} people</span>}
+                                          <span className="font-semibold text-slate-900">{Math.round(d.score)}</span>
+                                        </dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                </div>
+                              );
+                            })()}
+
+                            {(() => {
+                              const b = backtestOf(p);
+                              return b && (
+                                <p className="text-xs text-slate-600 leading-relaxed rounded-xl bg-slate-50 border border-slate-200/80 px-3.5 py-2.5"
+                                  title={[b.source, b.note].filter(Boolean).join('. ')}>
+                                  <span className="font-semibold text-slate-900">Track record: </span>
+                                  in {b.region ?? 'the back-test'} ({b.period}), {b.followed_by_flood} of {b.alarms} alarms {b.band} were
+                                  followed by a recorded flood within 3 days ({Math.round((100 * b.followed_by_flood) / b.alarms)}%).
+                                </p>
+                              );
+                            })()}
 
                             {a && (
                               <div>

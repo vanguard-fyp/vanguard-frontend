@@ -18,6 +18,8 @@ export interface PredictionScanStatus {
   scanned_at?: string;
   /** whether each data source answered in the last scan */
   sources?: Partial<Record<'forecast' | 'river' | 'fire_satellite' | 'air_quality' | 'gdacs' | 'jps_gauges', boolean>>;
+  /** why a source was unavailable, when known (e.g. jps_gauges: "page format changed: Pahang") */
+  source_notes?: Record<string, string>;
   /** status: ok | partial (some predictions could not be saved, see failed) | failed | skipped */
   result?: { status: string; candidates?: number; written?: number; expired?: number; failed?: string[]; reason?: string; scanned_at?: string };
 }
