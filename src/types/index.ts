@@ -156,7 +156,44 @@ export interface CopilotMessage {
   guardrail?: string;
   /** user messages: the request failed and was not answered */
   failed?: boolean;
+  /** copilot replies: a drafted action waiting for the officer's approval */
+  proposal?: CopilotProposal | null;
+  /** what the officer did with the proposal */
+  proposalOutcome?: { status: 'approved' | 'cancelled'; text: string };
 }
+
+/** Incident a drafted action is about (resolved by the backend against live data). */
+interface CopilotProposalIncident {
+  incident_id?: string;
+  incident_display_id?: string;
+  incident_title?: string;
+}
+
+/**
+ * A copilot draft. Nothing has been done: approving it calls the normal
+ * endpoint (publish broadcast, dispatch mission, SITREP download).
+ */
+export type CopilotProposal =
+  | (CopilotProposalIncident & {
+      type: 'announcement';
+      title: string;
+      category: 'Emergency Alert' | 'Evacuation Order' | 'Safety Announcement';
+      severity: SeverityLevel;
+      content: string;
+      target_type: 'State' | 'District';
+      target_state: string;
+      target_districts: string[];
+    })
+  | (CopilotProposalIncident & {
+      type: 'mission';
+      incident_id: string;
+      title: string;
+      priority: SeverityLevel;
+      objective: string;
+      duration_hours: number;
+      teams: { team_id: string; display_id?: string; name?: string; agency?: string; personnel: number }[];
+    })
+  | (CopilotProposalIncident & { type: 'sitrep'; incident_id: string });
 
 export interface CopilotChatResponse {
   reply: string;
@@ -170,6 +207,7 @@ export interface CopilotChatResponse {
   guardrail?: string;
   source?: CopilotSource;
   model?: string | null;
+  proposal?: CopilotProposal | null;
 }
 
 /** llm = model reply · guardrail = blocked before any model call · unavailable = no model reply could be produced */

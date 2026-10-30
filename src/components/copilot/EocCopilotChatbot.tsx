@@ -11,6 +11,8 @@ import {
   Loader2,
   ShieldAlert,
   AlertTriangle,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCopilotTasks } from '../../hooks';
@@ -19,12 +21,14 @@ import type { CopilotMessage } from '../../types';
 import { DailyBriefingModal } from './DailyBriefingModal';
 import { TaskCard } from './TaskCard';
 import { CopilotMascot } from './CopilotMascot';
+import { ActionProposalCard } from './ActionProposalCard';
+import { useVoiceInput } from './useVoiceInput';
 import { FormattedMessageText } from '../../utils/messageFormatter';
 
 const GUARDRAIL_LABEL: Record<string, string> = {
   refuse_scope: 'Outside the EOC copilot scope',
   refuse_injection: 'Instruction override blocked',
-  refuse_action: 'The copilot cannot carry out actions — use the relevant screen',
+  refuse_action: 'The copilot can only draft broadcasts, missions and SITREPs — use the relevant screen',
   refuse_length: 'Message too long',
 };
 
@@ -38,6 +42,7 @@ const STARTERS = [
   'Which incidents still need a team?',
   'Summarise the critical incidents',
   'Which supplies are running low?',
+  'Draft a broadcast for the most critical incident',
 ];
 
 export const EocCopilotChatbot: React.FC = () => {
@@ -60,6 +65,8 @@ export const EocCopilotChatbot: React.FC = () => {
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  // Speech fills the box; the officer reads it and presses send (never auto-sent).
+  const voice = useVoiceInput((text) => setInputMessage((cur) => (cur ? `${cur} ${text}` : text)));
 
   // Dragging: the launcher and the panel move independently inside a box that
   // starts below the navbar, so neither can be dragged over it (or off-screen).
@@ -138,6 +145,7 @@ export const EocCopilotChatbot: React.FC = () => {
         source: response.source,
         guardrail: response.guardrail,
         model: response.model,
+        proposal: response.proposal,
       };
       setRevealId(botMsg.id);
       setMessages((prev) => [...prev, botMsg]);
@@ -426,6 +434,16 @@ export const EocCopilotChatbot: React.FC = () => {
                               ` · AI-generated${modelLabel(msg.model) ? ` (${modelLabel(msg.model)})` : ''} — verify before acting`}
                             {msg.sender === 'copilot' && msg.source === 'guardrail' && ' · blocked by safety check'}
                           </span>
+                          {msg.proposal && msg.id !== revealId && (
+                            <ActionProposalCard
+                              proposal={msg.proposal}
+                              messageId={msg.id}
+                              outcome={msg.proposalOutcome}
+                              onResolved={(outcome) =>
+                                setMessages((prev) => prev.map((m) => (m.id === msg.id ? { ...m, proposalOutcome: outcome } : m)))
+                              }
+                            />
+                          )}
                         </div>
                       </div>
                     );
@@ -466,9 +484,22 @@ export const EocCopilotChatbot: React.FC = () => {
                     type="text"
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder={isSending ? 'Copilot is thinking…' : 'Ask about incidents, teams or supplies'}
+                    placeholder={isSending ? 'Copilot is thinking…' : voice.listening ? 'Listening…' : 'Ask, or ask it to draft a broadcast or mission'}
                     className="flex-1 px-3.5 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-xl placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-300 focus:ring-4 focus:ring-blue-600/10 transition"
                   />
+                  {voice.supported && (
+                    <button
+                      type="button"
+                      onClick={voice.listening ? voice.stop : voice.start}
+                      aria-label={voice.listening ? 'Stop voice input' : 'Speak your message'}
+                      aria-pressed={voice.listening}
+                      title={voice.error ?? (voice.listening ? 'Stop' : 'Speak')}
+                      className={`w-10 shrink-0 flex items-center justify-center rounded-xl border transition-colors cursor-pointer ${
+                        voice.listening ? 'bg-red-50 border-red-200 text-red-600 animate-pulse' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'}`}
+                    >
+                      {voice.listening ? <MicOff size={14} /> : <Mic size={14} />}
+                    </button>
+                  )}
                   <button
                     type="submit"
                     disabled={isSending || !inputMessage.trim()}
