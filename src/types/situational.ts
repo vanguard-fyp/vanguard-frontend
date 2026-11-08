@@ -76,6 +76,8 @@ export interface Gis3DLayerExplorerProps {
   layers: GISLayerState;
   incidents: Incident[];
   pois: MapPOI[];
+  /** Places around the searched point; follow the layer filters, not the "near incidents" rule. */
+  nearbyPois?: MapPOI[];
   onSelectIncident: (incident: Incident) => void;
   onToggleLayer?: (key: keyof GISLayerState) => void;
 }

@@ -11,4 +11,5 @@ export * from './useIntelligence';
 export * from './usePagination';
 export * from './useGeo';
 export * from './useSystemSettings';
+export * from './useSensors';
 export * from './useCopilot';

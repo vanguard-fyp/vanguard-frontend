@@ -5,7 +5,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { useUpdateUser } from '../../../hooks';
 import { userService } from '../../../services/userService';
-import { PhoneInput, sanitizePhoneInput } from './PhoneInput';
+import { PhoneInput, isValidMalaysianPhone, sanitizePhoneInput } from './PhoneInput';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -60,6 +60,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!isValidMalaysianPhone(phone)) {
+      toast.error('Please enter a valid Malaysian phone number.');
+      return;
+    }
     setIsSaving(true);
 
     try {
@@ -75,7 +79,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         email: email.trim(),
       };
       // phoneNumber accepted by backend via AliasChoices("phone_number", "phoneNumber")
-      if (phone.trim()) updates.phone_number = phone.trim();
+      updates.phone_number = phone.trim();
       // avatarUrl accepted by backend via AliasChoices("avatar_url", "avatarUrl")
       if (avatar_url) updates.avatar_url = avatar_url;
       // agency and role are NOT editable by the officer themselves
@@ -88,7 +92,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
       updateCurrentUser({
         name: displayName.trim(),
         email: email.trim(),
-        ...(phone.trim() ? { phone_number: phone.trim() } : {}),
+        phone_number: phone.trim(),
         ...(avatar_url ? { avatar_url } : {}),
       });
 
@@ -222,6 +226,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 label="Phone Number"
                 value={phone}
                 onChange={setPhone}
+                required
                 showValidation
               />
               <div>

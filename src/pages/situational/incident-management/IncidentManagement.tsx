@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   MapPin,
-  ChevronRight,
   Plus,
   X,
   Globe,
@@ -16,7 +15,6 @@ import {
   ExternalLink,
   Edit3,
   Trash2,
-  Image as ImageIcon,
   Loader2,
   BrainCircuit,
   Siren,
@@ -24,9 +22,10 @@ import {
   CopyCheck,
   Archive,
 } from 'lucide-react';
-import { Tag, TONE, SEVERITY_TONE, ALERT_TONE, LevelTag, SourceTag, StatusTag } from '../../../components/ui/shared/Tag';
+import { Tag, TONE, SEVERITY_TONE, ALERT_TONE, LevelTag, StatusTag } from '../../../components/ui/shared/Tag';
 import { useIncidents, useCreateIncident, useUpdateIncident, useDeleteIncident, useGlobalIncidents, usePromotePrediction, useIncidentMedia } from '../../../hooks';
 import { PaginationBar } from '../../../components/ui/shared/PaginationBar';
+import { SlashMedia } from '../../../components/ui/situational/HazardArt';
 import { MediaUploader, hasPendingUploads, uploadedRefs, type MediaItem } from '../../../components/ui/shared/MediaUploader';
 import type { LocationResolution } from '../../../components/ui/shared/MalaysiaLocationPicker';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
@@ -836,77 +835,48 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         tabIndex={0}
                         onClick={open}
                         onKeyDown={(e) => { if (e.key === 'Enter') open(); }}
-                        className={`group rounded-2xl border p-5 flex flex-col gap-3 cursor-pointer transition-[border-color,box-shadow] duration-200
+                        className={`group min-h-[148px] rounded-2xl border flex overflow-hidden cursor-pointer transition-[border-color,box-shadow] duration-200
                         focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600
                         ${isInactive ? 'bg-slate-50 border-slate-200/80 opacity-80' : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-[0_10px_28px_-16px_rgba(15,23,42,.35)]'}`}
                       >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <Tag tone={SEVERITY_TONE[incident.severity] ?? 'slate'}>{incident.severity}</Tag>
-                          <StatusTag status={incident.status} />
-                          <span className="ml-auto text-[11px] font-semibold text-slate-400 tabular-nums">
-                            {getCleanDisplayId(incident.id, incident.display_id)}
-                          </span>
-                        </div>
-
-                        <div>
-                          <h3 className="text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-700 transition-colors">
+                        <SlashMedia hazard={incident.type || incident.title} photo={photos[0]} count={photos.length}
+                          alt={`Photo of ${incident.title}`} surface={isInactive ? '#f8fafc' : '#ffffff'} />
+                        <div className="flex-1 min-w-0 flex flex-col pl-1.5 pr-4 py-3.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Tag tone={SEVERITY_TONE[incident.severity] ?? 'slate'}>{incident.severity}</Tag>
+                            <StatusTag status={incident.status} />
+                          </div>
+                          <h3 className="mt-2 text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-blue-700 transition-colors">
                             {incident.title}
                           </h3>
-                          <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-700 min-w-0">
-                            <MapPin size={13} className="shrink-0" style={{ color: TONE.blue }} />
-                            <span className="truncate">
-                              {formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district)}
-                            </span>
+                          <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 min-w-0">
+                            <MapPin size={12} className="shrink-0" style={{ color: TONE.blue }} />
+                            <span className="truncate">{[...new Set([incident.district, incident.state].filter(Boolean))].join(', ') || incident.location}</span>
                           </p>
-                        </div>
-
-                        <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{(incident.description ?? '').replace(/\*\*|__|#+\s/g, '')}</p>
-
-                        {photos.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <div className="flex -space-x-2">
-                              {photos.slice(0, 3).map((url, idx) => (
-                                <img
-                                  key={idx}
-                                  src={url}
-                                  alt={`Evidence ${idx + 1}`}
-                                  className="h-9 w-12 rounded-md object-cover ring-2 ring-white"
-                                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                                />
-                              ))}
-                            </div>
-                            <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                              <ImageIcon size={12} className="text-slate-400" />
-                              {incident.media_urls!.length} attachment{incident.media_urls!.length === 1 ? '' : 's'}
+                          <div className="mt-auto pt-2 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold text-slate-400 tabular-nums truncate">
+                              {getCleanDisplayId(incident.id, incident.display_id)}
                             </span>
-                          </div>
-                        )}
-
-                        <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex items-center gap-1.5">
-                            <LevelTag level={incident.disaster_level} />
-                            <SourceTag source={incident.source} reporter={incident.reporter_name} />
-                          </div>
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenEdit(incident, e)}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                              title="Edit incident"
-                              aria-label="Edit incident"
-                            >
-                              <Edit3 size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => handleOpenDelete(incident, e)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                              title="Archive or delete incident"
-                              aria-label="Archive or delete incident"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                            <ChevronRight size={16} className="text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all ml-0.5" />
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenEdit(incident, e)}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                title="Edit incident"
+                                aria-label="Edit incident"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenDelete(incident, e)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                title="Archive or delete incident"
+                                aria-label="Archive or delete incident"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </motion.article>
@@ -1009,50 +979,39 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                     <motion.article
                       key={gEvent.id}
                       {...CARD_MOTION}
-                      className="group bg-white border border-slate-200/80 rounded-2xl p-5 flex flex-col gap-3 hover:border-slate-300 hover:shadow-[0_10px_28px_-16px_rgba(15,23,42,.35)] transition-[border-color,box-shadow] duration-200"
+                      className="group min-h-[148px] bg-white border border-slate-200/80 rounded-2xl flex overflow-hidden hover:border-slate-300 hover:shadow-[0_10px_28px_-16px_rgba(15,23,42,.35)] transition-[border-color,box-shadow] duration-200"
                     >
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Tag tone={ALERT_TONE[gEvent.alertLevel] ?? 'slate'}>{gEvent.alertLevel} alert</Tag>
-                        <Tag variant="outline" dot={false}>{gEvent.hazardType}</Tag>
-                        <span className="ml-auto text-[11px] font-semibold text-slate-400 tabular-nums">
-                          {gEvent.date ? new Date(gEvent.date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date unknown'}
-                        </span>
-                      </div>
-
-                      <div>
-                        <h3 className="text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2">{gEvent.title}</h3>
-                        <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-700 min-w-0">
-                          <MapPin size={13} className="shrink-0" style={{ color: TONE.blue }} />
-                          <span className="truncate">{gEvent.country}</span>
-                        </p>
-                      </div>
-
-                      <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">{gEvent.description}</p>
-
-                      <dl className="flex items-start gap-6 text-xs">
-                        <div className="min-w-0">
-                          <dt className="text-[11px] text-slate-400">GDACS severity</dt>
-                          <dd className="font-semibold text-slate-800 mt-0.5 line-clamp-1" title={gEvent.severity}>{gEvent.severity}</dd>
+                      <SlashMedia hazard={gEvent.hazardType} />
+                      <div className="flex-1 min-w-0 flex flex-col pl-1.5 pr-4 py-3.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Tag tone={ALERT_TONE[gEvent.alertLevel] ?? 'slate'}>{gEvent.alertLevel} alert</Tag>
+                          <Tag variant="outline" dot={false}>{gEvent.hazardType}</Tag>
                         </div>
-                      </dl>
-
-                      <div className="mt-auto pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                        <a
-                          href={gEvent.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors"
-                        >
-                          <ExternalLink size={13} />
-                          GDACS Portal
-                        </a>
-                        <button
-                          onClick={() => handleEscalateGdacs(gEvent)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 hover:border-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
-                        >
-                          <Plus size={13} />
-                          Escalate to National EOC
-                        </button>
+                        <h3 className="mt-2 text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2">{gEvent.title}</h3>
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 min-w-0">
+                          <MapPin size={12} className="shrink-0" style={{ color: TONE.blue }} />
+                          <span className="truncate">
+                            {gEvent.country}{gEvent.date ? ` · ${new Date(gEvent.date).toLocaleDateString('en-MY', { timeZone: 'Asia/Kuala_Lumpur', day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                          </span>
+                        </p>
+                        <div className="mt-auto pt-2 flex items-center justify-between gap-2">
+                          <a
+                            href={gEvent.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-slate-900 transition-colors"
+                          >
+                            <ExternalLink size={12} />
+                            GDACS
+                          </a>
+                          <button
+                            onClick={() => handleEscalateGdacs(gEvent)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 hover:border-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+                          >
+                            <Plus size={13} />
+                            Escalate
+                          </button>
+                        </div>
                       </div>
                     </motion.article>
                   ))}

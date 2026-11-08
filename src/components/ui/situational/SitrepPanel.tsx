@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, BrainCircuit, Gauge, Activity, MapPin, FileText, ShieldCheck, Target, Users, HeartPulse, Route, Building2, type LucideIcon } from 'lucide-react';
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Circle } from 'react-leaflet';
-import { useRescueTeams, useMissions, useIncidentLogs } from '../../../hooks';
+import { useRescueTeams, useMissions, useIncidentLogs, useIncidentAssessment } from '../../../hooks';
 import { LogDetailBody } from './LogDetailBody';
 import type { FactField, Incident } from '../../../types';
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
-import { isNum } from '../../../utils/display';
+import { fmtNumber, isNum } from '../../../utils/display';
 import { factState } from '../../../utils/facts';
 import { Overlay, NAVY } from '../shared/Modal';
 import { StatusTag, TONE, IconTile } from '../shared/Tag';
@@ -77,6 +77,11 @@ const factText = (incident: Incident, field: FactField, fmt: (v: NonNullable<Inc
 const SummaryTab: React.FC<{ incident: Incident }> = ({ incident }) => {
   const { data: rescueTeams = [] } = useRescueTeams();
   const { data: missions = [] } = useMissions();
+  const { data: envelope, isLoading: assessmentLoading } = useIncidentAssessment(incident.id);
+  // A run in progress or failed has no figure yet, so fall back to the last completed one.
+  const estimatedVictims = [envelope?.current, envelope?.last_usable]
+    .map((x) => x?.estimated_affected_population ?? x?.population?.estimated_exposed_population)
+    .find(isNum) ?? null;
   const [lat, lng] = incident.coordinates || [4.2105, 101.9758];
   const assignedMissions = missions.filter((m) => m.incident_id === incident.id);
   const teamIds = new Set<string>();
@@ -107,6 +112,18 @@ const SummaryTab: React.FC<{ incident: Incident }> = ({ incident }) => {
         </div>
         <div className="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden">
           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${score ?? 0}%`, background: band }} />
+        </div>
+        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2.5">
+          <IconTile color={TONE.indigo} size={28}><Users size={14} strokeWidth={2.2} /></IconTile>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-slate-700">Estimated victims</p>
+            <p className="text-[11px] text-slate-400">AI estimate of people exposed, not a confirmed count</p>
+          </div>
+          {assessmentLoading
+            ? <Bone className="block h-5 w-14 shrink-0" />
+            : estimatedVictims != null
+              ? <span className="text-lg font-bold text-slate-900 tabular-nums shrink-0">~{fmtNumber(estimatedVictims)}</span>
+              : <span className="text-xs font-medium text-slate-400 shrink-0">Not estimated yet</span>}
         </div>
       </Section>
 

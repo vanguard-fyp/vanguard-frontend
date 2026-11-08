@@ -25,6 +25,7 @@ export const NAV_STRUCTURE: NavSection[] = [
         children: [
           { label: 'Incident Management', path: '/situational/incidents' },
           { label: 'Disaster Intelligence', path: '/situational/intelligence' },
+          { label: 'Flood Sensors', path: '/situational/sensors' },
         ],
       },
       {

@@ -31,13 +31,23 @@ export const ACCENT = {
 /** Category hues for supplies: the same cool family, plus slate for the rest. */
 export const CATEGORY = ['#1e40af', '#3b82f6', '#06b6d4', '#818cf8', '#94a3b8'];
 
-/** Severity as tone: only Critical carries colour; the rest step down in grey. */
+/** Severity as colour, in the app's severity hues. Lists rely on this alone, so the legend must stay beside them. */
 export const SEVERITY_TONE: Record<string, string> = {
   Critical: DASH.critical,
-  High: '#475569',
-  Medium: '#94a3b8',
-  Low: '#cbd5e1',
+  High: '#ea580c',
+  Medium: '#f59e0b',
+  Low: '#94a3b8',
 };
+
+/** Severity as a thin border on an otherwise white row, and the matching legend dot. */
+export const SEVERITY_EDGE: Record<string, string> = {
+  Critical: '#ef9a9a',
+  High: '#f3b37f',
+  Medium: '#ecc96a',
+  Low: '#d5dde7',
+};
+
+export const sevEdge = (s?: string | null) => SEVERITY_EDGE[s ?? ''] ?? SEVERITY_EDGE.Low;
 
 export const sevTone = (s?: string | null) => SEVERITY_TONE[s ?? ''] ?? DASH.inkFaint;
 

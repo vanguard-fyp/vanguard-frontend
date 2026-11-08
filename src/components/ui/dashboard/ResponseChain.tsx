@@ -1,12 +1,15 @@
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Incident, Mission, RescueTeam } from '../../../types';
-import { DASH, sevTone } from '../../../constants/dashboard';
+import { DASH, sevEdge } from '../../../constants/dashboard';
 
 /* ============================================================
    Response chain: incidents → missions → teams.
    Answers "who is covering what?" and flags the gaps: incidents
    with no mission, missions with no team, idle teams, and teams on
    more than one mission. Rows show a name; details on hover.
+   Nothing is dimmed until the officer hovers, picks a row or picks
+   a gap filter, and the picked row is never dimmed. Clicking it
+   again clears the pick.
    ============================================================ */
 
 interface ResponseChainProps {
@@ -15,17 +18,21 @@ interface ResponseChainProps {
   teams: RescueTeam[];
   selectedIncidentId?: string | null;
   onSelectIncident?: (incident: Incident) => void;
+  onClearIncident?: () => void;
 }
 
 type Gap = 'uncovered' | 'unstaffed' | 'overloaded' | 'idle';
 type Link = { from: string; to: string };
 
-const GAPS: { key: Gap; label: string; tag: string }[] = [
-  { key: 'uncovered', label: 'No mission', tag: 'No mission' },
-  { key: 'unstaffed', label: 'No team', tag: 'No team' },
-  { key: 'overloaded', label: 'Stretched', tag: '2+ missions' },
-  { key: 'idle', label: 'Idle', tag: 'Idle' },
+/** `act` gaps need a decision from the officer, so only their tag carries colour. */
+const GAPS: { key: Gap; label: string; tag: string; act: boolean }[] = [
+  { key: 'uncovered', label: 'No mission', tag: 'No mission', act: true },
+  { key: 'unstaffed', label: 'No team', tag: 'No team', act: true },
+  { key: 'overloaded', label: 'Stretched', tag: '2+ missions', act: false },
+  { key: 'idle', label: 'Idle', tag: 'Idle', act: false },
 ];
+
+const MISSION_DOT = '#93b4f0';
 
 /** Every team id a mission is linked to, whichever field the API filled. */
 const missionTeamIds = (m: Mission): string[] => {
@@ -36,7 +43,7 @@ const missionTeamIds = (m: Mission): string[] => {
 };
 
 export const ResponseChain: React.FC<ResponseChainProps> = ({
-  incidents, missions, teams, selectedIncidentId, onSelectIncident,
+  incidents, missions, teams, selectedIncidentId, onSelectIncident, onClearIncident,
 }) => {
   const [focus, setFocus] = useState<string | null>(null);
   const [pinned, setPinned] = useState<string | null>(null);
@@ -92,9 +99,12 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
   const gapOf = useCallback((id: string) => GAPS.find((g) => graph.gaps[g.key].has(id)) ?? null, [graph]);
 
   // ── Highlight: the whole chain through the focused node ────────────
+  // The one active row: an incident picked here or in the priority list, else a pinned mission or team.
+  const active = selectedIncidentId ?? pinned;
+
   const lit = useMemo(() => {
     if (gapFilter) return graph.gaps[gapFilter];
-    const anchor = focus ?? pinned ?? selectedIncidentId ?? null;
+    const anchor = focus ?? active;
     if (!anchor) return null;
     const set = new Set<string>([anchor]);
     const addMission = (mid: string) => {
@@ -107,7 +117,7 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
     if (graph.teamsByMission.has(anchor)) addMission(anchor);
     (graph.missionsByTeam.get(anchor) ?? []).forEach(addMission);
     return set;
-  }, [focus, pinned, selectedIncidentId, gapFilter, graph, missions]);
+  }, [focus, active, gapFilter, graph, missions]);
 
   // ── Link geometry, measured from the rendered rows ─────────────────
   const boardRef = useRef<HTMLDivElement>(null);
@@ -145,28 +155,29 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
   };
 
   // ── Rows (plain render helpers so DOM nodes persist between renders) ──
-  const renderRow = ({ id, dot, title, detail, side, selected, onClick }: {
-    id: string; dot: string; title: string; detail: string; side?: React.ReactNode;
-    selected?: boolean; onClick?: () => void;
+  const renderRow = ({ id, dot, edge, title, detail, side, onClick }: {
+    id: string; dot: string; edge?: string; title: string; detail: string; side?: React.ReactNode;
+    onClick?: () => void;
   }) => {
     const gap = gapOf(id);
-    const dimmed = lit && !lit.has(id);
+    const selected = active === id;
+    const dimmed = lit && !lit.has(id) && !selected && focus !== id;
     return (
       <button key={id} type="button" ref={ref(id)}
         aria-current={selected ? 'true' : undefined}
         onMouseEnter={() => setFocus(id)} onMouseLeave={() => setFocus(null)}
         onFocus={() => setFocus(id)} onBlur={() => setFocus(null)}
-        onClick={onClick}
-        className={`group relative w-full text-left rounded-xl px-3 py-2.5 transition-[opacity,background-color,box-shadow] duration-200 cursor-pointer
+        onClick={() => { setGapFilter(null); onClick?.(); }}
+        style={{ boxShadow: selected ? '0 0 0 1.5px #2563eb' : `inset 0 0 0 1px ${edge ?? '#e2e8f0'}` }}
+        className={`group relative w-full text-left rounded-xl bg-white hover:bg-slate-50 px-3 py-2.5 transition-[opacity,box-shadow,background-color] duration-200 cursor-pointer
           focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600
-          ${selected ? 'bg-blue-50 shadow-[inset_0_0_0_1px_rgba(37,99,235,.35)]' : 'bg-slate-50 hover:bg-slate-100'}
-          ${dimmed ? 'opacity-35' : 'opacity-100'}`}
+          ${dimmed ? 'opacity-50' : 'opacity-100'}`}
       >
         <div className="flex items-center gap-2.5">
           <span className="w-2 h-2 rounded-full shrink-0"
             style={gap ? { boxShadow: `inset 0 0 0 1.5px ${DASH.inkFaint}` } : { background: dot }} />
           <span className="text-xs font-semibold text-slate-900 truncate flex-1">{title}</span>
-          {gap ? <span className="text-[11px] text-slate-500 shrink-0">{gap.tag}</span> : side}
+          {gap ? <span className={`text-[11px] shrink-0 ${gap.act ? 'font-semibold text-amber-700' : 'text-slate-500'}`}>{gap.tag}</span> : side}
         </div>
         <p className="dash-reveal text-xs text-slate-500 truncate pl-[18px]"><span className="block pt-1">{detail}</span></p>
       </button>
@@ -180,6 +191,11 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
     </div>
   );
 
+  const togglePin = (id: string) => {
+    onClearIncident?.();
+    setPinned(active === id ? null : id);
+  };
+
   const total = graph.incOrder.length + graph.misOrder.length + graph.teamOrder.length;
 
   return (
@@ -191,7 +207,7 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
           const on = gapFilter === key;
           return (
             <button key={key} type="button" disabled={n === 0} aria-pressed={on}
-              onClick={() => setGapFilter(on ? null : key)}
+              onClick={() => { setGapFilter(on ? null : key); setPinned(null); onClearIncident?.(); }}
               className={`text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors cursor-pointer disabled:cursor-default focus-visible:outline-2 focus-visible:outline-blue-600
                 ${on ? 'bg-blue-600 text-white' : n === 0 ? 'text-slate-300' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
             >
@@ -211,7 +227,7 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
                 const on = !!lit && lit.has(p.from) && lit.has(p.to);
                 return (
                   <path key={p.key} d={p.d} fill="none"
-                    stroke={on ? DASH.blue : '#d5dde7'}
+                    stroke={on ? '#7ea6f4' : '#d5dde7'}
                     strokeWidth={on ? 1.75 : 1.25}
                     strokeOpacity={lit && !on ? 0.4 : 1}
                     style={{ transition: 'stroke .2s, stroke-opacity .2s' }}
@@ -222,34 +238,31 @@ export const ResponseChain: React.FC<ResponseChainProps> = ({
 
             {renderColumn('Incidents', graph.incOrder.length, graph.incOrder.map((i) => renderRow({
               id: i.id,
-              dot: sevTone(i.severity),
+              dot: sevEdge(i.severity),
+              edge: sevEdge(i.severity),
               title: i.title,
               detail: `${i.severity} · ${i.district}`,
-              selected: selectedIncidentId === i.id,
-              onClick: () => { setPinned(null); onSelectIncident?.(i); },
+              onClick: () => {
+                setPinned(null);
+                if (selectedIncidentId === i.id) onClearIncident?.(); else onSelectIncident?.(i);
+              },
               side: <span className="text-xs font-bold text-slate-600 tabular-nums shrink-0" title="AI priority">{i.ai_priority_score ?? ''}</span>,
             })))}
 
             {renderColumn('Missions', graph.misOrder.length, graph.misOrder.map((m) => renderRow({
               id: m.id,
-              dot: DASH.blue,
+              dot: MISSION_DOT,
               title: m.title,
               detail: `${m.display_id || 'Mission'} · ${m.status}`,
-              selected: pinned === m.id,
-              onClick: () => {
-                setPinned(m.id);
-                const inc = incidents.find((x) => x.id === m.incident_id);
-                if (inc) onSelectIncident?.(inc);
-              },
+              onClick: () => togglePin(m.id),
             })))}
 
             {renderColumn('Teams', graph.teamOrder.length, graph.teamOrder.map((t) => renderRow({
               id: t.id,
-              dot: DASH.blue,
+              dot: MISSION_DOT,
               title: t.name,
               detail: `${t.agency} · ${t.committed_personnel ?? 0} of ${t.total_personnel ?? t.personnel_count} committed`,
-              selected: pinned === t.id,
-              onClick: () => setPinned(pinned === t.id ? null : t.id),
+              onClick: () => togglePin(t.id),
             })))}
           </div>
         </div>

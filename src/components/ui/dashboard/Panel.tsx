@@ -1,6 +1,5 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, type LucideIcon } from 'lucide-react';
-import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, Tooltip } from 'recharts';
 import { DASH } from '../../../constants/dashboard';
 
 /* ============================================================
@@ -19,7 +18,7 @@ interface PanelProps {
 
 export const Panel: React.FC<PanelProps> = ({ title, action, children, className = '', bodyClassName = '' }) => (
   <section className={`bg-white rounded-2xl border border-slate-200/80 flex flex-col min-w-0 ${className}`}>
-    <header className="flex items-center justify-between gap-3 px-6 pt-5 pb-4">
+    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-6 pt-5 pb-4">
       <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider truncate">{title}</h2>
       {action}
     </header>
@@ -113,122 +112,34 @@ export const TrendPill: React.FC<{ pill: Pill }> = ({ pill }) => {
 interface StatCardProps {
   title: string;
   value: string | number;
+  /** drawn large and faint, cropped by the card's corner, to say what the figure counts */
   icon: LucideIcon;
-  /** the card's own muted hue: icon, sparkline, bar */
+  /** the card's own muted hue, used by the icon */
   accent: string;
   pill?: Pill;
-  /** supporting line under the value */
-  detail?: string;
-  /** trend series and how to draw it */
-  spark?: { data?: number[]; labels?: string[]; kind?: 'area' | 'bar'; caption?: string };
-  /** 0–100 share drawn as a flat bar instead of a sparkline */
-  progress?: number;
-  progressCaption?: string;
-  /** flat bar split into labelled segments (e.g. crew per agency) */
-  segments?: { label: string; filled: number; total: number }[];
-  /** data still loading: show the card's shape with placeholders */
+  /** data still loading: show the card's shape with a placeholder */
   loading?: boolean;
 }
 
-const sparkTooltip = (
-  <Tooltip cursor={false} wrapperStyle={{ pointerEvents: 'none' }}
-    contentStyle={{ fontSize: 10, borderRadius: 6, padding: '2px 6px', border: `1px solid ${DASH.rule}` }}
-    labelFormatter={(_, p) => (p?.[0]?.payload?.label as string) ?? ''}
-    formatter={(v) => [Number(v).toLocaleString(), '']} separator=""
-  />
-);
-
-export const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, accent, pill, detail, spark, progress, progressCaption, segments, loading }) => {
-  if (loading) {
-    return (
-      <div className="min-w-0 bg-white rounded-2xl border border-slate-200/80 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 flex flex-col" aria-busy="true" aria-label={`${title}, loading`}>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 truncate">{title}</p>
-          <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${accent}14`, color: accent }}>
-            <Icon size={16} strokeWidth={2} aria-hidden="true" />
-          </span>
+export const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, accent, pill, loading }) => (
+  <div className="relative overflow-hidden min-w-0 min-h-[116px] bg-white rounded-2xl border border-slate-200/80 px-4 py-4 sm:px-5 sm:py-5"
+    aria-busy={loading || undefined} aria-label={loading ? `${title}, loading` : undefined}
+  >
+    <Icon size={112} strokeWidth={1.5} aria-hidden="true" fill="currentColor" fillOpacity={0.35}
+      className="absolute -right-3 -bottom-7 pointer-events-none" style={{ color: accent, opacity: 0.16 }} />
+    <div className="relative">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 truncate">{title}</p>
+      {loading ? (
+        <Bone className="block h-9 w-20 mt-2.5" />
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2.5">
+          <p className="text-[28px] leading-9 font-bold text-slate-900 tabular-nums">{value}</p>
+          {pill && <TrendPill pill={pill} />}
         </div>
-        <Bone className="h-7 w-20 mt-1.5" />
-        <Bone className="h-3 w-32 mt-2" />
-        <div className="mt-auto pt-2">
-          <Bone className="h-9 w-full" />
-          <div className="mt-2 pt-2 border-t border-slate-100"><Bone className="h-2.5 w-28" /></div>
-        </div>
-      </div>
-    );
-  }
-  const rows = spark?.data?.map((v, i) => ({ i, v, label: spark.labels?.[i] ?? '' })) ?? [];
-  const active = rows.some((r) => r.v > 0);
-  const gid = `spark-${title.replace(/\W/g, '')}`;
-  const caption = progress != null || segments ? progressCaption : spark?.caption;
-  const segs = segments?.filter((g) => g.total > 0) ?? [];
-  return (
-    <div className="min-w-0 bg-white rounded-2xl border border-slate-200/80 px-4 pt-3.5 pb-3 sm:px-5 sm:pt-4 flex flex-col">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 truncate">{title}</p>
-        <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${accent}14`, color: accent }}>
-          <Icon size={16} strokeWidth={2} aria-hidden="true" />
-        </span>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-        <p className="text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
-        {pill && <TrendPill pill={pill} />}
-      </div>
-      {detail && <p className="text-xs font-medium text-slate-500 truncate mt-0.5">{detail}</p>}
-
-      <div className="mt-auto pt-2">
-        {segs.length > 0 ? (
-          <div className="h-9 flex items-end gap-1.5">
-            {segs.map((g) => (
-              <div key={g.label} className="group/seg relative flex-1 min-w-0">
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: DASH.track }}>
-                  <div className="h-full rounded-full" style={{ width: `${(g.filled / g.total) * 100}%`, background: accent }} />
-                </div>
-                <p className="mt-1 text-[9px] font-semibold text-slate-400 text-center whitespace-nowrap">{g.label}</p>
-                <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-20 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 group-hover/seg:opacity-100 transition-opacity">
-                  {g.label}: {g.filled} of {g.total} deployed
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : progress != null ? (
-          <div className="h-9 flex items-end pb-1">
-            <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: DASH.track }}>
-              <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progress))}%`, background: accent }} />
-            </div>
-          </div>
-        ) : spark && active ? (
-          <div className="h-9 -mx-1">
-            <ResponsiveContainer width="100%" height="100%">
-              {spark.kind === 'bar' ? (
-                <BarChart data={rows} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barSize={6}>
-                  {sparkTooltip}
-                  <Bar dataKey="v" fill={`${accent}59`} radius={[2, 2, 0, 0]} activeBar={{ fill: accent }} />
-                </BarChart>
-              ) : (
-                <AreaChart data={rows} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={accent} stopOpacity={0.18} />
-                      <stop offset="100%" stopColor={accent} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  {sparkTooltip}
-                  <Area type="monotone" dataKey="v" stroke={accent} strokeWidth={1.75} fill={`url(#${gid})`} />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        ) : spark ? (
-          <p className="h-9 flex items-end pb-1 text-[11px] text-slate-400">No new records in this window</p>
-        ) : null}
-        {/* hairline between the chart and its caption */}
-        {caption && <p className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400 truncate">{caption}</p>}
-      </div>
+      )}
     </div>
-  );
-};
+  </div>
+);
 
 export function Segmented<T extends string>({ value, options, onChange, label }: {
   value: T;

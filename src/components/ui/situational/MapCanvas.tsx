@@ -28,9 +28,10 @@ import {
 import { DisasterBadge } from '../dashboard/DisasterBadge';
 import type { GISLayerState, GisFeature, GisLayerResponse, Incident, MapPOI, FlyToTarget, HoverInfo } from '../../../types';
 import { DARK_STYLE, TOPOLOGY_PLANES } from '../../../constants';
-import { overpassService } from '../../../services/overpassService';
-import { useGisLayers } from '../../../hooks/useGeo';
+import { geoService } from '../../../services/geoService';
+import { NEARBY_RADIUS_KM, useGisLayers } from '../../../hooks/useGeo';
 import { factState } from '../../../utils/facts';
+import { facilityToPoi, incidentMatchesLayers, withinKm } from '../../../utils/mapLayers';
 
 import 'maplibre-gl/dist/maplibre-gl.css';
 import 'leaflet/dist/leaflet.css';
@@ -44,6 +45,8 @@ interface MapCanvasProps {
   onToggleLayer?: (key: keyof GISLayerState) => void;
   incidents?: Incident[];
   pois?: MapPOI[];
+  /** Places around the searched point (Google Places first). */
+  nearbyPois?: MapPOI[];
   /** Feature count per layer from the loaded data (shown in the layer panel). */
   onLayerCounts?: (counts: Partial<Record<keyof GISLayerState, number | 'loading' | 'unavailable'>>) => void;
 }
@@ -78,7 +81,8 @@ const LeafletViewportLoader: React.FC<{
       clearTimeout(timer);
       timer = setTimeout(() => {
         const zoom = map.getZoom();
-        if (zoom >= 8) {
+        // The search radius is about 10 km: wider views would spend billed lookups on little.
+        if (zoom >= 11) {
           const center = map.getCenter();
           onFetchArea(center.lat, center.lng);
         }
@@ -221,6 +225,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
   onToggleLayer,
   incidents = [],
   pois = [],
+  nearbyPois = [],
   onLayerCounts,
 }) => {
   const [hover, setHover] = useState<HoverInfo>(null);
@@ -304,77 +309,47 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
     });
   }, [is3D]);
 
-  // ── Progressive OSM facility loader (shared by Leaflet viewport events + 3D focus) ──
+  // ── Facility loader (shared by Leaflet viewport events + incidents) ──
+  // The backend tries Google Places first; OpenStreetMap only answers when Google can't.
+  const loadedCenters = React.useRef<{ lat: number; lng: number }[]>([]);
   const fetchAreaFacilities = useCallback(async (lat: number, lng: number) => {
-    if (overpassService.hasFetchedNear(lat, lng, 6)) return;
+    const center = { lat, lng };
+    if (loadedCenters.current.some((c) => withinKm(c, center, 6))) return;
+    loadedCenters.current.push(center);
     setIsLoadingFacilities(true);
     try {
-      const pois = await overpassService.fetchNearbyFacilities(lat, lng, 8000, 60);
+      const rows = await geoService.nearbyFacilities(lat, lng, NEARBY_RADIUS_KM);
       setLiveFacilities((prev) => {
         const map = new Map<string, MapPOI>(prev.map((p) => [p.id, p]));
-        pois.forEach((p) => map.set(p.id, p));
+        rows.forEach((f) => map.set(f.id, facilityToPoi(f)));
         return Array.from(map.values());
       });
     } catch (err) {
-      console.warn('Overpass fetch notice:', err);
+      // Forget this area so the next visit tries it again.
+      loadedCenters.current = loadedCenters.current.filter((c) => c !== center);
+      console.warn('Facility lookup notice:', err);
     } finally {
       setIsLoadingFacilities(false);
     }
   }, []);
 
-  // ── Fetch Real OSM Facilities around focus targets & top active hazard incidents ──
+  // ── Facilities around the top active incidents ──
   useEffect(() => {
-    let isCancelled = false;
+    const severityOrder: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+    const top3 = [...incidents]
+      .sort((a, b) => {
+        const sv = (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4);
+        if (sv !== 0) return sv;
+        return (b.affected_population || 0) - (a.affected_population || 0);
+      })
+      .slice(0, 3);
+    top3.forEach((inc) => void fetchAreaFacilities(inc.coordinates[0], inc.coordinates[1]));
+  }, [incidents, fetchAreaFacilities]);
 
-    const loadLiveFacilities = async () => {
-      const queryCenters: { lat: number; lng: number }[] = [];
-
-      if (flyToTarget) {
-        queryCenters.push({ lat: flyToTarget.lat, lng: flyToTarget.lng });
-      } else if (incidents.length > 0) {
-        // Only query around the top-3 most-impacted incidents to avoid Overpass timeout
-        const severityOrder: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-        const top3 = [...incidents]
-          .sort((a, b) => {
-            const sv = (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4);
-            if (sv !== 0) return sv;
-            return (b.affected_population || 0) - (a.affected_population || 0);
-          })
-          .slice(0, 3);
-        top3.forEach((inc) => queryCenters.push({ lat: inc.coordinates[0], lng: inc.coordinates[1] }));
-      }
-
-      for (const c of queryCenters) {
-        if (isCancelled) break;
-        if (overpassService.hasFetchedNear(c.lat, c.lng, 6)) continue;
-        setIsLoadingFacilities(true);
-        try {
-          const pois = await overpassService.fetchNearbyFacilities(c.lat, c.lng, 8000, 60);
-          if (!isCancelled) {
-            setLiveFacilities((prev) => {
-              const map = new Map<string, MapPOI>(prev.map((p) => [p.id, p]));
-              pois.forEach((p) => map.set(p.id, p));
-              return Array.from(map.values());
-            });
-          }
-        } catch (err) {
-          console.warn('Overpass fetch notice:', err);
-        } finally {
-          if (!isCancelled) setIsLoadingFacilities(false);
-        }
-      }
-    };
-
-    loadLiveFacilities();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [flyToTarget, incidents]);
-
-  // Live Overpass OSM facilities + backend GIS layers + real warehouses if provided
+  // Nearby places + facilities around the view + backend GIS layers + real warehouses if provided
   const combinedPOIs = useMemo(() => {
     const map = new Map<string, MapPOI>();
+    nearbyPois.forEach((p) => map.set(p.id, p));
     liveFacilities.forEach((p) => map.set(p.id, p));
     gisPois.forEach((p) => map.set(p.id, p));
     pois.forEach((p) => {
@@ -383,31 +358,10 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
       }
     });
     return Array.from(map.values());
-  }, [pois, liveFacilities, gisPois]);
+  }, [pois, nearbyPois, liveFacilities, gisPois]);
 
   // Filter incidents based on active hazard layers
-  const visibleIncidents = useMemo(() => {
-    return incidents.filter((inc) => {
-      if (layers.disasterHotspots) return true;
-
-      const t = (inc.type || (inc as any).disaster_type || '').toLowerCase();
-      if (layers.floodAreas && (t.includes('flood') || t.includes('inundation'))) return true;
-      if (layers.landslideAreas && (t.includes('landslide') || t.includes('slope'))) return true;
-      if (layers.fireZones && (t.includes('fire') || t.includes('wildfire'))) return true;
-      if (
-        layers.severeStorms &&
-        (t.includes('storm') || t.includes('cyclone') || t.includes('haze') || t.includes('wind'))
-      )
-        return true;
-      if (
-        layers.earthquakeDrought &&
-        (t.includes('earthquake') || t.includes('seismic') || t.includes('drought'))
-      )
-        return true;
-
-      return false;
-    });
-  }, [incidents, layers]);
+  const visibleIncidents = useMemo(() => incidents.filter((inc) => incidentMatchesLayers(inc, layers)), [incidents, layers]);
 
   const incidentData = useMemo(
     () =>
@@ -746,7 +700,7 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
                 {isLoadingFacilities && (
                   <div className="bg-slate-900/90 border border-blue-500/50 rounded-lg px-2.5 py-1.5 text-[10px] font-mono text-blue-300 backdrop-blur-sm shadow-lg flex items-center gap-1.5">
                     <Radio size={11} className="text-blue-400 animate-pulse" />
-                    <span>Syncing Live OSM Facilities…</span>
+                    <span>Loading nearby facilities…</span>
                   </div>
                 )}
               </div>

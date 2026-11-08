@@ -4,6 +4,7 @@ import { X, Send, PackagePlus } from 'lucide-react';
 import { useCreateResourceRequest, useIncidents, useInventory, useStockAdvisory, useWarehouses } from '../../../../hooks';
 import { RISK_LABEL, RISK_TO_URGENCY } from './ResourceAdvisory';
 import { AiAction, AiSuggestion, AiVerdict } from '../../shared/AiSuggestion';
+import { checkRequisition } from '../../../../utils/resourceFlow';
 import type { StockAdvisoryItem } from '../../../../services/resourceService';
 import { useToast } from '../../../../context/ToastContext';
 import { useAuth } from '../../../../context/AuthContext';
@@ -19,9 +20,8 @@ interface CreateResourceRequestModalProps {
 
 
 /**
- * Stock in one line, and a suggestion only when it would change something:
- * a restock size for replenishments, a warning when a requisition would eat
- * into stock already promised to other pending requests.
+ * Stock in one line, and a suggestion for either flow: a restock size for
+ * replenishments, and for requisitions whether this depot can cover the quantity.
  */
 const StockHint: React.FC<{
   item: ResourceItem;
@@ -29,12 +29,19 @@ const StockHint: React.FC<{
   loading: boolean;
   restock: boolean;
   quantity: number;
+  urgency: SeverityLevel;
   onUse: (quantity: number, urgency?: SeverityLevel) => void;
-}> = ({ item, advisory, loading, restock, quantity, onUse }) => {
+}> = ({ item, advisory, loading, restock, quantity, urgency, onUse }) => {
   const pending = advisory?.pending_demand ?? 0;
-  const after = advisory?.stock_after_pending;
   const suggest = restock && advisory && advisory.reorder_quantity > 0 && advisory.reorder_quantity !== quantity;
-  const overPromised = !restock && after != null && quantity > after && quantity <= item.stock_level;
+  const check = !restock && advisory && quantity > 0 ? checkRequisition(advisory, quantity, urgency) : null;
+  const look = check && {
+    enough: { tone: 'good', verdict: 'Enough stock', text: <>This depot covers the request, leaving <strong>{check.left.toLocaleString()} {item.unit}</strong>.</> },
+    below_safety: { tone: 'caution', verdict: 'Below safety level', text: <>This depot covers the request but drops to <strong>{Math.max(0, check.left).toLocaleString()} {item.unit}</strong>, under its safety level of {advisory!.min_threshold.toLocaleString()}.</> },
+    partial: { tone: 'caution', verdict: 'Not enough', text: <>Only <strong>{check.usable.toLocaleString()} {item.unit}</strong> can go at {urgency} urgency without touching promised or safety stock.</> },
+    none: { tone: 'bad', verdict: 'None free', text: <>All stock at this depot is promised to other requests or held as safety stock.</> },
+  }[check.status] as { tone: 'good' | 'caution' | 'bad'; verdict: string; text: React.ReactNode };
+  const short = check?.status === 'partial' || check?.status === 'none';
   return (
     <div className="text-xs space-y-1.5 -mt-1">
       <p className={item.stock_level > 0 ? 'text-slate-600' : 'text-red-700 font-medium'}>
@@ -42,8 +49,18 @@ const StockHint: React.FC<{
         {pending > 0 && <span className="text-slate-400"> · {pending.toLocaleString()} already requested</span>}
         {loading && <span className="text-slate-400"> · checking demand…</span>}
       </p>
-      {overPromised && (
-        <p className="text-amber-700">Only {Math.max(0, after ?? 0).toLocaleString()} {item.unit} are not already promised to other requests.</p>
+      {check && look && (
+        <AiSuggestion
+          tone={look.tone}
+          headline={<AiVerdict tone={look.tone} verdict={look.verdict}>{look.text}</AiVerdict>}
+          action={check.status === 'partial' ? <AiAction onClick={() => onUse(check.usable)}>Use {check.usable.toLocaleString()}</AiAction> : undefined}
+          compact
+        >
+          {short && advisory!.transfer_options.length > 0 && (
+            <p>Could transfer from {advisory!.transfer_options.map((t) => `${t.warehouse_name ?? 'another depot'} (${t.spare_quantity.toLocaleString()} spare)`).join(', ')}.</p>
+          )}
+          {short && advisory!.transfer_options.length === 0 && <p>No other depot has spare stock; raise a restock.</p>}
+        </AiSuggestion>
       )}
       {suggest && (
         <AiSuggestion
@@ -317,6 +334,7 @@ export const CreateResourceRequestModal: React.FC<CreateResourceRequestModalProp
                 loading={advisory.isLoading}
                 restock={requisitionType === 'upstream'}
                 quantity={quantity}
+                urgency={urgency}
                 onUse={(q, u) => {
                   setQuantity(q);
                   if (u) setUrgency(u);

@@ -10,13 +10,17 @@ import { AIInsightDetailView } from './AIInsightDetailView';
 import { MapCanvas3D } from '../../../components/ui/situational/MapCanvas';
 import { Gis3DLayerExplorer, type GisFocusTarget } from '../../../components/ui/situational/Gis3DLayerExplorer';
 import { SitrepPanel } from '../../../components/ui/situational/SitrepPanel';
-import { useIncidents, useWarehouses } from '../../../hooks';
+import { NEARBY_RADIUS_KM, useIncidents, useNearbyFacilities, useWarehouses } from '../../../hooks';
+import { facilityToPoi } from '../../../utils/mapLayers';
 import { geoService } from '../../../services/geoService';
 import { containerAnim, defaultLayers, itemAnim } from '../../../constants';
 import { TONE } from '../../../components/ui/shared/Tag';
 
 type Tab = 'map' | 'overview';
 type MapMode = '3d-layers' | '3d' | '2d';
+
+/** The place or incident whose surroundings are shown on the map. */
+type NearbyAnchor = { lat: number; lng: number; label: string };
 
 type Result = {
   id: string;
@@ -26,6 +30,7 @@ type Result = {
   lat: number;
   lng: number;
   incident?: Incident;
+  google?: boolean;
 };
 
 const KIND_LOOK: Record<Result['kind'], { color: string; Icon: typeof MapPin; group: string }> = {
@@ -34,7 +39,7 @@ const KIND_LOOK: Record<Result['kind'], { color: string; Icon: typeof MapPin; gr
   place: { color: TONE.blue, Icon: MapPin, group: 'Places in Malaysia' },
 };
 
-/** Real addresses and place names in Malaysia (OpenStreetMap, through the backend). */
+/** Real addresses, places and facilities in Malaysia (Google Places, else OpenStreetMap, through the backend). */
 function usePlaceSearch(query: string) {
   const [places, setPlaces] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
@@ -48,7 +53,7 @@ function usePlaceSearch(query: string) {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const rows = await geoService.searchPlaces(q, ctrl.signal);
+        const rows = await geoService.searchPlaces(q, ctrl.signal, true);
         setPlaces(
           rows.map((r) => ({
             id: `place-${r.id}`,
@@ -57,6 +62,7 @@ function usePlaceSearch(query: string) {
             kind: 'place' as const,
             lat: r.lat,
             lng: r.lng,
+            google: r.source === 'Google',
           }))
         );
       } catch {
@@ -85,6 +91,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
   const [flyToTarget, setFlyToTarget] = useState<FlyToTarget | null>(null);
   const [focusTarget, setFocusTarget] = useState<GisFocusTarget | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [nearbyAnchor, setNearbyAnchor] = useState<NearbyAnchor | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   // The open detail view is driven by ?incidentId= so it can be deep-linked and survives reloads.
   const activeInsightId = searchParams.get('incidentId') ?? focusIncident?.id ?? null;
@@ -102,6 +109,9 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     () => incidents.filter((inc) => inc.status !== 'Resolved' && inc.status !== 'Rejected'),
     [incidents]
   );
+  const nearbyQuery = useNearbyFacilities(nearbyAnchor);
+  const nearbyPois = useMemo(() => (nearbyAnchor ? (nearbyQuery.data ?? []).map(facilityToPoi) : []), [nearbyAnchor, nearbyQuery.data]);
+  const nearbySources = [...new Set((nearbyQuery.data ?? []).map((f) => f.source).filter(Boolean))].join(', ');
   const warehousesQuery = useWarehouses();
   const { data: warehouses = [] } = warehousesQuery;
 
@@ -155,7 +165,8 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
     });
     return out.slice(0, 5);
   }, [searchQuery, activeIncidents, combinedPOIs]);
-  const { places, loading: placesLoading } = usePlaceSearch(searchQuery);
+  // Only while the dropdown is open: picking a result fills the box, which must not search (and bill) again.
+  const { places, loading: placesLoading } = usePlaceSearch(searchOpen ? searchQuery : '');
   const results = useMemo(() => [...local, ...places], [local, places]);
   useEffect(() => setActiveIdx(0), [searchQuery]);
 
@@ -171,6 +182,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
       detail: item.subtitle,
     });
     setFocusTarget({ lat: item.lat, lng: item.lng, label: item.title, detail: item.subtitle, timestamp: Date.now() });
+    setNearbyAnchor({ lat: item.lat, lng: item.lng, label: item.title });
     if (item.kind === 'incident' && item.incident) {
       setSelectedIncident(item.incident);
       setSitrepOpen(true);
@@ -187,6 +199,8 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
 
   const handleSelectIncident = (incident: Incident) => {
     setSelectedIncident(incident);
+    const [lat, lng] = incident.coordinates ?? [];
+    if (Number.isFinite(lat) && Number.isFinite(lng)) setNearbyAnchor({ lat, lng, label: incident.title });
     setSitrepOpen(true);
   };
   const handleCloseSitrep = () => {
@@ -261,6 +275,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                     if (!val.trim()) {
                       setFlyToTarget(null);
                       setFocusTarget(null);
+                      setNearbyAnchor(null);
                     }
                   }}
                   onFocus={() => setSearchOpen(true)}
@@ -270,13 +285,13 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                     else if (e.key === 'Enter' && results[activeIdx]) handleSelectResult(results[activeIdx]);
                     else if (e.key === 'Escape') setSearchOpen(false);
                   }}
-                  placeholder="Search a place, address or incident"
+                  placeholder="Search a place, facility, address or incident"
                   className="w-full pl-9 pr-8 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-4 focus:ring-blue-600/10 transition"
                 />
                 {placesLoading ? (
                   <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />
                 ) : searchQuery && (
-                  <button onClick={() => { setSearchQuery(''); setSearchOpen(false); setFlyToTarget(null); setFocusTarget(null); }} aria-label="Clear search"
+                  <button onClick={() => { setSearchQuery(''); setSearchOpen(false); setFlyToTarget(null); setFocusTarget(null); setNearbyAnchor(null); }} aria-label="Clear search"
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer">
                     <X size={13} />
                   </button>
@@ -316,10 +331,26 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                         );
                       })
                     )}
-                    {places.length > 0 && <p className="px-3.5 pt-1.5 pb-1 text-[10px] text-slate-400">Places from OpenStreetMap</p>}
+                    {places.length > 0 && <p className="px-3.5 pt-1.5 pb-1 text-[10px] text-slate-400">Places from {places.some((p) => p.google) ? 'Google' : 'OpenStreetMap'}</p>}
                   </div>
                 )}
               </div>
+
+              {nearbyAnchor && (
+                <div className="inline-flex items-center gap-1.5 min-w-0 max-w-[280px] pl-2.5 pr-1 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-600"
+                  title={`Within ${NEARBY_RADIUS_KM} km of ${nearbyAnchor.label}${nearbySources ? ` · Source: ${nearbySources}` : ''}`}>
+                  {nearbyQuery.isLoading ? <Loader2 size={13} className="shrink-0 animate-spin text-slate-400" /> : <MapPin size={13} className="shrink-0" style={{ color: TONE.blue }} />}
+                  {nearbyQuery.isError ? (
+                    <button type="button" onClick={() => nearbyQuery.refetch()} className="font-semibold text-blue-600 hover:text-blue-700 cursor-pointer whitespace-nowrap">Nearby failed, retry</button>
+                  ) : (
+                    <span className="truncate">{nearbyQuery.isLoading ? 'Finding nearby places…' : `${nearbyPois.length} ${nearbyPois.length === 1 ? 'place' : 'places'} near ${nearbyAnchor.label}`}</span>
+                  )}
+                  <button type="button" onClick={() => setNearbyAnchor(null)} aria-label="Hide nearby places"
+                    className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer shrink-0">
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
 
               <div className="ml-auto flex items-center gap-2">
                 <div role="radiogroup" aria-label="Map view" className="inline-flex items-center bg-slate-100 rounded-lg p-0.5">
@@ -335,8 +366,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                     );
                   })}
                 </div>
-                {mapMode !== '3d-layers' && (
-                  <button
+                <button
                     onClick={() => setLayerPanelOpen((v) => !v)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer border ${
                       layerPanelOpen ? 'bg-[#1e293b] text-white border-[#1e293b]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
@@ -344,27 +374,25 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                   >
                     <Globe2 size={13} /> Filters <span className="tabular-nums opacity-70">{Object.values(layers).filter(Boolean).length}</span>
                   </button>
-                )}
               </div>
             </div>
 
-            {mapMode !== '3d-layers' && (
-              <LayerPanel
-                layers={layers}
-                counts={layerCounts}
-                isOpen={layerPanelOpen}
-                onClose={() => setLayerPanelOpen(false)}
-                onToggleLayer={toggleLayer}
-                onResetLayers={handleResetLayers}
-                onSelectAllLayers={handleSelectAllLayers}
-              />
-            )}
+            <LayerPanel
+              layers={layers}
+              counts={mapMode === '3d-layers' ? undefined : layerCounts}
+              isOpen={layerPanelOpen}
+              onClose={() => setLayerPanelOpen(false)}
+              onToggleLayer={toggleLayer}
+              onResetLayers={handleResetLayers}
+              onSelectAllLayers={handleSelectAllLayers}
+            />
 
             {mapMode === '3d-layers' ? (
               <Gis3DLayerExplorer
                 layers={layers}
                 incidents={activeIncidents}
                 pois={combinedPOIs}
+                nearbyPois={nearbyPois}
                 onSelectIncident={handleSelectIncident}
                 onToggleLayer={toggleLayer}
                 focusTarget={focusTarget}
@@ -378,6 +406,7 @@ const DisasterIntelligence: React.FC<DisasterIntelligenceProps> = ({ focusIncide
                 onToggleLayer={toggleLayer}
                 incidents={activeIncidents}
                 pois={combinedPOIs}
+                nearbyPois={nearbyPois}
                 onLayerCounts={setLayerCounts}
               />
             )}

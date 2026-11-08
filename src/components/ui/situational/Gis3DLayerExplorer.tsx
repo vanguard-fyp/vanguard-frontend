@@ -17,8 +17,12 @@ import {
   Plus,
   Warehouse as WarehouseIcon,
   X,
+  Cross,
+  Shield,
+  Stethoscope,
 } from 'lucide-react';
-import type { Gis3DLayerExplorerProps, Incident } from '../../../types';
+import type { Gis3DLayerExplorerProps, GISLayerState, Incident, MapPOI } from '../../../types';
+import { incidentMatchesLayers } from '../../../utils/mapLayers';
 import { useGisLayers } from '../../../hooks/useGeo';
 import { useHazardPredictions, useRescueTeams } from '../../../hooks';
 
@@ -135,11 +139,33 @@ const BaseTiles: React.FC<{ widthPx: number; center: { x: number; y: number }; z
 
 const SEVERITY_COLOR: Record<string, string> = { Critical: '#f87171', High: '#fb923c', Medium: '#fbbf24', Low: '#94a3b8' };
 
-type FacilityKind = 'depot' | 'fire' | 'relief';
+type FacilityKind = 'depot' | 'fire' | 'relief' | 'hospital' | 'clinic' | 'police';
 const FACILITY_STYLE: Record<FacilityKind, { label: string; color: string; icon: React.ReactNode }> = {
   depot: { label: 'Depots', color: C.depot, icon: <WarehouseIcon size={9} className="text-slate-900" /> },
   fire: { label: 'Fire stations', color: C.fire, icon: <Flame size={9} className="text-slate-900" /> },
   relief: { label: 'Relief centres', color: C.relief, icon: <Home size={9} className="text-slate-900" /> },
+  hospital: { label: 'Hospitals', color: '#f472b6', icon: <Cross size={9} className="text-slate-900" /> },
+  clinic: { label: 'Clinics & pharmacies', color: '#5eead4', icon: <Stethoscope size={9} className="text-slate-900" /> },
+  police: { label: 'Police', color: '#93c5fd', icon: <Shield size={9} className="text-slate-900" /> },
+};
+
+/** Which layer-panel filter controls each kind of facility. */
+const FACILITY_LAYER: Record<FacilityKind, keyof GISLayerState> = {
+  depot: 'rescueTeamLocations',
+  fire: 'fireStations',
+  relief: 'emergencyShelters',
+  hospital: 'hospitals',
+  clinic: 'clinics',
+  police: 'policeStations',
+};
+
+const POI_KIND: Partial<Record<MapPOI['category'], FacilityKind>> = {
+  Hospital: 'hospital',
+  Clinic: 'clinic',
+  Pharmacy: 'clinic',
+  'Police Station': 'police',
+  'Fire Station': 'fire',
+  Shelter: 'relief',
 };
 
 interface Point {
@@ -186,8 +212,10 @@ const DetailLine: React.FC<{ text: HoverLine; compact?: boolean }> = ({ text, co
 const panel = 'bg-[#1e293b]/90 backdrop-blur-md border border-white/10 shadow-[0_12px_32px_-12px_rgba(0,0,0,.6)]';
 
 export const Gis3DLayerExplorer: React.FC<Gis3DLayerExplorerProps & { focusTarget?: GisFocusTarget | null }> = ({
+  layers,
   incidents,
   pois,
+  nearbyPois = [],
   onSelectIncident,
   focusTarget,
 }) => {
@@ -269,8 +297,8 @@ export const Gis3DLayerExplorer: React.FC<Gis3DLayerExplorerProps & { focusTarge
   const { data: predictions = [] } = useHazardPredictions();
 
   const activeIncidents: Incident[] = useMemo(
-    () => incidents.filter((i) => !['Resolved', 'Rejected', 'Archived'].includes(i.status) && inMalaysia(i.coordinates[0], i.coordinates[1])),
-    [incidents]
+    () => incidents.filter((i) => !['Resolved', 'Rejected', 'Archived'].includes(i.status) && inMalaysia(i.coordinates[0], i.coordinates[1]) && incidentMatchesLayers(i, layers)),
+    [incidents, layers]
   );
 
   const allFacilities: Facility[] = useMemo(() => {
@@ -307,14 +335,19 @@ export const Gis3DLayerExplorer: React.FC<Gis3DLayerExplorerProps & { focusTarge
 
   const facilities = useMemo(() => {
     const list = nearOnly ? allFacilities.filter((f) => nearAnIncident(f.lat, f.lng)) : allFacilities;
-    const perKind: Record<FacilityKind, number> = { depot: 0, fire: 0, relief: 0 };
-    return list.filter((f) => ++perKind[f.kind] <= MAX_PER_KIND);
+    const perKind: Record<FacilityKind, number> = { depot: 0, fire: 0, relief: 0, hospital: 0, clinic: 0, police: 0 };
+    const nearby: Facility[] = nearbyPois.flatMap((p) => {
+      const kind = POI_KIND[p.category];
+      if (!kind || !inMalaysia(p.coordinates[0], p.coordinates[1])) return [];
+      return [{ id: `nearby-${p.id}`, name: p.name, lat: p.coordinates[0], lng: p.coordinates[1], sub: `${p.category} · ${p.details}`, kind }];
+    });
+    return [...list.filter((f) => ++perKind[f.kind] <= MAX_PER_KIND), ...nearby].filter((f) => layers[FACILITY_LAYER[f.kind]]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allFacilities, nearOnly, activeIncidents]);
+  }, [allFacilities, nearbyPois, nearOnly, activeIncidents, layers]);
   const floods = useMemo(
-    () => (nearOnly ? floodHotspots.filter((f) => nearAnIncident(f.lat, f.lng)) : floodHotspots).slice(0, MAX_PER_KIND),
+    () => (layers.floodAreas ? (nearOnly ? floodHotspots.filter((f) => nearAnIncident(f.lat, f.lng)) : floodHotspots).slice(0, MAX_PER_KIND) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [floodHotspots, nearOnly, activeIncidents]
+    [floodHotspots, nearOnly, activeIncidents, layers.floodAreas]
   );
 
   // Nearest relief centre and nearest available team per incident.
@@ -834,7 +867,7 @@ export const Gis3DLayerExplorer: React.FC<Gis3DLayerExplorerProps & { focusTarge
           );
         })}
         <div className="border-t border-white/10 mt-1 pt-2 px-2 flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-slate-300">
-          {(Object.keys(FACILITY_STYLE) as FacilityKind[]).map((k) => (
+          {(Object.keys(FACILITY_STYLE) as FacilityKind[]).filter((k) => facilities.some((f) => f.kind === k)).map((k) => (
             <span key={k} className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: FACILITY_STYLE[k].color }} />
               {FACILITY_STYLE[k].label}

@@ -13,6 +13,7 @@ import {
   Phone,
   MapPin,
   ArrowRight,
+  CheckCircle2,
   XCircle,
   Eye,
   EyeOff,
@@ -34,6 +35,7 @@ import {
   useUpdateAssistanceStatus,
 } from '../../../hooks';
 import { SkeletonList } from '../../../components/ui/shared/SkeletonLoader';
+import { ConfirmModal } from '../../../components/ui/shared/Modal';
 import { useToast } from '../../../context/ToastContext';
 
 import type { AgencyFilter, StatusFilter, TeamSortBy, RescueTeam } from '../../../types';
@@ -42,6 +44,12 @@ import { MissionWizard } from './MissionWizard';
 import { TeamListFilters } from '../../../components/ui/coordination/rescue/TeamListFilters';
 import { containerAnim, itemAnim } from '../../../constants';
 import { formatDateTime } from '../../../utils/dateFormatter';
+
+/* One size and shape for every SOS action; filled blue only for the next step. */
+const SOS_BTN = 'inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600';
+const SOS_BTN_PRIMARY = 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600 hover:border-blue-700';
+const SOS_BTN_CANCEL = 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200';
+const SOS_BTN_WARN = 'bg-white hover:bg-amber-50 text-amber-800 border-amber-300';
 
 const RescueOperations: React.FC = () => {
   const teamsQuery = useRescueTeams();
@@ -84,6 +92,7 @@ const RescueOperations: React.FC = () => {
   const [sosSearch, setSosSearch] = useState('');
   const [sosStatusFilter, setSosStatusFilter] = useState<'All' | 'Pending' | 'Acknowledged' | 'Dispatched' | 'Resolved'>('All');
   const [sosToCancelId, setSosToCancelId] = useState<any | null>(null);
+  const [sosToResolve, setSosToResolve] = useState<any | null>(null);
   const [editingTeam, setEditingTeam] = useState<RescueTeam | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -578,48 +587,28 @@ const RescueOperations: React.FC = () => {
 
                         {!isClosed && (
                           <div className="flex items-center gap-2">
-                            {isPending && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAcknowledgeAssistance(sos)}
-                                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                                >
-                                  Acknowledge
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCancelAssistance(sos)}
-                                  className="flex items-center gap-1 px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] rounded-lg border border-red-200 transition-colors cursor-pointer"
-                                >
-                                  <XCircle size={12} />
-                                  Cancel
-                                </button>
-                              </>
-                            )}
                             {isAcknowledged && pendingSosSync[sos.id] && (
-                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => void retrySosSync(sos.id)} className="px-3 py-2 border border-amber-600 rounded-lg text-amber-900 font-semibold">
+                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => void retrySosSync(sos.id)} className={`${SOS_BTN} ${SOS_BTN_WARN}`}>
                                 Retry SOS update · {pendingSosSync[sos.id]}
                               </button>
                             )}
-                            {(isAcknowledged || isDispatched) && (
-                              <button type="button" onClick={() => handleCancelAssistance(sos)} className="px-3 py-2 text-red-700 border border-red-200 rounded-lg">Cancel SOS</button>
+                            <button type="button" onClick={() => handleCancelAssistance(sos)} className={`${SOS_BTN} ${SOS_BTN_CANCEL}`}>
+                              <XCircle size={12} />
+                              Cancel SOS
+                            </button>
+                            {isPending && (
+                              <button type="button" onClick={() => handleAcknowledgeAssistance(sos)} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>
+                                Acknowledge
+                              </button>
                             )}
                             {isDispatched && (
-                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => {
-                                if (!window.confirm('Confirm that this SOS no longer needs assistance? This does not close its mission.')) return;
-                                updateAssistanceMutation.mutate({ requestId: sos.id, status: 'Resolved' }, {
-                                  onSuccess: () => toastSuccess('SOS resolved', 'The request is closed. Any shared mission remains unchanged.'),
-                                  onError: (error) => toastError('SOS not resolved', error.message),
-                                });
-                              }} className="px-3 py-2 bg-blue-700 text-white rounded-lg">Mark resolved</button>
+                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => setSosToResolve(sos)} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>
+                                <CheckCircle2 size={12} />
+                                Mark Resolved
+                              </button>
                             )}
                             {isAcknowledged && !pendingSosSync[sos.id] && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeploySosSquad(sos)}
-                                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                              >
+                              <button type="button" onClick={() => handleDeploySosSquad(sos)} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>
                                 <span>Deploy Tactical Squad</span>
                                 <ArrowRight size={12} />
                               </button>
@@ -723,6 +712,25 @@ const RescueOperations: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* Resolve SOS Request Confirmation Modal */}
+      <ConfirmModal
+        open={!!sosToResolve}
+        onClose={() => setSosToResolve(null)}
+        onConfirm={() => updateAssistanceMutation.mutate({ requestId: sosToResolve.id, status: 'Resolved' }, {
+          onSuccess: () => {
+            setSosToResolve(null);
+            toastSuccess('SOS resolved', 'The request is closed. Any shared mission remains unchanged.');
+          },
+          onError: (error) => toastError('SOS not resolved', error.message),
+        })}
+        title="Mark this SOS resolved?"
+        icon={CheckCircle2}
+        confirmLabel="Mark Resolved"
+        pending={updateAssistanceMutation.isPending}
+      >
+        {sosToResolve?.display_id || sosToResolve?.displayId || 'This request'} no longer needs assistance. This does not close its mission.
+      </ConfirmModal>
 
       {/* Cancel SOS Request Confirmation Modal */}
       <AnimatePresence>

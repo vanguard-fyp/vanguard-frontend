@@ -2,16 +2,16 @@ import { DataRegion } from '../../components/common/DataRegion';
 import React, { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Users, ShieldCheck, Route } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Users, ShieldCheck, Route, Waves } from 'lucide-react';
 
 import { Panel, StatCard, Segmented, ConcentricRings, TrendPill, ringUnits, Bone } from '../../components/ui/dashboard/Panel';
 import { DashboardMap } from '../../components/ui/dashboard/DashboardMap';
 import { ResponseChain } from '../../components/ui/dashboard/ResponseChain';
-import { PriorityList } from '../../components/ui/dashboard/PriorityList';
+import { PriorityList, SeverityLegend } from '../../components/ui/dashboard/PriorityList';
 import {
-  useIncidents, useRescueTeams, useMissions, useKpiTrends,
-  useSeverityDist, useResponseTrends, useTeamCapacity, useResourceUtilization,
+  useIncidents, useRescueTeams, useMissions, useResponseTrends, useResourceUtilization, useSensorNodes,
 } from '../../hooks';
+import { criticalSensors, sensorLevelCm, sensorName } from '../../utils/sensors';
 import { DASHBOARD_ANIMATIONS } from '../../constants/theme';
 import { DASH, ACCENT, CATEGORY, CHART_TOOLTIP } from '../../constants/dashboard';
 import type { Incident } from '../../types';
@@ -28,7 +28,8 @@ const VIEWS = [
 const axisTick = { fill: DASH.inkFaint, fontSize: 10 };
 
 const EOCCommandCenter: React.FC = () => {
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  // What the officer picked. Nothing is picked on load, so no row looks active by accident.
+  const [pickedIncident, setPickedIncident] = useState<Incident | null>(null);
   const [view, setView] = useState<'map' | 'chain'>('map');
   const [stockHover, setStockHover] = useState<number | null>(null);
   const navigate = useNavigate();
@@ -39,14 +40,9 @@ const EOCCommandCenter: React.FC = () => {
   const { data: rescueTeams = [], isPending: teamsLoading } = teamsQuery;
   const missionsQuery = useMissions();
   const { data: missions = [], isPending: misLoading } = missionsQuery;
-  const kpiQuery = useKpiTrends();
-  const { data: kpiTrends, isPending: kpiLoading } = kpiQuery;
-  const severityQuery = useSeverityDist();
-  const { data: severityDist = [] } = severityQuery;
   const responseTrendQuery = useResponseTrends();
   const { data: responseTrend = [], isPending: respLoading } = responseTrendQuery;
-  const capacityQuery = useTeamCapacity();
-  const { data: teamCapacity = [], isPending: capLoading } = capacityQuery;
+  const { data: sensorNodes = [] } = useSensorNodes();
   const utilizationQuery = useResourceUtilization();
   const { data: resourceUtil = [], isPending: stockLoading } = utilizationQuery;
 
@@ -63,42 +59,13 @@ const EOCCommandCenter: React.FC = () => {
   );
 
   const criticalCount = activeIncidents.filter((i) => i.severity === 'Critical').length;
+  const sensorNow = Date.now();
+  const sensorAlerts = criticalSensors(sensorNodes, sensorNow);
   const totalAffected = activeIncidents.reduce((sum, i) => sum + (i.affected_population || 0), 0);
   const deployedTeams = rescueTeams.filter((t) => (t.committed_personnel ?? 0) > 0 || t.status === 'Deployed' || t.status === 'En Route');
-  const uniqueDistricts = Array.from(new Set(activeIncidents.map((i) => i.district || i.state).filter(Boolean)));
-  const deployedAgencies = Array.from(new Set(deployedTeams.map((t) => t.agency))).join(', ');
-  // Personnel-based utilisation from the SAME capacity rule as Rescue Operations
-  // (backend capacity_service). Off-duty personnel are not deployable, so they are
-  // excluded from the denominator.
-  const capacityTotals = teamCapacity.reduce(
-    (acc: { onDuty: number; deployed: number }, t: { deployed?: number; available?: number }) => ({
-      onDuty: acc.onDuty + (t.deployed ?? 0) + (t.available ?? 0),
-      deployed: acc.deployed + (t.deployed ?? 0),
-    }),
-    { onDuty: 0, deployed: 0 }
-  );
-  const capacityPct = capacityTotals.onDuty > 0 ? Math.round((capacityTotals.deployed / capacityTotals.onDuty) * 100) : 0;
   const onDutyTeams = rescueTeams.filter((t) => t.status !== 'Off Duty' && t.status !== 'Deleted');
-  const offDutyTeamCount = rescueTeams.length - onDutyTeams.length;
   const inProgressCount = activeMissions.filter((m) => m.status === 'In Progress').length;
-  const pendingCount = activeMissions.filter((m) => m.status === 'Pending').length;
-  const severityLine = severityDist.filter((s) => s.value > 0 && s.name !== 'Critical').map((s) => `${s.value} ${s.name.toLowerCase()}`).join(' · ');
   const stockData = resourceUtil.map((r, i) => ({ ...r, fill: CATEGORY[i % CATEGORY.length] }));
-
-  const perUnit = kpiTrends?.bucket === 'hour' ? 'hour' : 'day';
-  const lastLabel = kpiTrends?.labels?.[kpiTrends.labels.length - 1];
-  const sparkWindow = kpiTrends?.window_end
-    ? kpiTrends.is_current_window
-      ? perUnit === 'hour' ? 'last 12 h' : 'last 7 days'
-      : `${perUnit === 'hour' ? '12 h' : '7 days'} to ${lastLabel ?? kpiTrends.window_end.slice(0, 10)}`
-    : undefined;
-  const sparkCaption = (what: string) => (sparkWindow ? `${what}/${perUnit} · ${sparkWindow}` : undefined);
-
-  React.useEffect(() => {
-    if (activeIncidents.length > 0 && !selectedIncident) {
-      setSelectedIncident(activeIncidents[0]);
-    }
-  }, [incidents]);
 
   // ── Response time ────────────────────────────────────────────────
   const respAt = (i: number): number | null => responseTrend[i]?.response_min ?? responseTrend[i]?.responseMin ?? null;
@@ -106,7 +73,11 @@ const EOCCommandCenter: React.FC = () => {
   const firstResp = responseTrend.length > 0 ? respAt(0) : null;
   const respDeltaPct = latestResp != null && firstResp != null && firstResp > 0 ? Math.round(((latestResp - firstResp) / firstResp) * 100) : null;
 
-  const selectIncident = useCallback((inc: Incident) => setSelectedIncident(inc), []);
+  const selectIncident = useCallback((inc: Incident) => setPickedIncident(inc), []);
+  const clearIncident = useCallback(() => setPickedIncident(null), []);
+  // The map's info card falls back to the most urgent incident.
+  const mapIncident = pickedIncident ?? activeIncidents.reduce<Incident | null>(
+    (top, i) => (top && (top.ai_priority_score ?? -1) >= (i.ai_priority_score ?? -1) ? top : i), null);
   const openIncident = useCallback((inc: Incident) => navigate(`/situational/incidents/${inc.id}`), [navigate]);
 
   return (
@@ -117,30 +88,36 @@ const EOCCommandCenter: React.FC = () => {
         EOC Command Center
       </motion.h1>
 
-      {/* ─── Row 1: headline numbers with trends ─────────────────────── */}
+      {sensorAlerts.length > 0 && (
+        <motion.button variants={DASHBOARD_ANIMATIONS.item} type="button" onClick={() => navigate('/situational/sensors')}
+          className="w-full flex items-center gap-3 rounded-2xl border px-5 py-3 text-left cursor-pointer"
+          style={{ background: DASH.criticalSoft, borderColor: DASH.critical, color: DASH.critical }}
+        >
+          <Waves size={18} aria-hidden="true" className="shrink-0" />
+          <span className="flex-1 min-w-0 text-sm font-bold truncate">
+            {sensorAlerts
+              .map((node) => `${sensorName(node)} critical · ${sensorLevelCm(node, sensorNow)?.toFixed(1) ?? '--'} cm`)
+              .join('  |  ')}
+          </span>
+          <ChevronRight size={18} aria-hidden="true" className="shrink-0" />
+        </motion.button>
+      )}
+
+      {/* ─── Row 1: headline numbers ───────────────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item} className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
         <DataRegion queries={[incidentsQuery]} label="Active Incidents"><StatCard title="Active Incidents" value={activeIncidents.length} icon={AlertTriangle} accent={ACCENT.incident}
-          loading={incLoading || kpiLoading}
+          loading={incLoading}
           pill={criticalCount > 0 ? { text: `${criticalCount} critical`, tone: 'bad', trend: 'up' } : undefined}
-          detail={severityLine || undefined}
-          spark={{ data: kpiTrends?.incidents, labels: kpiTrends?.labels, kind: 'area', caption: sparkCaption('New') }}
         /></DataRegion>
         <DataRegion queries={[incidentsQuery]} label="People Affected"><StatCard title="People Affected" value={totalAffected.toLocaleString()} icon={Users} accent={ACCENT.people}
-          loading={incLoading || kpiLoading}
-          detail={`Across ${uniqueDistricts.length} ${uniqueDistricts.length === 1 ? 'area' : 'areas'}`}
-          spark={{ data: kpiTrends?.population, labels: kpiTrends?.labels, kind: 'bar', caption: sparkWindow ? `Running total · ${sparkWindow}` : undefined }}
+          loading={incLoading}
         /></DataRegion>
         <DataRegion queries={[teamsQuery]} label="Teams Deployed"><StatCard title="Teams Deployed" value={`${deployedTeams.length}/${onDutyTeams.length}`} icon={ShieldCheck} accent={ACCENT.team}
-          loading={teamsLoading || capLoading}
-          detail={[deployedAgencies, offDutyTeamCount > 0 ? `${offDutyTeamCount} off duty` : ''].filter(Boolean).join(' · ') || 'No teams deployed'}
-          segments={teamCapacity.map((t) => ({ label: t.name, filled: t.deployed ?? 0, total: (t.deployed ?? 0) + (t.available ?? 0) }))}
-          progressCaption={capacityTotals.onDuty > 0 ? `${capacityTotals.deployed} of ${capacityTotals.onDuty} on-duty crew deployed (${capacityPct}%)` : undefined}
+          loading={teamsLoading}
         /></DataRegion>
         <DataRegion queries={[missionsQuery, incidentsQuery]} label="Active Missions"><StatCard title="Active Missions" value={activeMissions.length} icon={Route} accent={ACCENT.mission}
-          loading={misLoading || kpiLoading}
+          loading={misLoading}
           pill={inProgressCount > 0 ? { text: `${inProgressCount} in progress`, tone: 'neutral' } : undefined}
-          detail={`${pendingCount} queued`}
-          spark={{ data: kpiTrends?.missions, labels: kpiTrends?.labels, kind: 'area', caption: sparkCaption('New') }}
         /></DataRegion>
       </motion.div>
 
@@ -241,11 +218,12 @@ const EOCCommandCenter: React.FC = () => {
               incidents={activeIncidents}
               missions={activeMissions}
               teams={onDutyTeams}
-              selectedIncidentId={selectedIncident?.id}
+              selectedIncidentId={pickedIncident?.id}
               onSelectIncident={selectIncident}
+              onClearIncident={clearIncident}
             />
           ) : (
-            <DashboardMap incidents={incidents} selectedIncident={selectedIncident}
+            <DashboardMap incidents={incidents} selectedIncident={mapIncident}
               onSelectIncident={openIncident} />
           )}
         </Panel></DataRegion>
@@ -253,8 +231,8 @@ const EOCCommandCenter: React.FC = () => {
 
       {/* ─── Row 4: AI priority ──────────────────────────────────────── */}
       <motion.div variants={DASHBOARD_ANIMATIONS.item}>
-        <DataRegion queries={[incidentsQuery]} label="AI priority score"><Panel title="AI priority score" action={<span className="text-[10px] font-medium text-slate-400">by incident, 0–100</span>}>
-          <PriorityList incidents={activeIncidents} selectedIncidentId={selectedIncident?.id} onSelectIncident={selectIncident} loading={incLoading} />
+        <DataRegion queries={[incidentsQuery]} label="AI priority score"><Panel title="AI priority score" action={<SeverityLegend />}>
+          <PriorityList incidents={activeIncidents} selectedIncidentId={pickedIncident?.id} onSelectIncident={selectIncident} loading={incLoading} />
         </Panel></DataRegion>
       </motion.div>
     </motion.div>

@@ -34,10 +34,11 @@ const SystemAdministration: React.FC = () => {
     } else {
       createUserMutation.mutate({
         name: data.name || 'New Officer',
-        email: data.email || 'officer@nadma.gov.my',
+        email: data.email!,
         agency: data.agency || 'NADMA Malaysia',
         role: data.role || 'Disaster Management Officer',
         status: 'Active',
+        ...(data.avatar_url ? { avatar_url: data.avatar_url } : {}),
       });
     }
   };

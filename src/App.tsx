@@ -17,6 +17,7 @@ const EOCCommandCenter = lazy(() => import('./pages/dashboard/EOCCommandCenter')
 const IncidentManagement = lazy(() => import('./pages/situational/incident-management/IncidentManagement'));
 const IncidentDetailPage = lazy(() => import('./pages/situational/incident-management/IncidentDetailPage'));
 const DisasterIntelligence = lazy(() => import('./pages/situational/disaster-intelligence/DisasterIntelligence'));
+const FloodSensors = lazy(() => import('./pages/situational/flood-sensors/FloodSensors'));
 const RescueOperations = lazy(() => import('./pages/coordination/rescue-operations/RescueOperations'));
 const ResourceManagement = lazy(() => import('./pages/coordination/resource-management/ResourceManagement'));
 const PublicCommunication = lazy(() => import('./pages/communication/PublicCommunication'));
@@ -89,6 +90,7 @@ const MainAppLayout: React.FC = () => {
             <Route path="/situational/incidents" element={<IncidentManagement />} />
             <Route path="/situational/incidents/:id" element={<IncidentDetailPage />} />
             <Route path="/situational/intelligence" element={<DisasterIntelligence />} />
+            <Route path="/situational/sensors" element={<FloodSensors />} />
             <Route path="/response/rescue" element={<RescueOperations />} />
             <Route path="/response/resources" element={<ResourceManagement />} />
             <Route path="/communication" element={<PublicCommunication />} />

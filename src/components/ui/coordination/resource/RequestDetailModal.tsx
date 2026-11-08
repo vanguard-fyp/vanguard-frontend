@@ -5,6 +5,7 @@ import type { ResourceRequest } from '../../../../types';
 import { requestFlow } from '../../../../utils/resourceFlow';
 import { formatDateTime } from '../../../../utils/dateFormatter';
 import { requestRoute } from './ResourceUI';
+import { RequestRecommendationCard } from './ResourceAdvisory';
 
 interface RequestDetailModalProps {
   request: ResourceRequest | null;
@@ -171,6 +172,9 @@ export const RequestDetailModal: React.FC<RequestDetailModalProps> = ({ request,
               )}
             </Card>
           </div>
+
+          {/* AI suggestion while a decision is still open */}
+          {request.status === 'Pending Approval' && <RequestRecommendationCard req={request} />}
 
           {/* Justification - only if provided */}
           {request.justification && (
