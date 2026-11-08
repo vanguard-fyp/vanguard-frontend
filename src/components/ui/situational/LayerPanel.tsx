@@ -35,6 +35,7 @@ const groups: LayerGroup[] = [
   {
     title: 'Emergency Facilities & Shelters',
     items: [
+      { key: 'jkmReliefCentres', label: 'JKM Centres Open Now', icon: <Home size={15} />, iconColor: 'text-emerald-700', activeBg: 'bg-emerald-50/80', activeBorder: 'border-emerald-200', activeDot: 'bg-emerald-600' },
       { key: 'emergencyShelters', label: 'Evac Shelters (PPS)', icon: <Home size={15} />, iconColor: 'text-emerald-600', activeBg: 'bg-emerald-50/80', activeBorder: 'border-emerald-200', activeDot: 'bg-emerald-500' },
       { key: 'hospitals', label: 'Hospitals & Medical', icon: <Hospital size={15} />, iconColor: 'text-pink-600', activeBg: 'bg-pink-50/80', activeBorder: 'border-pink-200', activeDot: 'bg-pink-500' },
       { key: 'clinics', label: 'Clinics & Dispensaries', icon: <Stethoscope size={15} />, iconColor: 'text-teal-600', activeBg: 'bg-teal-50/80', activeBorder: 'border-teal-200', activeDot: 'bg-teal-500' },

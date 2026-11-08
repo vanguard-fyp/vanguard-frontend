@@ -226,6 +226,7 @@ export interface GISLayerState {
   fireStations: boolean;
   policeStations: boolean;
   evacuationSchools: boolean;
+  jkmReliefCentres: boolean;
   rescueTeamLocations: boolean;
 }
 
@@ -246,6 +247,8 @@ export interface MapPOI {
     | 'Depot'
     | 'Pharmacy'
     | 'Flood Hotspot'
+    | 'JKM Relief Centre'
+    | 'JKM Relief Centre (nearly full)'
     | 'Other';
   coordinates: [number, number];
   capacity?: { current: number; max: number };

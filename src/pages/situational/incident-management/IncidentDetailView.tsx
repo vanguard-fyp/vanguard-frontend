@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
 import { CredibilityCard, isCredibilityAvailable } from '../../../components/ui/situational/CredibilityCard';
+import { ReliefCentresLine } from '../../../components/ui/situational/ReliefCentresLine';
 import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia, useIncidentAssessment } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
@@ -507,6 +508,8 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
               <TriggerAlertPanel alert={incident.trigger_alert} size="full" />
             </Section>
           )}
+
+          <ReliefCentresLine state={incident.state} district={incident.administrative_district || incident.district} />
 
           {isTracked && incident.impact_timeline && (
             <ImpactTimeline timeline={incident.impact_timeline} mode="confirmed-only" size="full" />

@@ -30,6 +30,7 @@ import type { GISLayerState, GisFeature, GisLayerResponse, Incident, MapPOI, Fly
 import { DARK_STYLE, TOPOLOGY_PLANES } from '../../../constants';
 import { geoService } from '../../../services/geoService';
 import { NEARBY_RADIUS_KM, useGisLayers } from '../../../hooks/useGeo';
+import { useReliefCentres } from '../../../hooks/useIntelligence';
 import { factState } from '../../../utils/facts';
 import { facilityToPoi, incidentMatchesLayers, withinKm } from '../../../utils/mapLayers';
 
@@ -137,6 +138,8 @@ const poiHex: Record<string, string> = {
   'Road Closure': '#64748b',
   Pharmacy: '#0d9488',
   'Flood Hotspot': '#0ea5e9',
+  'JKM Relief Centre': '#047857',
+  'JKM Relief Centre (nearly full)': '#b91c1c',
   Other: '#64748b',
 };
 
@@ -156,6 +159,8 @@ const poiRgb: Record<string, [number, number, number]> = {
   'Road Closure': [100, 116, 139],
   Pharmacy: [13, 148, 136],
   'Flood Hotspot': [14, 165, 233],
+  'JKM Relief Centre': [4, 120, 87],
+  'JKM Relief Centre (nearly full)': [185, 28, 28],
   Other: [100, 116, 139],
 };
 
@@ -173,6 +178,8 @@ const poiToLayerKey: Record<string, keyof GISLayerState> = {
   Depot: 'rescueTeamLocations',
   Pharmacy: 'clinics',
   'Flood Hotspot': 'floodAreas',
+  'JKM Relief Centre': 'jkmReliefCentres',
+  'JKM Relief Centre (nearly full)': 'jkmReliefCentres',
 };
 
 const GIS_LAYERS: { key: string; toggle: keyof GISLayerState; short: string }[] = [
@@ -235,6 +242,20 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
 
   // Backend GIS layers — fetched only while their toggle is on.
   const gisQueries = useGisLayers(GIS_LAYERS.map((l) => ({ key: l.key, enabled: !!layers[l.toggle] })));
+  // JKM's centres open now (only fetched while the layer is on).
+  const reliefQuery = useReliefCentres({}, layers.jkmReliefCentres);
+  const reliefPois = useMemo<MapPOI[]>(() => {
+    const full = reliefQuery.data?.nearly_full_pct ?? 90;
+    return (reliefQuery.data?.centres ?? []).flatMap((c) =>
+      c.lat == null || c.lng == null ? [] : [{
+        id: `jkm-${c.id}`,
+        name: c.name,
+        category: c.capacity_pct >= full ? 'JKM Relief Centre (nearly full)' as const : 'JKM Relief Centre' as const,
+        coordinates: [c.lat, c.lng] as [number, number],
+        details: `${c.victims} victims · ${c.families} families · ${c.capacity_pct}% full · ${c.district}, ${c.state} · Source: JKM`,
+      }],
+    );
+  }, [reliefQuery.data]);
   const gisPois = useMemo(
     () =>
       gisQueries.flatMap((q) =>
@@ -352,13 +373,14 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
     nearbyPois.forEach((p) => map.set(p.id, p));
     liveFacilities.forEach((p) => map.set(p.id, p));
     gisPois.forEach((p) => map.set(p.id, p));
+    reliefPois.forEach((p) => map.set(p.id, p));
     pois.forEach((p) => {
       if (p.category === 'Warehouse' && !map.has(p.id)) {
         map.set(p.id, p);
       }
     });
     return Array.from(map.values());
-  }, [pois, nearbyPois, liveFacilities, gisPois]);
+  }, [pois, nearbyPois, liveFacilities, gisPois, reliefPois]);
 
   // Filter incidents based on active hazard layers
   const visibleIncidents = useMemo(() => incidents.filter((inc) => incidentMatchesLayers(inc, layers)), [incidents, layers]);
@@ -412,12 +434,17 @@ export const MapCanvas3D: React.FC<MapCanvasProps> = ({
       if (q.isLoading) counts[l.toggle] = typeof counts[l.toggle] === 'number' && (counts[l.toggle] as number) > 0 ? counts[l.toggle] : 'loading';
       else if (q.isError || q.data?.status === 'unavailable') counts[l.toggle] = typeof counts[l.toggle] === 'number' && (counts[l.toggle] as number) > 0 ? counts[l.toggle] : 'unavailable';
     });
+    if (layers.jkmReliefCentres) {
+      if (reliefQuery.isLoading) counts.jkmReliefCentres = 'loading';
+      else if (reliefQuery.isError || reliefQuery.data?.available === false) counts.jkmReliefCentres = 'unavailable';
+      else counts.jkmReliefCentres ??= 0;
+    }
     for (const k of ['emergencyShelters', 'hospitals', 'clinics', 'fireStations', 'policeStations', 'evacuationSchools', 'rescueTeamLocations'] as (keyof GISLayerState)[]) {
       if (counts[k] === undefined) counts[k] = isLoadingFacilities ? 'loading' : 0;
     }
     onLayerCounts(counts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incidents, combinedPOIs, layers, isLoadingFacilities, gisQueries.map((q) => `${q.status}${q.dataUpdatedAt}`).join('|')]);
+  }, [incidents, combinedPOIs, layers, isLoadingFacilities, reliefQuery.status, reliefQuery.data, gisQueries.map((q) => `${q.status}${q.dataUpdatedAt}`).join('|')]);
 
   // Real points for the 3D topology planes (no decorative placeholders).
   const planeNodes: Partial<Record<keyof GISLayerState, { label: string; x: number; y: number }[]>> = useMemo(

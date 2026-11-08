@@ -89,6 +89,15 @@ export function useHazardPredictions() {
   });
 }
 
+export function useReliefCentres(params: { state?: string; district?: string } = {}, enabled = true) {
+  return useQuery({
+    queryKey: [...INTEL_KEYS.predictions, 'relief-centres', params.state ?? '', params.district ?? ''],
+    queryFn: () => intelligenceService.getReliefCentres(params),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useDismissPrediction() {
   const qc = useQueryClient();
   return useMutation({

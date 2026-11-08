@@ -25,6 +25,13 @@ const historyText = (p: HazardPrediction): string => {
   return `${h.confirmed_events} confirmed events in ${where} in the last ${h.years} years${last}. Context only, not part of the score.`;
 };
 
+/** JKM's open relief centres in this prediction's districts: context only, never the score. */
+const reliefText = (p: HazardPrediction): string => {
+  const r = p.relief_centres;
+  if (!r?.open) return '';
+  return `${r.open} relief centre${r.open === 1 ? '' : 's'} open · ${r.victims.toLocaleString()} victims${r.nearly_full ? ` · ${r.nearly_full} nearly full` : ''}`;
+};
+
 /** Official MET warning(s) behind the "MET warning" tag: context only, never part of the score. */
 const warningText = (p: HazardPrediction): string =>
   (p.official_warnings ?? [])
@@ -455,8 +462,9 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                     <span className="block text-xs text-slate-500 truncate mt-0.5">
                                       {p.state ? `${p.state} · ` : ''}{whenText(p)}{isNum(p.exposed_population) ? ` · ${fmtNumber(p.exposed_population)} exposed` : ''}
                                     </span>
-                                    {(p.history?.label || !!p.official_warnings?.length) && (
+                                    {(p.history?.label || !!p.official_warnings?.length || !!p.relief_centres?.open) && (
                                       <span className="flex flex-wrap gap-1.5 mt-1">
+                                        {!!p.relief_centres?.open && <Tag tone="red" title={reliefText(p)}>JKM centres open</Tag>}
                                         {!!p.official_warnings?.length && <Tag tone="red" title={warningText(p)}>MET warning</Tag>}
                                         {p.history?.label && <Tag tone="amber" title={historyText(p)}>{p.history.label}</Tag>}
                                       </span>
@@ -501,6 +509,12 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                   {fmtText(p.hazard_type, 'Hazard')} · {fmtText(p.district, 'Unknown district')}
                                 </h3>
                                 {p.state && <p className="text-xs text-slate-500 mt-0.5">{p.state}</p>}
+                                {!!p.relief_centres?.open && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <Tag tone="red">JKM</Tag>
+                                    <span className="text-[11px] text-slate-500">{reliefText(p)}</span>
+                                  </div>
+                                )}
                                 {!!p.official_warnings?.length && (
                                   <div className="mt-2 flex flex-wrap items-center gap-2">
                                     <Tag tone="red">MET warning</Tag>

@@ -73,22 +73,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
         avatar_url = await userService.uploadAvatar(pendingAvatarFile);
       }
 
-      // 2. Build payload — use camelCase keys matching UserUpdate Pydantic model
       const updates: Record<string, string> = {
         name: displayName.trim(),
         email: email.trim(),
       };
-      // phoneNumber accepted by backend via AliasChoices("phone_number", "phoneNumber")
       updates.phone_number = phone.trim();
-      // avatarUrl accepted by backend via AliasChoices("avatar_url", "avatarUrl")
       if (avatar_url) updates.avatar_url = avatar_url;
-      // agency and role are NOT editable by the officer themselves
 
-      // 3. Persist to DB
       await updateUser.mutateAsync({ id: user.id, updates });
 
-      // 4. Patch the auth context immediately so the Sidebar and modal
-      //    reflect the new avatar / name without a page refresh
       updateCurrentUser({
         name: displayName.trim(),
         email: email.trim(),

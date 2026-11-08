@@ -90,6 +90,7 @@ export const defaultLayers: GISLayerState = {
   fireStations: true,
   policeStations: true,
   evacuationSchools: true,
+  jkmReliefCentres: false,
   rescueTeamLocations: true,
 };
 

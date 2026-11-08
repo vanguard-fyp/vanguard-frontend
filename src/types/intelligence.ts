@@ -351,6 +351,38 @@ export interface HazardPrediction {
   history?: PredictionHistory | null;
   /** Official MET Malaysia warnings in force for this hazard and area. Context only. null = feed unreachable. */
   official_warnings?: OfficialWarning[] | null;
+  /** JKM relief centres open in this prediction's districts. Context only. null = feed unreachable. */
+  relief_centres?: ReliefSummary | null;
+}
+
+export interface ReliefSummary {
+  open: number;
+  victims: number;
+  families: number;
+  nearly_full: number;
+  source: string;
+}
+
+export interface ReliefCentre {
+  id: string;
+  name: string;
+  state: string;
+  district: string;
+  mukim?: string | null;
+  lat: number | null;
+  lng: number | null;
+  victims: number;
+  families: number;
+  capacity_pct: number;
+}
+
+/** available = false means the feed could not be read (unknown, not "none open"). */
+export interface ReliefCentresResponse {
+  available: boolean;
+  source: string;
+  centres: ReliefCentre[];
+  summary: ReliefSummary | null;
+  nearly_full_pct?: number;
 }
 
 export interface OfficialWarning {

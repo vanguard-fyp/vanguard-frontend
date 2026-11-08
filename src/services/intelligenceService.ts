@@ -1,3 +1,4 @@
+import type { ReliefCentresResponse } from '../types/intelligence';
 import { apiClient } from './apiClient';
 import type {
   AssessmentEnvelope,
@@ -53,6 +54,10 @@ export interface PredictionAccuracy {
 }
 
 export const intelligenceService = {
+  /** Relief centres open now according to JKM, optionally for one state/district. */
+  getReliefCentres: (params: { state?: string; district?: string } = {}) =>
+    apiClient.get<ReliefCentresResponse>('/intelligence/relief-centres', params),
+
   /** Related active incidents grouped into wider events (advisory). */
   getWiderEvents: () => apiClient.get<WiderEvent[]>('/intelligence/events'),
 
