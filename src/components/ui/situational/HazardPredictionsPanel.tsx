@@ -541,6 +541,14 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                               </div>
                             </dl>
 
+                            {p.district_profile && (
+                              <p className="text-xs text-slate-600 leading-relaxed"
+                                title={`${p.district_profile.source}: poverty ${p.district_profile.poverty_year}, population ${p.district_profile.population_year}. Context only; not part of the hazard score.`}>
+                                <span className="font-semibold text-slate-900">Who's at risk here: </span>
+                                {p.district_profile.poverty_pct}% of households in poverty{p.district_profile.poverty_scope === 'state' ? ' (state figure)' : ''} · {p.district_profile.age_65_plus_pct}% aged 65+ · {p.district_profile.under_5_pct}% under 5 ({p.district_profile.source})
+                              </p>
+                            )}
+
                             <ScoreScale score={p.hazard_score} confidence={p.confidence} />
 
                             {rs.length > 0 && (

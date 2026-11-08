@@ -353,6 +353,20 @@ export interface HazardPrediction {
   official_warnings?: OfficialWarning[] | null;
   /** JKM relief centres open in this prediction's districts. Context only. null = feed unreachable. */
   relief_centres?: ReliefSummary | null;
+  /** DOSM figures for the district, shown beside the warning. Never part of the score. */
+  district_profile?: DistrictProfile | null;
+}
+
+export interface DistrictProfile {
+  district: string;
+  poverty_pct: number;
+  /** 'state' = no district figure is published; the state's is shown instead */
+  poverty_scope: 'district' | 'state';
+  age_65_plus_pct: number;
+  under_5_pct: number;
+  poverty_year: number;
+  population_year: number;
+  source: string;
 }
 
 export interface ReliefSummary {
