@@ -83,7 +83,7 @@ export const ActionProposalCard: React.FC<Props> = ({ proposal, messageId, outco
     setError(null);
     try {
       if (draft.type === 'sitrep') {
-        incidentService.downloadSitrepPdf(draft.incident_id, draft.incident_display_id);
+        await incidentService.downloadSitrepPdf(draft.incident_id, draft.incident_display_id);
         onResolved({ status: 'approved', text: `SITREP for ${draft.incident_display_id ?? 'the incident'} downloaded.` });
       } else if (draft.type === 'announcement') {
         const created = await publish.mutateAsync(toAnnouncement(draft));

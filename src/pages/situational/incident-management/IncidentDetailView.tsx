@@ -707,7 +707,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
                     { label: 'Public Warning Poster', hint: 'Printable PDF', Icon: Printer, run: () => incidentService.downloadSitrepPoster(incident.id, incident.display_id) },
                   ].map(({ label, hint, Icon, run }) => (
                     <li key={label}>
-                      <button onClick={run}
+                      <button onClick={() => run().catch((e: Error) => toastError(e.message || 'The file could not be downloaded.'))}
                         className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer text-left">
                         <IconTile color={TONE.blue}><Icon size={15} /></IconTile>
                         <span className="flex-1 min-w-0">
