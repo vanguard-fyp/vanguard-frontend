@@ -69,6 +69,11 @@ export const missionService = {
     return apiClient.get<RescueRecommendation>('/missions/recommendations', { incident_id: incidentId });
   },
 
+  /** Send one team En Route; the mission's other teams are not changed. */
+  mobilizeTeam: async (missionId: string, teamId: string): Promise<Mission> => {
+    return apiClient.patch<Mission>(`/missions/${missionId}/teams/${teamId}/mobilize`);
+  },
+
   /**
    * Update mission status
    */

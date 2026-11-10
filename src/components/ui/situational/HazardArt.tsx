@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle, Activity, CloudFog, CloudLightning, Flame, Image as ImageIcon, Mountain, Waves, Wind, type LucideIcon,
 } from 'lucide-react';
@@ -132,6 +132,8 @@ export const SlashMedia: React.FC<{
   className?: string;
 }> = ({ hazard, photo, count = 0, alt = '', surface = '#ffffff', className = 'w-[40%]' }) => {
   const [failed, setFailed] = useState(false);
+  // A new photo (or a refreshed signed link) gets a fresh chance to load.
+  useEffect(() => setFailed(false), [photo]);
   return (
     <div className={`relative shrink-0 overflow-hidden ${className}`}>
       {photo && !failed

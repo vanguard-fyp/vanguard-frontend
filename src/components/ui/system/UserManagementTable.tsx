@@ -1,12 +1,13 @@
 import { DataRegion } from '../../common/DataRegion';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, Search, Edit2, Trash2, SlidersHorizontal } from 'lucide-react';
+import { Users, Search, Edit2, Trash2, SlidersHorizontal, Send } from 'lucide-react';
 import type { UserAccount, UserManagementTableProps } from '../../../types';
 import { userRolesFilterList as roles } from '../../../constants';
 import { ConfirmationDialog } from '../shared/ConfirmationDialog';
 import { formatDateTime } from '../../../utils/dateFormatter';
-import { useUsers } from '../../../hooks/useUsers';
+import { useResendInvite, useUsers } from '../../../hooks/useUsers';
 import { useAuth } from '../../../context/AuthContext';
+import { useToast } from '../../../context/ToastContext';
 import { PaginationBar } from '../shared/PaginationBar';
 
 export const UserManagementTable: React.FC<UserManagementTableProps> = ({
@@ -24,6 +25,15 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
   const usersQuery = useUsers();
   const { data: allUsers = [], isLoading, isError, refetch, isFetching } = usersQuery;
   const { user: currentUser } = useAuth();
+  const toast = useToast();
+  const resendInvite = useResendInvite();
+
+  const handleResend = (u: UserAccount) => {
+    resendInvite.mutate(u.id, {
+      onSuccess: () => toast.success('Invite sent', `A new invite link was emailed to ${u.email}.`),
+      onError: (e) => toast.error('Invite not sent', e instanceof Error ? e.message : undefined),
+    });
+  };
 
   const filteredUsers = useMemo(() => {
     let list = allUsers.filter((u) => {
@@ -190,7 +200,18 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
                         {/* <span className="text-[10px] text-slate-400 font-normal">({formatRelativeTime(user.last_active)})</span> */}
                       </div>
                     ) : (
-                      <span className="text-slate-400">Never</span>
+                      <div className="flex flex-col items-start gap-0.5">
+                        <span className="text-amber-700 font-semibold">Invite pending</span>
+                        <button
+                          type="button"
+                          onClick={() => handleResend(user)}
+                          disabled={resendInvite.isPending && resendInvite.variables === user.id}
+                          className="flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                        >
+                          <Send size={11} aria-hidden="true" />
+                          {resendInvite.isPending && resendInvite.variables === user.id ? 'Sending…' : 'Resend invite'}
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right">

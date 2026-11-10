@@ -128,7 +128,6 @@
   height: calc(100vh - 4rem); height: calc(100svh - 4rem);
   overflow: hidden;
 }
-.lf-stage__field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* The plate sits between the copy column (28rem) and the legend (17rem), never under either. */
 .lf-stage__plate {
   position: absolute; left: calc(28rem + (100vw - 45rem) / 2); top: 50%;
@@ -454,6 +453,7 @@
 /* ---------- Footer ---------- */
 .lf-footer { background: var(--lf-ink); color: #d8dde3; padding-block: 3rem 2rem; font-size: 0.875rem; }
 .lf-footer a { color: #fff; }
+.lf-footer__name { color: #fff; }
 .lf-footer__grid { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgb(255 255 255 / 0.16); }
 .lf-footer h4 { margin: 0 0 0.75rem; font-size: 0.8125rem; color: #fff; font-weight: 600; }
 .lf-footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
@@ -754,13 +754,10 @@
 
 /* Halftone carried down behind the shelf. */
 
-.lf-section__field { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0.6; pointer-events: none; }
-.lf-section--field > .lf-wrap { position: relative; z-index: 1; }
 
 .lf-intro__cta { margin-top: 2rem; }
 
 /* The halftone sits behind the introduction, never over its links. */
-.lf-intro > .lf-stage__field { z-index: 0; pointer-events: none; }
 .lf-intro > .lf-intro__grid { position: relative; z-index: 1; }
 .lf-loader[data-leaving='true'] { pointer-events: none; }
 .lf-roamer[data-big='true'] { outline-color: transparent; box-shadow: none; background: transparent; }
@@ -816,3 +813,118 @@
 .lf-status__title { font-size: clamp(1.9rem, 3vw, 2.4rem); margin: 0; }
 .lf-status__body { margin: 0.6rem 0 1.75rem; font-size: 1rem; }
 .lf-status .lf-btn { border-radius: 10px; }
+
+/* ---------- Weather atmosphere (landing page only) ---------- */
+.lf--weather {
+  --lf-ink-soft: #3a4552;
+  --lf-ink-faint: #566271;
+  background: transparent;
+  isolation: isolate;
+}
+.lf--weather .lf-section, .lf--weather .lf-section--deep { background: transparent; }
+.lf--weather .lf-header {
+  background: color-mix(in srgb, #fff 48%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25);
+  backdrop-filter: blur(14px) saturate(1.25);
+}
+.lf--weather .lf-section { border-top-color: rgba(19, 32, 47, .12); }
+
+.lf-wx { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--lf-stock); }
+.lf-wx > * { position: absolute; inset: 0; }
+.lf-wx__sky { will-change: opacity; }
+.lf-wx__sky--calm {
+  background:
+    radial-gradient(52% 62% at 78% 46%, rgba(126, 182, 244, .3), transparent 72%),
+    radial-gradient(44% 56% at 10% 88%, rgba(170, 206, 250, .3), transparent 72%),
+    linear-gradient(180deg, #e6f1fd 0%, #f4f9ff 100%);
+}
+.lf-wx__sky--flood { background: linear-gradient(180deg, #e6f1fd 0%, #f4f9ff 100%); }
+.lf-wx__sky--slide { background: linear-gradient(180deg, #d8eeff 0%, #f6fbff 55%, #fff7e6 100%); }
+.lf-wx__sky--storm { background: linear-gradient(180deg, #cbd8ea 0%, #e3ebf5 100%); }
+.lf-wx__sky--clear { background: linear-gradient(180deg, #e0f1ff 0%, #fbfdff 100%); }
+.lf-wx__sun {
+  will-change: opacity;
+  background:
+    radial-gradient(circle at 84% 6%, rgba(255, 244, 214, .95) 0, rgba(255, 233, 184, .5) 16%, transparent 46%),
+    linear-gradient(205deg, rgba(255, 240, 205, .3) 0, transparent 44%);
+}
+.lf-wx__clouds { will-change: opacity; opacity: 0; }
+.lf-wx__clouds span {
+  position: absolute; display: block; width: 62vw; height: 40vh; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, .78), transparent);
+  animation: lf-wx-drift 70s ease-in-out infinite alternate;
+}
+.lf-wx__clouds span:nth-child(1) { left: -14vw; top: 2vh; }
+.lf-wx__clouds span:nth-child(2) { left: 46vw; top: 18vh; animation-duration: 95s; animation-direction: alternate-reverse; }
+.lf-wx__clouds span:nth-child(3) { left: 8vw; top: 58vh; animation-duration: 120s; }
+@keyframes lf-wx-drift { to { transform: translate3d(9vw, 2vh, 0); } }
+.lf-wx__canvas { width: 100%; height: 100%; }
+.lf-wx__canvas--rain { filter: blur(.6px); }
+.lf-wx__flash { background: #fff; opacity: 0; }
+
+/* What comes up with each section. Transforms only, so scrolling stays on the compositor. */
+.lf-wx .lf-wx__rise { inset: auto 0 0 0; will-change: transform; transform: translate3d(0, 100%, 0); }
+.lf-wx__rise[data-on='false'] { visibility: hidden; }
+.lf-wx__rise svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.lf-wx .lf-wx__rise--flood { height: 40vh; height: 40svh; }
+.lf-wx .lf-wx__rise--slide { height: 36vh; height: 36svh; }
+.lf-wx .lf-wx__rise--bank {
+  inset: 0 0 auto 0; height: 34vh; height: 34svh; transform: translate3d(0, -100%, 0);
+  background:
+    radial-gradient(60% 90% at 18% 0, rgba(92, 112, 142, .62), transparent 70%),
+    radial-gradient(55% 80% at 72% 0, rgba(80, 100, 132, .66), transparent 70%),
+    linear-gradient(180deg, rgba(96, 116, 146, .42), transparent);
+}
+.lf-wx__town { fill: rgba(140, 170, 204, .2); }
+.lf-wx .lf-wx__wave { position: absolute; top: 0; bottom: 0; left: 0; width: 200%; animation: lf-wx-wave 16s linear infinite; }
+.lf-wx__wave svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.lf-wx__wave--1 { top: 8%; animation-duration: 24s; }
+.lf-wx__wave--1 path { fill: rgba(170, 214, 248, .3); }
+.lf-wx .lf-wx__wave--2 { top: 26%; animation-duration: 17s; animation-direction: reverse; }
+.lf-wx__wave--2 path { fill: rgba(150, 204, 244, .26); }
+.lf-wx .lf-wx__wave--3 { top: 46%; animation-duration: 12s; }
+.lf-wx__wave--3 path { fill: rgba(130, 192, 240, .24); }
+.lf-wx__rise[data-on='false'] .lf-wx__wave { animation-play-state: paused; }
+@keyframes lf-wx-wave { to { transform: translate3d(-50%, 0, 0); } }
+.lf-wx__hill-far { fill: #e6d8bd; }
+.lf-wx__hill-near { fill: #d6c19c; }
+.lf-wx__rocks { fill: #b8a07a; }
+.lf-wx .lf-wx__bolt { inset: 0 auto auto 40%; width: 76px; height: 44vh; opacity: 0; fill: #fff; filter: drop-shadow(0 0 14px rgba(190, 215, 255, .95)); }
+.lf-wx[data-still='true'] .lf-wx__wave, .lf-wx[data-still='true'] .lf-wx__clouds span { animation: none; }
+
+/* ---------- The first screen: the next section's sky, with the radar as glass ---------- */
+.lf--weather .lf-intro { display: grid; align-items: center; min-height: calc(100vh - 4rem); min-height: calc(100svh - 4rem); }
+.lf--weather .lf-intro__grid { width: 100%; }
+.lf--weather #resources { border-top-color: transparent; }
+
+/* The radar's own disc is the glass; nothing surrounds it. The loader draws the
+   same disc so it lands exactly. */
+.lf--weather .lf-stage__plate::before, .lf--weather .lf-loader__scope::before {
+  content: ''; position: absolute; inset: 6.48%; z-index: -1; border-radius: 50%;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .78), rgba(255, 255, 255, .36));
+  box-shadow: 0 30px 70px -38px rgba(40, 84, 150, .5), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+.lf--weather .lf-stage__plate, .lf--weather .lf-loader__scope .lf-plate { --lf-stock: transparent; }
+
+/* The loader is the first screen's sky, so the page starts without a colour change. */
+.lf--weather .lf-loader {
+  background-color: #eaf3fe;
+}
+
+/* The footer continues the last section's sky instead of starting a dark band. */
+.lf--weather .lf-footer {
+  position: relative; color: var(--lf-ink-soft);
+  background: linear-gradient(180deg, transparent, rgba(186, 214, 246, .34));
+}
+.lf--weather .lf-footer a, .lf--weather .lf-footer h4, .lf--weather .lf-footer__name { color: var(--lf-ink); }
+.lf--weather .lf-footer__grid { border-bottom-color: rgba(19, 32, 47, .12); }
+.lf--weather .lf-footer__base { color: var(--lf-ink-soft); }
+
+@media (max-width: 899px) {
+  .lf-wx__canvas--rain { filter: none; }
+  .lf-wx .lf-wx__rise--flood { height: 30vh; height: 30svh; }
+  .lf-wx .lf-wx__rise--slide { height: 26vh; height: 26svh; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lf--weather .lf-header { background: var(--lf-stock); }
+}

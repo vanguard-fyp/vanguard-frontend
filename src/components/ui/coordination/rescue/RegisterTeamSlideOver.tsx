@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ShieldAlert, MapPin, Plus, Search } from 'lucide-react';
-import { useCreateRescueTeam, useUpdateRescueTeam } from '../../../../hooks';
+import { useCreateRescueTeam, useLockPageScroll, useUpdateRescueTeam } from '../../../../hooks';
 import { useToast } from '../../../../context/ToastContext';
 import { PhoneInput, isValidMalaysianPhone } from '../../shared/PhoneInput';
+import { Overlay } from '../../shared/Modal';
 import type { AgencyFilter, RescueTeam } from '../../../../types';
 
 interface RegisterTeamSlideOverProps {
@@ -100,6 +101,8 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
     setPersonnelError('');
     setAttemptedSubmit(false);
   }, [teamToEdit, isOpen]);
+
+  useLockPageScroll(isOpen);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -355,6 +358,7 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
   };
 
   return (
+    <Overlay>
     <AnimatePresence>
       {isOpen && (
         <>
@@ -364,7 +368,7 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs"
+            className="fixed top-0 left-0 w-screen h-screen z-[55] bg-black/50 backdrop-blur-xs"
           />
 
           {/* Slide-over Drawer */}
@@ -373,7 +377,7 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-            className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white border-l border-slate-200 shadow-2xl flex flex-col overflow-hidden"
+            className="fixed top-0 right-0 h-screen z-[56] w-full max-w-lg bg-white border-l border-slate-200 shadow-2xl flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="px-6 py-4.5 bg-slate-900 text-white flex items-center justify-between">
@@ -718,5 +722,6 @@ export const RegisterTeamSlideOver: React.FC<RegisterTeamSlideOverProps> = ({
         </>
       )}
     </AnimatePresence>
+    </Overlay>
   );
 };

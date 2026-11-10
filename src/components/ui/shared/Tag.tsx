@@ -23,7 +23,7 @@ export const TONE = {
 export type Tone = keyof typeof TONE;
 
 /** Text on a soft tag: one step darker than the hue, so it reads as ink, not neon. */
-const TONE_INK: Record<Tone, string> = {
+export const TONE_INK: Record<Tone, string> = {
   red: '#b91c1c',
   orange: '#c2410c',
   amber: '#b45309',

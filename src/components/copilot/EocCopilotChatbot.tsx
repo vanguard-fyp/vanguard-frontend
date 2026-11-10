@@ -66,7 +66,9 @@ export const EocCopilotChatbot: React.FC = () => {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   // Speech fills the box; the officer reads it and presses send (never auto-sent).
-  const voice = useVoiceInput((text) => setInputMessage((cur) => (cur ? `${cur} ${text}` : text)));
+  // What was typed before the mic started; each speech update replaces only the spoken part.
+  const voiceBase = useRef('');
+  const voice = useVoiceInput((spoken) => setInputMessage(voiceBase.current ? `${voiceBase.current} ${spoken}` : spoken));
 
   // Dragging: the launcher and the panel move independently inside a box that
   // starts below the navbar, so neither can be dragged over it (or off-screen).
@@ -150,8 +152,6 @@ export const EocCopilotChatbot: React.FC = () => {
       setRevealId(botMsg.id);
       setMessages((prev) => [...prev, botMsg]);
     } catch (err) {
-      // Not answered: mark the message as failed and give the text back so the
-      // officer can retry without retyping (unless they already typed something new).
       setMessages((prev) => prev.map((m) => (m.id === userMsg.id ? { ...m, failed: true } : m)));
       setInputMessage((current) => current || trimmed);
       setMessages((prev) => [
@@ -490,7 +490,7 @@ export const EocCopilotChatbot: React.FC = () => {
                   {voice.supported && (
                     <button
                       type="button"
-                      onClick={voice.listening ? voice.stop : voice.start}
+                      onClick={voice.listening ? voice.stop : () => { voiceBase.current = inputMessage.trim(); voice.start(); }}
                       aria-label={voice.listening ? 'Stop voice input' : 'Speak your message'}
                       aria-pressed={voice.listening}
                       title={voice.error ?? (voice.listening ? 'Stop' : 'Speak')}

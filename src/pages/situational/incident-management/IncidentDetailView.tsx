@@ -12,6 +12,8 @@ import {
   Wind,
   Navigation,
   ArrowUpRight,
+  ChevronDown,
+  Lock,
   XCircle,
   Download,
   Printer,
@@ -34,21 +36,22 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { TriggerAlertPanel } from '../../../components/ui/situational/TriggerAlertPanel';
 import { ImpactTimeline } from '../../../components/ui/situational/ImpactTimeline';
-import { CredibilityCard, isCredibilityAvailable } from '../../../components/ui/situational/CredibilityCard';
+import { CredibilityCard } from '../../../components/ui/situational/CredibilityCard';
 import { ReliefCentresLine } from '../../../components/ui/situational/ReliefCentresLine';
-import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia, useIncidentAssessment } from '../../../hooks';
+import { useIncidentLogs, useUpdateIncident, useResolveIncident, useIncidentMedia } from '../../../hooks';
 import { incidentService } from '../../../services/incidentService';
 import { formatDateTime } from '../../../utils/dateFormatter';
 import { useToast } from '../../../context/ToastContext';
 import { formatFullLocation } from '../../../utils/locationFormatter';
 import { FACT_STATE_LABEL, editedFieldVerification, factState } from '../../../utils/facts';
 import { fmtText, isNum } from '../../../utils/display';
-import type { CommandTabType, FactField, FactState, Incident, IncidentDetailViewProps } from '../../../types';
+import type { FactField, FactState, Incident, IncidentDetailViewProps } from '../../../types';
 import { useAuth } from '../../../context/AuthContext';
 import { Tag, TONE, IconTile, StatusTag, LevelTag, SourceTag, type Tone } from '../../../components/ui/shared/Tag';
 import { FormModal, ConfirmModal, Field, GhostButton, PrimaryButton, inputCls, NAVY, Overlay } from '../../../components/ui/shared/Modal';
 import { Bone } from '../../../components/ui/dashboard/Panel';
 import { FormattedMessageText } from '../../../utils/messageFormatter';
+import { currentStage, stageLocked, stageState, type PipelineStage, type StageState } from '../../../utils/incidentPipeline';
 
 function getCleanIncidentId(id: string, displayId?: string): string {
   if (displayId) return displayId;
@@ -61,9 +64,6 @@ function getCleanIncidentId(id: string, displayId?: string): string {
   }
   return id.toUpperCase();
 }
-
-/** Activity entries shown before "Show all". */
-const LOG_PREVIEW = 5;
 
 function getWeatherDescription(code: number): string {
   if (code === 0) return 'Clear sky';
@@ -121,6 +121,42 @@ const Note: React.FC<{ tone: Tone; title: string; children: React.ReactNode }> =
   </div>
 );
 
+/** A labelled block inside a pipeline step. */
+const StepBlock: React.FC<{ title: string; note?: string; children: React.ReactNode }> = ({ title, note, children }) => (
+  <div>
+    <div className="flex items-center justify-between gap-3 mb-2">
+      <h3 className="text-xs font-semibold text-slate-800">{title}</h3>
+      {note && <span className="text-[11px] text-slate-400">{note}</span>}
+    </div>
+    {children}
+  </div>
+);
+
+/** One step of the response pipeline: always a one-line header, its work only when open. */
+const PipelineStep: React.FC<{
+  n: number; title: string; summary: string; state: StageState; open: boolean; locked?: boolean; last?: boolean;
+  onToggle: () => void; children: React.ReactNode;
+}> = ({ n, title, summary, state, open, locked, last, onToggle, children }) => (
+  <li className="relative">
+    {!last && <span className="absolute left-[31px] sm:left-[35px] top-12 bottom-0 w-px bg-slate-200" aria-hidden="true" />}
+    <button type="button" aria-expanded={open} onClick={onToggle} disabled={locked}
+      className="relative w-full flex items-center gap-3 px-5 sm:px-6 py-3 text-left cursor-pointer enabled:hover:bg-slate-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600">
+      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold tabular-nums shrink-0 ${state === 'upcoming' ? 'bg-slate-100 text-slate-400' : 'text-white'}`}
+        style={state === 'upcoming' ? undefined : { background: state === 'done' ? TONE.teal : TONE.blue }}>
+        {state === 'done' ? <Check size={13} strokeWidth={3} /> : n}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className={`block text-[13px] font-semibold ${state === 'upcoming' ? 'text-slate-500' : 'text-slate-900'}`}>{title}</span>
+        <span className="block text-xs text-slate-500 truncate">{summary}</span>
+      </span>
+      {locked
+        ? <Lock size={14} aria-label="Locked" className="text-slate-300 shrink-0" />
+        : <ChevronDown size={16} aria-hidden="true" className={`text-slate-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />}
+    </button>
+    {open && <div className="relative pl-14 sm:pl-[60px] pr-5 sm:pr-6 pt-1 pb-5 space-y-4">{children}</div>}
+  </li>
+);
+
 /** A fact's display value, or "Not reported" when its provenance is unknown. */
 function factValue(incident: Incident, field: FactField, render: (v: NonNullable<Incident[FactField]>) => React.ReactNode) {
   const v = incident[field];
@@ -139,17 +175,16 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const isTracked = !!incident.impact_timeline?.length;
   const { user } = useAuth();
   const { data: incidentLogs = [], isLoading: isLoadingLogs } = useIncidentLogs(incident.id);
-  const { data: assessmentData, isLoading: isLoadingAssessment } = useIncidentAssessment(incident.id);
-  const isCredibilityShown = isCredibilityAvailable(assessmentData, isLoadingAssessment);
   const updateIncident = useUpdateIncident();
   const resolveIncident = useResolveIncident();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
 
-  const [activeCommandTab, setActiveCommandTab] = useState<CommandTabType>(() => {
-    if (incident.status === 'Unverified') return 'verify';
-    if (incident.status === 'Resolved') return 'resolve';
-    return 'deploy';
-  });
+  // The step the incident is waiting on starts open; officers can open any other.
+  const waitingOn = currentStage(incident.status);
+  const [openStages, setOpenStages] = useState<PipelineStage[]>([waitingOn]);
+  useEffect(() => setOpenStages([waitingOn]), [waitingOn]);
+  const toggleStage = (key: PipelineStage) =>
+    setOpenStages((cur) => (cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key]));
 
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
@@ -161,7 +196,7 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
   const [rejectReason, setRejectReason] = useState('');
   const [rejectReasonError, setRejectReasonError] = useState('');
   const [copiedPhone, setCopiedPhone] = useState(false);
-  const [showAllLogs, setShowAllLogs] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
   const [assessmentPop, setAssessmentPop] = useState(incident.affected_population || 0);
@@ -343,12 +378,6 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     assessmentInfra !== (incident.infrastructure_damage || 'None') ||
     assessmentAccess !== (incident.accessibility_score ?? 50);
   const location = formatFullLocation(incident.location, incident.district, incident.state, incident.administrative_district);
-  const COMMAND_TABS: { key: CommandTabType; label: string; dot?: boolean }[] = [
-    { key: 'verify', label: 'Verify', dot: incident.status === 'Unverified' },
-    { key: 'deploy', label: 'Deploy' },
-    { key: 'resolve', label: 'Resolve' },
-    { key: 'export', label: 'Export' },
-  ];
   const IMPACT: { field: FactField; title: string; caption: string; color: string; Icon: typeof Users; render: (v: NonNullable<Incident[FactField]>) => React.ReactNode; small?: boolean }[] = [
     { field: 'affected_population', title: 'People Affected', caption: 'Field report', color: TONE.indigo, Icon: Users, render: (v) => Number(v).toLocaleString() },
     { field: 'casualties_count', title: 'Casualties', caption: 'Needing immediate aid', color: TONE.red, Icon: AlertTriangle, render: (v) => Number(v).toLocaleString() },
@@ -362,61 +391,206 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
     return a.includes('create') ? TONE.blue : a.includes('verif') ? TONE.teal : a.includes('resolv') ? TONE.indigo : a.includes('reject') ? TONE.red : a.includes('updat') ? TONE.amber : TONE.slate;
   };
 
-  const activitySection = (isLoadingLogs || incidentLogs.length > 0) && (
+  const latestLog = incidentLogs[0];
+  const activityBox = (isLoadingLogs || incidentLogs.length > 0) && (
     <section className="bg-white border border-slate-200/80 rounded-2xl">
-      <header className={`${isCredibilityShown ? 'px-5' : 'px-5 sm:px-6'} pt-5 pb-3.5 border-b border-slate-100 flex items-center justify-between gap-3`}>
-        <div className="flex items-center gap-2 min-w-0">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800 truncate">
-            Operational Action Log
-          </h2>
-        </div>
-        {incidentLogs.length > LOG_PREVIEW && (
-          <button type="button" onClick={() => setShowAllLogs((v) => !v)} className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer shrink-0">
-            {showAllLogs ? (isCredibilityShown ? 'Show latest' : 'Show latest only') : `Show all ${incidentLogs.length}`}
-          </button>
-        )}
-      </header>
-      <div className={`${isCredibilityShown ? 'px-5' : 'px-5 sm:px-6'} py-5`}>
-        {isLoadingLogs ? (
-          <div className="space-y-4">{[0, 1, 2].map((i) => <div key={i} className="space-y-1.5"><Bone className="h-3 w-1/3" /><Bone className="h-2.5 w-1/2" /></div>)}</div>
-        ) : incidentLogs.length > 0 ? (
-          <ol className="relative space-y-3.5">
-            {(showAllLogs ? incidentLogs : incidentLogs.slice(0, LOG_PREVIEW)).map((log, idx, arr) => (
-              <li key={log.id || idx} className="relative pl-7">
-                {idx < arr.length - 1 && (
-                  <span className="absolute left-[5px] top-6 bottom-[-14px] w-0.5 bg-slate-200" aria-hidden="true" />
-                )}
-                <span
-                  className="absolute left-0 top-[18px] w-3 h-3 rounded-full ring-4 ring-white"
-                  style={{ background: logDot(log.action) }}
-                  aria-hidden="true"
-                />
-                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:border-slate-300 transition-colors">
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-bold text-slate-900 text-xs sm:text-[13px] leading-snug">{log.action}</h3>
-                    <span className="text-[11px] text-slate-400 font-medium tabular-nums shrink-0 whitespace-nowrap">
-                      {formatDateTime(log.logged_at)}
-                    </span>
-                  </div>
-                  {log.detail && (
-                    <div className="mt-2 text-xs text-slate-600 leading-relaxed">
-                      <LogDetailBody detail={log.detail} />
-                    </div>
-                  )}
-                  {log.actor && (
-                    <p className="mt-2.5 text-xs text-slate-500">
-                      <span className="text-slate-400">Actor:</span>{' '}
-                      <span className="font-medium text-slate-700">{log.actor}</span>
-                    </p>
-                  )}
+      <button type="button" aria-expanded={logsOpen} onClick={() => setLogsOpen((v) => !v)}
+        className="w-full px-5 py-3.5 flex items-center gap-3 text-left rounded-2xl cursor-pointer hover:bg-slate-50 transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600">
+        <span className="flex-1 min-w-0">
+          <span className="block text-xs font-bold uppercase tracking-wider text-slate-800">
+            Activity log{incidentLogs.length > 0 && <span className="ml-2 font-semibold text-slate-400 tabular-nums">{incidentLogs.length}</span>}
+          </span>
+          {isLoadingLogs
+            ? <Bone className="block h-2.5 w-2/3 mt-1.5" />
+            : latestLog && <span className="block text-[11px] text-slate-500 truncate mt-0.5">{latestLog.action} · {formatDateTime(latestLog.logged_at)}</span>}
+        </span>
+        <ChevronDown size={16} aria-hidden="true" className={`text-slate-400 shrink-0 transition-transform ${logsOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {logsOpen && (
+        <ol className="px-5 pb-4 pt-1 max-h-96 overflow-y-auto border-t border-slate-100 divide-y divide-slate-100">
+          {incidentLogs.map((log, idx) => (
+            <li key={log.id || idx} className="py-3">
+              <div className="flex items-start gap-2">
+                <span className="w-2 h-2 rounded-full shrink-0 mt-1" style={{ background: logDot(log.action) }} aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-slate-900 leading-snug">{log.action}</p>
+                  <p className="text-[11px] text-slate-400 tabular-nums mt-0.5">{formatDateTime(log.logged_at)}{log.actor ? ` · ${log.actor}` : ''}</p>
+                  {log.detail && <div className="mt-1.5 text-xs text-slate-600 leading-relaxed"><LogDetailBody detail={log.detail} /></div>}
                 </div>
-              </li>
-            ))}
-          </ol>
-        ) : null}
-      </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
+
+  const STAGES: { key: PipelineStage; title: string; summary: string; body: React.ReactNode }[] = [
+    {
+      key: 'verify',
+      title: 'Verify',
+      summary: incident.status === 'Unverified' ? 'Check the report before sending teams'
+        : incident.status === 'Rejected' ? 'Report rejected'
+          : `Verified by ${incident.verified_by || 'EOC Watch Commander'}${incident.verified_at ? ` · ${formatDateTime(incident.verified_at)}` : ''}`,
+      body: (
+        <>
+          {incident.description?.trim() && (
+            <StepBlock title="Situation">
+              <div className="text-sm text-slate-700 leading-relaxed max-w-prose"><FormattedMessageText text={incident.description} /></div>
+            </StepBlock>
+          )}
+          {hasMedia && (
+            <StepBlock title={`Field evidence · ${incident.media_urls!.length}`} note="AI-screened · click to enlarge">
+              {isLoadingMedia ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {incident.media_urls!.slice(0, 4).map((_, i) => <Bone key={i} className="aspect-video rounded-xl" />)}
+                </div>
+              ) : isMediaError ? (
+                <p className="text-xs text-slate-600 rounded-xl px-3.5 py-3" style={{ background: `${TONE.amber}12` }}>
+                  Media could not be loaded. The attachments are still recorded on the incident.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {media.map((m) =>
+                    m.status === 'available' && m.url ? (
+                      <div
+                        key={m.ref}
+                        onClick={() => m.kind === 'image' && setSelectedMediaUrl(m.url)}
+                        className="group relative rounded-xl overflow-hidden bg-slate-100 aspect-video cursor-pointer ring-1 ring-slate-200 hover:ring-2 hover:ring-blue-500 transition-all"
+                      >
+                        {m.kind === 'video' ? (
+                          <video src={m.url} controls preload="metadata" className="w-full h-full object-cover" />
+                        ) : (
+                          <>
+                            <img src={m.url} alt="Field evidence" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors flex items-center justify-center">
+                              <span className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-slate-900 transition-opacity"><Maximize2 size={14} /></span>
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div key={m.ref} className="rounded-xl border border-dashed border-slate-300 bg-slate-50 aspect-video flex flex-col items-center justify-center gap-1 text-slate-400">
+                        {m.kind === 'video' ? <Video size={16} /> : <ImageIcon size={16} />}
+                        <span className="text-[11px] font-semibold">{m.status === 'unsupported' ? 'Unsupported format' : 'Unavailable'}</span>
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </StepBlock>
+          )}
+          <CredibilityCard incidentId={incident.id} hideWhenEmpty />
+          {incident.status === 'Unverified' ? (
+            <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setShowVerifyModal(true)}
+                      disabled={updateIncident.isPending}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                    >
+                      <CheckCircle size={14} /> Verify Report
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRejectReasonError('');
+                        setShowRejectModal(true);
+                      }}
+                      disabled={updateIncident.isPending}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-60 text-red-700 bg-red-50 hover:bg-red-100"
+                    >
+                      <XCircle size={14} /> Reject/ Mark Duplicate
+                    </button>
+            </div>
+          ) : incident.status === 'Rejected' ? (
+            <Note tone="red" title="Rejected">{incident.rejection_reason || 'No reason recorded.'}</Note>
+          ) : onTrackInIntelligence ? (
+            <div>
+                    {onTrackInIntelligence && (
+                      <button
+                        onClick={() => onTrackInIntelligence(incident)}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <ArrowUpRight size={14} /> Track in Disaster Intelligence
+                      </button>
+                    )}
+            </div>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: 'deploy',
+      title: 'Deploy',
+      summary: incident.status === 'Unverified' ? 'Verify the report first'
+        : incident.status === 'Verified' ? 'Assign teams in Rescue Operations' : incident.status === 'Rejected' ? 'Not needed' : 'Teams assigned',
+      body: (
+        <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/response/rescue')}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
+                    style={{ background: NAVY }}
+                  >
+                    <Send size={14} /> Dispatch in Rescue Operations
+                  </button>
+          <p className="text-[11px] text-slate-400">Teams and missions are assigned in Rescue Operations.</p>
+        </div>
+      ),
+    },
+    {
+      key: 'resolve',
+      title: 'Resolve',
+      summary: incident.status === 'Unverified' ? 'Verify the report first'
+        : incident.status === 'Rejected' ? 'Not needed'
+          : incident.resolved_at ? `Closed · ${formatDateTime(incident.resolved_at)}` : 'Close missions and file the outcome',
+      body: incident.status === 'Resolved' ? (
+                  <Note tone="teal" title="Resolved and closed">
+                    Closed by {incident.verified_by || 'EOC Command'}{incident.resolved_at ? ` · ${formatDateTime(incident.resolved_at)}` : ''}.
+                    {incident.outcome_notes && (
+                      <span className="block mt-2 pt-2 border-t border-slate-200/70 text-slate-700 whitespace-pre-wrap">{incident.outcome_notes}</span>
+                    )}
+                  </Note>
+      ) : (
+        <>
+          <p className="text-xs text-slate-600 leading-relaxed">Closes its missions, releases assigned teams and files the closing record.</p>
+          <div>
+                    <button
+                      onClick={() => setShowResolveModal(true)}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
+                      style={{ background: NAVY }}
+                    >
+                      <CheckSquare size={14} /> Mark Resolved
+                    </button>
+          </div>
+        </>
+      ),
+    },
+    {
+      key: 'export',
+      title: 'Export',
+      summary: 'Situation report and public warning poster',
+      body: (
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { label: 'Situation Report (SITREP)', hint: 'Official PDF', Icon: Download, run: () => incidentService.downloadSitrepPdf(incident.id, incident.display_id) },
+                    { label: 'Public Warning Poster', hint: 'Printable PDF', Icon: Printer, run: () => incidentService.downloadSitrepPoster(incident.id, incident.display_id) },
+                  ].map(({ label, hint, Icon, run }) => (
+                    <li key={label}>
+                      <button onClick={() => run().catch((e: Error) => toastError(e.message || 'The file could not be downloaded.'))}
+                        className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer text-left">
+                        <IconTile color={TONE.blue}><Icon size={15} /></IconTile>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs font-semibold text-slate-900">{label}</span>
+                          <span className="block text-[11px] text-slate-400">{hint}</span>
+                        </span>
+                        <Download size={14} className="text-slate-300 group-hover:text-blue-600 transition-colors" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+      ),
+    },
+  ];
 
   return (
     <motion.div
@@ -494,236 +668,38 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
         })}
       </dl>
 
-      {/* ── 3. The readings ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
         <div className="space-y-5 min-w-0">
-          {incident.description?.trim() && (
-            <Section title="Situation" divided>
-              <div className="text-sm text-slate-700 leading-relaxed max-w-prose"><FormattedMessageText text={incident.description} /></div>
-            </Section>
+          {/* ── 3. Running figures: stay on screen through the whole response ── */}
+          {isTracked && incident.impact_timeline && (
+            <ImpactTimeline timeline={incident.impact_timeline} mode="confirmed-only" size="full" />
           )}
-
           {isSensorSource && incident.trigger_alert && (
             <Section title="River telemetry" divided>
               <TriggerAlertPanel alert={incident.trigger_alert} size="full" />
             </Section>
           )}
 
-          <ReliefCentresLine state={incident.state} district={incident.administrative_district || incident.district} />
-
-          {isTracked && incident.impact_timeline && (
-            <ImpactTimeline timeline={incident.impact_timeline} mode="confirmed-only" size="full" />
-          )}
-
-          {hasConditions && (
-          <Section title="Conditions" note={liveWeather ? 'Live from Open-Meteo' : undefined}>
-            <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
-                <dt className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-                  Reported weather <FactBadge incident={incident} field="weather_condition" />
-                </dt>
-                <dd className="text-sm font-semibold text-slate-900 mt-1">{fmtText(incident.weather_condition, 'Not reported')}</dd>
-              </div>
-              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
-                <dt className="flex items-center gap-1.5 text-[11px] text-slate-500"><Thermometer size={12} style={{ color: TONE.blue }} /> Live conditions</dt>
-                <dd className="text-sm font-semibold text-slate-900 mt-1">
-                  {weatherStatus === 'loading'
-                    ? <Bone className="h-4 w-28 mt-0.5" />
-                    : weatherStatus === 'no_location'
-                      ? 'No incident pin'
-                      : liveWeather
-                        ? `${isNum(liveWeather.temp) ? `${liveWeather.temp}°C` : 'Temp unavailable'} · ${fmtText(liveWeather.weatherDesc)}`
-                        : 'Unavailable'}
-                </dd>
-              </div>
-              <div className="rounded-xl bg-slate-50 px-3.5 py-3">
-                <dt className="flex items-center gap-1.5 text-[11px] text-slate-500"><Droplets size={12} style={{ color: TONE.cyan }} /> Rain chance · humidity</dt>
-                <dd className="text-sm font-semibold text-slate-900 mt-1 tabular-nums">
-                  {weatherStatus === 'loading'
-                    ? <Bone className="h-4 w-24 mt-0.5" />
-                    : liveWeather
-                      ? `${isNum(liveWeather.rainProb) ? `${liveWeather.rainProb}%` : 'n/a'} · ${isNum(liveWeather.humidity) ? `${liveWeather.humidity}%` : 'n/a'}`
-                      : 'Unavailable'}
-                </dd>
-              </div>
-            </dl>
-            {liveWeather && isNum(liveWeather.windSpeed) && (
-              <p className="mt-3 text-xs text-slate-500 flex items-center justify-end gap-1.5">
-                <Wind size={12} className="text-slate-400" /> Wind {liveWeather.windSpeed} km/h at the incident pin
-              </p>
-            )}
-          </Section>
-          )}
-
-          {hasMedia && (
-            <Section title="Field evidence" count={incident.media_urls!.length} note="AI-screened · click to enlarge" divided>
-              {isLoadingMedia ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {incident.media_urls!.slice(0, 4).map((_, i) => <Bone key={i} className="aspect-video rounded-xl" />)}
-                </div>
-              ) : isMediaError ? (
-                <p className="text-xs text-slate-600 rounded-xl px-3.5 py-3" style={{ background: `${TONE.amber}12` }}>
-                  Media could not be loaded. The attachments are still recorded on the incident.
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {media.map((m) =>
-                    m.status === 'available' && m.url ? (
-                      <div
-                        key={m.ref}
-                        onClick={() => m.kind === 'image' && setSelectedMediaUrl(m.url)}
-                        className="group relative rounded-xl overflow-hidden bg-slate-100 aspect-video cursor-pointer ring-1 ring-slate-200 hover:ring-2 hover:ring-blue-500 transition-all"
-                      >
-                        {m.kind === 'video' ? (
-                          <video src={m.url} controls preload="metadata" className="w-full h-full object-cover" />
-                        ) : (
-                          <>
-                            <img src={m.url} alt="Field evidence" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                            <span className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/25 transition-colors flex items-center justify-center">
-                              <span className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-white/90 text-slate-900 transition-opacity"><Maximize2 size={14} /></span>
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <div key={m.ref} className="rounded-xl border border-dashed border-slate-300 bg-slate-50 aspect-video flex flex-col items-center justify-center gap-1 text-slate-400">
-                        {m.kind === 'video' ? <Video size={16} /> : <ImageIcon size={16} />}
-                        <span className="text-[11px] font-semibold">{m.status === 'unsupported' ? 'Unsupported format' : 'Unavailable'}</span>
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-            </Section>
-          )}
-
-          <CredibilityCard incidentId={incident.id} hideWhenEmpty />
-
-          {!isCredibilityShown && activitySection}
+        {/* ── 4. The work, one step at a time ── */}
+        <section className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden min-w-0">
+          <header className="px-5 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Response pipeline</h2>
+            <StatusTag status={incident.status} />
+          </header>
+          <ol className="pb-2">
+            {STAGES.map((st, i) => (
+              <PipelineStep key={st.key} n={i + 1} title={st.title} summary={st.summary}
+                state={stageState(st.key, incident.status)} locked={stageLocked(st.key, incident.status)}
+                open={openStages.includes(st.key) && !stageLocked(st.key, incident.status)}
+                last={i === STAGES.length - 1} onToggle={() => toggleStage(st.key)}>
+                {st.body}
+              </PipelineStep>
+            ))}
+          </ol>
+        </section>
         </div>
 
-        <aside className={`space-y-5 ${isCredibilityShown ? '' : 'lg:sticky lg:top-4'}`}>
-          <section className="bg-white border border-slate-200/80 rounded-2xl">
-            <header className="px-5 pt-5 pb-3.5 mb-4 border-b border-slate-100 flex items-center justify-between gap-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Actions</h2>
-              <StatusTag status={incident.status} />
-            </header>
-
-            <div className="px-5 pb-4">
-              <div role="tablist" className="grid grid-cols-4 bg-slate-100 rounded-lg p-0.5">
-                {COMMAND_TABS.map(({ key, label, dot }) => {
-                  const on = activeCommandTab === key;
-                  return (
-                    <button key={key} role="tab" aria-selected={on} type="button" onClick={() => setActiveCommandTab(key)}
-                      className={`relative py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-colors ${on ? 'text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-                    >
-                      {on && <motion.span layoutId="incident-cmd-tab" className="absolute inset-0 bg-white rounded-md shadow-[0_1px_2px_rgba(15,23,42,.08)]" transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} />}
-                      <span className="relative">{label}</span>
-                      {dot && <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full" style={{ background: TONE.amber }} />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="px-5 pb-5 space-y-3">
-              {activeCommandTab === 'verify' && (
-                incident.status === 'Unverified' ? (
-                  <>
-                    <Note tone="amber" title="Waiting for Verification">Confirm the report is real before sending teams.</Note>
-                    <button
-                      onClick={() => setShowVerifyModal(true)}
-                      disabled={updateIncident.isPending}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                    >
-                      <CheckCircle size={14} /> Verify Report
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRejectReasonError('');
-                        setShowRejectModal(true);
-                      }}
-                      disabled={updateIncident.isPending}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-60 text-red-700 bg-red-50 hover:bg-red-100"
-                    >
-                      <XCircle size={14} /> Reject/ Mark Duplicate
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Note tone="blue" title="Verified">Verified by {incident.verified_by || 'EOC Watch Commander'}.</Note>
-                    {onTrackInIntelligence && (
-                      <button
-                        onClick={() => onTrackInIntelligence(incident)}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                      >
-                        <ArrowUpRight size={14} /> Track in Disaster Intelligence
-                      </button>
-                    )}
-                  </>
-                )
-              )}
-
-              {activeCommandTab === 'deploy' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/response/rescue')}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
-                    style={{ background: NAVY }}
-                  >
-                    <Send size={14} /> Dispatch in Rescue Operations
-                  </button>
-                  <p className="text-[11px] text-slate-400">Teams and missions are assigned in Rescue Operations.</p>
-                </>
-              )}
-
-              {activeCommandTab === 'resolve' && (
-                incident.status === 'Resolved' ? (
-                  <Note tone="teal" title="Resolved and closed">
-                    Closed by {incident.verified_by || 'EOC Command'}{incident.resolved_at ? ` · ${formatDateTime(incident.resolved_at)}` : ''}.
-                    {incident.outcome_notes && (
-                      <span className="block mt-2 pt-2 border-t border-slate-200/70 text-slate-700 whitespace-pre-wrap">{incident.outcome_notes}</span>
-                    )}
-                  </Note>
-                ) : (
-                  <>
-                    <Note tone="slate" title="Incident Completion">Closes its missions, releases assigned teams and files the closing record.</Note>
-                    <button
-                      onClick={() => setShowResolveModal(true)}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer hover:brightness-125"
-                      style={{ background: NAVY }}
-                    >
-                      <CheckSquare size={14} /> Mark Resolved
-                    </button>
-                  </>
-                )
-              )}
-
-              {activeCommandTab === 'export' && (
-                <ul className="space-y-2">
-                  {[
-                    { label: 'Situation Report (SITREP)', hint: 'Official PDF', Icon: Download, run: () => incidentService.downloadSitrepPdf(incident.id, incident.display_id) },
-                    { label: 'Public Warning Poster', hint: 'Printable PDF', Icon: Printer, run: () => incidentService.downloadSitrepPoster(incident.id, incident.display_id) },
-                  ].map(({ label, hint, Icon, run }) => (
-                    <li key={label}>
-                      <button onClick={() => run().catch((e: Error) => toastError(e.message || 'The file could not be downloaded.'))}
-                        className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-slate-200/80 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer text-left">
-                        <IconTile color={TONE.blue}><Icon size={15} /></IconTile>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-xs font-semibold text-slate-900">{label}</span>
-                          <span className="block text-[11px] text-slate-400">{hint}</span>
-                        </span>
-                        <Download size={14} className="text-slate-300 group-hover:text-blue-600 transition-colors" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Record details: who reported, through what, at which tier */}
+        <aside className="space-y-5 min-w-0">
           <section className="bg-white border border-slate-200/80 rounded-2xl">
             <header className="px-5 pt-5 pb-3.5 border-b border-slate-100">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Details</h2>
@@ -789,7 +765,52 @@ export const IncidentDetailView: React.FC<IncidentDetailViewProps> = ({
             )}
           </section>
 
-          {isCredibilityShown && activitySection}
+          {hasConditions && (
+            <section className="bg-white border border-slate-200/80 rounded-2xl">
+              <header className="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">Conditions</h2>
+                {liveWeather && <span className="text-[11px] text-slate-400">Live · Open-Meteo</span>}
+              </header>
+              <dl className="px-5 pb-3 divide-y divide-slate-100 text-xs">
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <dt className="text-slate-500 shrink-0 flex items-center gap-2"> <FactBadge incident={incident} field="weather_condition" /></dt>
+                  <dd className="font-semibold text-slate-800 text-right min-w-0">{fmtText(incident.weather_condition, 'Not reported')}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <dt className="text-slate-500 shrink-0 flex items-center gap-1.5"><Thermometer size={12} style={{ color: TONE.blue }} /> Now</dt>
+                  <dd className="font-semibold text-slate-800 text-right min-w-0">
+                    {weatherStatus === 'loading'
+                      ? <Bone className="block h-3.5 w-24" />
+                      : weatherStatus === 'no_location'
+                        ? 'No incident pin'
+                        : liveWeather
+                          ? `${isNum(liveWeather.temp) ? `${liveWeather.temp}°C` : 'Temp unavailable'} · ${fmtText(liveWeather.weatherDesc)}`
+                          : 'Unavailable'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <dt className="text-slate-500 shrink-0 flex items-center gap-1.5"><Droplets size={12} style={{ color: TONE.cyan }} /> Rain · humidity</dt>
+                  <dd className="font-semibold text-slate-800 tabular-nums">
+                    {weatherStatus === 'loading'
+                      ? <Bone className="block h-3.5 w-16" />
+                      : liveWeather
+                        ? `${isNum(liveWeather.rainProb) ? `${liveWeather.rainProb}%` : 'n/a'} · ${isNum(liveWeather.humidity) ? `${liveWeather.humidity}%` : 'n/a'}`
+                        : 'Unavailable'}
+                  </dd>
+                </div>
+                {liveWeather && isNum(liveWeather.windSpeed) && (
+                  <div className="flex items-center justify-between gap-3 py-2.5">
+                    <dt className="text-slate-500 shrink-0 flex items-center gap-1.5"><Wind size={12} className="text-slate-400" /> Wind</dt>
+                    <dd className="font-semibold text-slate-800 tabular-nums">{liveWeather.windSpeed} km/h</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
+
+          <ReliefCentresLine state={incident.state} district={incident.administrative_district || incident.district} />
+
+          {activityBox}
         </aside>
       </div>
 

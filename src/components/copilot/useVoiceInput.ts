@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+type SpeechResult = ArrayLike<{ transcript: string }> & { isFinal?: boolean };
+
 /** The browser's speech recogniser (Chrome/Edge expose it with a webkit prefix). */
 type Recognition = {
   lang: string;
@@ -7,7 +9,7 @@ type Recognition = {
   continuous: boolean;
   start: () => void;
   stop: () => void;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult: ((e: { results: ArrayLike<SpeechResult> }) => void) | null;
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
 };
@@ -26,11 +28,31 @@ const ERRORS: Record<string, string> = {
 };
 
 /**
- * Speech-to-text for the copilot box. The text is handed to ``onText`` for the
- * officer to read and send; nothing is sent automatically. ``supported`` is
- * false in browsers without speech recognition (the mic button is hidden).
+ * Everything said so far, as one line. Some browsers (Chrome on Android, Edge)
+ * send each result as the whole sentence so far ("Summarize", "Summarize today",
+ * …) rather than only the new words, so a result that repeats the previous one
+ * replaces it instead of being added.
  */
-export function useVoiceInput(onText: (text: string) => void) {
+export function joinTranscript(results: ArrayLike<SpeechResult>): string {
+  const parts: string[] = [];
+  for (const res of Array.from(results)) {
+    const text = (res[0]?.transcript ?? '').trim();
+    if (!text) continue;
+    const last = parts[parts.length - 1];
+    if (last !== undefined && text.toLowerCase().startsWith(last.toLowerCase())) parts[parts.length - 1] = text;
+    else if (last === undefined || !last.toLowerCase().startsWith(text.toLowerCase())) parts.push(text);
+  }
+  return parts.join(' ');
+}
+
+/**
+ * Speech-to-text for the copilot box. ``onText`` receives the whole of what has
+ * been said in this session each time it changes (words appear as they are
+ * spoken), so the caller replaces its spoken part rather than appending. Nothing
+ * is sent automatically. ``supported`` is false in browsers without speech
+ * recognition (the mic button is hidden).
+ */
+export function useVoiceInput(onText: (spoken: string) => void) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rec = useRef<Recognition | null>(null);
@@ -44,10 +66,10 @@ export function useVoiceInput(onText: (text: string) => void) {
     if (!Ctor || listening) return;
     const r = new Ctor();
     r.lang = 'en-MY';
-    r.interimResults = false;
+    r.interimResults = true;
     r.continuous = false;
     r.onresult = (e) => {
-      const text = Array.from(e.results).map((res) => res[0]?.transcript ?? '').join(' ').trim();
+      const text = joinTranscript(e.results);
       if (text) handler.current(text);
     };
     r.onerror = (e) => setError(ERRORS[e.error] ?? 'Voice input stopped.');

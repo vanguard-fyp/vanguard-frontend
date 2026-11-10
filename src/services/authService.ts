@@ -48,6 +48,11 @@ export const authService = {
     return res;
   },
 
+  /** An invited officer sets their password with the token from the invite link. */
+  setPassword: async (accessToken: string, password: string): Promise<{ email: string }> => {
+    return apiClient.post<{ email: string }>('/auth/set-password', { access_token: accessToken, password });
+  },
+
   /**
    * Exchange the active refresh token for a fresh access + refresh token pair.
    */

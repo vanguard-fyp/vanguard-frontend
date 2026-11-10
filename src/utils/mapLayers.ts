@@ -35,11 +35,16 @@ export function facilityToPoi(f: NearbyFacility): MapPOI {
   };
 }
 
-/** Whether two points are within `km` of each other (haversine). */
-export function withinKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }, km: number): boolean {
+/** Great-circle distance between two points in km (haversine). */
+export function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const rad = (d: number) => (d * Math.PI) / 180;
   const dLat = rad(b.lat - a.lat);
   const dLng = rad(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371 * Math.asin(Math.sqrt(h)) < km;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/** Whether two points are within `km` of each other. */
+export function withinKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }, km: number): boolean {
+  return distanceKm(a, b) < km;
 }

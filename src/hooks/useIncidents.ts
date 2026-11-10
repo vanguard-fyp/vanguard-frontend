@@ -123,6 +123,16 @@ export function useIncidentMedia(incidentId: string | null | undefined, hasMedia
   });
 }
 
+/** Latest photo per incident for the list (under INCIDENT_KEYS.all, so an edit refreshes it). */
+export function useIncidentCovers() {
+  return useQuery({
+    queryKey: ['incidents', 'covers'],
+    queryFn: () => incidentService.getMediaCovers(),
+    staleTime: 10 * 60_000,
+    refetchInterval: 12 * 60_000,
+  });
+}
+
 export function useIncidentLogs(incidentId: string | null | undefined) {
   return useQuery({
     queryKey: ['incidents', 'logs', incidentId ?? ''],

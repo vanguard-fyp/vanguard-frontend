@@ -2,7 +2,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { DataRegion } from '../../../components/common/DataRegion';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   Plus,
   ShieldCheck,
@@ -11,8 +11,8 @@ import {
   UserPlus,
   LifeBuoy,
   Phone,
-  MapPin,
   ArrowRight,
+  ChevronDown,
   CheckCircle2,
   XCircle,
   Eye,
@@ -44,12 +44,41 @@ import { MissionWizard } from './MissionWizard';
 import { TeamListFilters } from '../../../components/ui/coordination/rescue/TeamListFilters';
 import { containerAnim, itemAnim } from '../../../constants';
 import { formatDateTime } from '../../../utils/dateFormatter';
+import { Tag, type Tone } from '../../../components/ui/shared/Tag';
+import { relativeTime } from '../../../utils/display';
+import { sortSosQueue } from '../../../utils/sosQueue';
+import { activeResponses, type ActiveResponse } from '../../../utils/sosResponses';
+
+/** Reasons an officer can close an SOS, and the status each one ends in. */
+const SOS_CLOSE_REASONS: { reason: string; status: 'Resolved' | 'Cancelled' }[] = [
+  { reason: 'Already rescued', status: 'Resolved' },
+  { reason: 'Citizen safe', status: 'Resolved' },
+  { reason: 'Handled by another agency', status: 'Resolved' },
+  { reason: 'Duplicate report', status: 'Cancelled' },
+  { reason: 'False report', status: 'Cancelled' },
+  { reason: 'Other', status: 'Cancelled' },
+];
+const SOS_HINT_KM = 5;
 
 /* One size and shape for every SOS action; filled blue only for the next step. */
-const SOS_BTN = 'inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600';
+const SOS_BTN = 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md border whitespace-nowrap transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600';
 const SOS_BTN_PRIMARY = 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600 hover:border-blue-700';
-const SOS_BTN_CANCEL = 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200';
+const SOS_BTN_RESOLVE = 'bg-teal-600 hover:bg-teal-700 text-white border-teal-600 hover:border-teal-700';
+const SOS_BTN_LINK = 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-transparent';
+const SOS_BTN_CLOSE = 'bg-red-50 hover:bg-red-100 text-red-700 border-transparent';
 const SOS_BTN_WARN = 'bg-white hover:bg-amber-50 text-amber-800 border-amber-300';
+
+const SOS_TONE: Record<string, Tone> = { Pending: 'amber', Acknowledged: 'blue', Dispatched: 'cyan', Resolved: 'teal', Cancelled: 'slate' };
+/** A labelled block in an SOS request's details. */
+const SosDetail: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="min-w-0">
+    <p className="text-[11px] font-semibold text-slate-500 mb-1">{label}</p>
+    {children}
+  </div>
+);
+
+/** Queue columns, shared by the header and every row so they stay aligned. */
+const SOS_COLS = 'md:grid-cols-[88px_minmax(0,1fr)_56px_112px_132px_20px]';
 
 const RescueOperations: React.FC = () => {
   const teamsQuery = useRescueTeams();
@@ -93,6 +122,12 @@ const RescueOperations: React.FC = () => {
   const [sosStatusFilter, setSosStatusFilter] = useState<'All' | 'Pending' | 'Acknowledged' | 'Dispatched' | 'Resolved'>('All');
   const [sosToCancelId, setSosToCancelId] = useState<any | null>(null);
   const [sosToResolve, setSosToResolve] = useState<any | null>(null);
+  const [openSosId, setOpenSosId] = useState<string | null>(null);
+  const reduceMotion = useReducedMotion();
+  const [sosCloseReason, setSosCloseReason] = useState('');
+  const [sosCloseAttempted, setSosCloseAttempted] = useState(false);
+  const [sosToLink, setSosToLink] = useState<any | null>(null);
+  const [sosLinkIncidentId, setSosLinkIncidentId] = useState('');
   const [editingTeam, setEditingTeam] = useState<RescueTeam | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -210,22 +245,48 @@ const RescueOperations: React.FC = () => {
   };
 
   const handleCancelAssistance = (sos: any) => {
+    setSosCloseReason('');
+    setSosCloseAttempted(false);
     setSosToCancelId(sos);
   };
 
-  const handleConfirmCancelSos = () => {
+  const handleConfirmCloseSos = () => {
     if (!sosToCancelId) return;
+    const choice = SOS_CLOSE_REASONS.find((r) => r.reason === sosCloseReason);
+    if (!choice) {
+      setSosCloseAttempted(true);
+      return;
+    }
     updateAssistanceMutation.mutate(
-      { requestId: sosToCancelId.id, status: 'Cancelled' },
+      { requestId: sosToCancelId.id, status: choice.status, closureReason: choice.reason },
       {
         onSuccess: () => {
-          toastSuccess('SOS Cancelled', `Request ${sosToCancelId.display_id || sosToCancelId.id} has been cancelled after validation.`);
+          toastSuccess('SOS closed', `${sosToCancelId.display_id || sosToCancelId.id}: ${choice.reason}.`);
           setSosToCancelId(null);
         },
-        onError: () => {
-          toastError('Cancel Failed', 'Could not cancel the request. Please retry.');
-          setSosToCancelId(null);
+        onError: (error) => toastError('SOS not closed', error.message),
+      }
+    );
+  };
+
+  const responsesFor = (sos: any): ActiveResponse[] =>
+    activeResponses(sos.coordinates ?? null, missions, incidents);
+
+  const handleOpenLink = (sos: any, incidentId?: string) => {
+    setSosLinkIncidentId(incidentId ?? responsesFor(sos)[0]?.incidentId ?? '');
+    setSosToLink(sos);
+  };
+
+  const handleConfirmLinkSos = () => {
+    if (!sosToLink || !sosLinkIncidentId) return;
+    updateAssistanceMutation.mutate(
+      { requestId: sosToLink.id, status: 'Dispatched', linkedIncidentId: sosLinkIncidentId },
+      {
+        onSuccess: () => {
+          toastSuccess('SOS linked', `${sosToLink.display_id || sosToLink.id} joined the existing response.`);
+          setSosToLink(null);
         },
+        onError: (error) => toastError('SOS not linked', error.message),
       }
     );
   };
@@ -381,7 +442,7 @@ const RescueOperations: React.FC = () => {
 
       {/* TAB 2: Citizen SOS Assistance Requests Feed */}
       {activeTab === 'assistance' && (<DataRegion queries={[sosQuery]} label="SOS requests">{(() => {
-        const filteredAssistance = assistanceRequests.filter((sos: any) => {
+        const filteredAssistance = sortSosQueue(assistanceRequests.filter((sos: any) => {
           const closed = ['Resolved', 'Cancelled'].includes(sos.status);
           if (!showClosedSos && closed && sosStatusFilter === 'All') return false;
           if (sosStatusFilter !== 'All' && sos.status !== sosStatusFilter) return false;
@@ -396,7 +457,7 @@ const RescueOperations: React.FC = () => {
             if (!match) return false;
           }
           return true;
-        });
+        }) as any[]);
 
         const statusCounts: Record<string, number> = {
           All: assistanceRequests.length,
@@ -470,155 +531,135 @@ const RescueOperations: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="bg-white border border-slate-200/70 rounded-xl overflow-hidden">
+                <div className={`hidden md:grid ${SOS_COLS} gap-x-4 px-4 py-2 bg-slate-50/70 text-[11px] font-medium text-slate-500`}>
+                  <span>Received</span>
+                  <span>Request</span>
+                  <span>People</span>
+                  <span>Status</span>
+                  <span className="sr-only">Next step</span>
+                  <span />
+                </div>
+                <ul className="divide-y divide-slate-100">
                 {filteredAssistance.map((sos: any) => {
                   const isPending = sos.status === 'Pending';
                   const isAcknowledged = sos.status === 'Acknowledged';
                   const isDispatched = sos.status === 'Dispatched';
-                  const isResolved = sos.status === 'Resolved';
-                  const isCancelled = sos.status === 'Cancelled';
-                  const isClosed = isResolved || isCancelled;
+                  const isClosed = sos.status === 'Resolved' || sos.status === 'Cancelled';
+                  const open = openSosId === sos.id;
+                  const toggle = () => setOpenSosId(open ? null : sos.id);
+                  const mediaList: string[] = sos.media_urls || sos.mediaUrls || [];
+                  const received = relativeTime(sos.created_at || sos.createdAt) ?? 'Unknown';
+                  const people = sos.people_affected || sos.peopleAffected || 1;
+                  const type = sos.request_type || sos.requestType || 'Rescue';
+                  const contact = sos.reporter_contact || sos.reporterContact;
+                  const status = <Tag tone={SOS_TONE[sos.status] ?? 'slate'}>{sos.status}</Tag>;
+                  const stop = (run: () => void) => (e: React.MouseEvent) => { e.stopPropagation(); run(); };
+                  const nextStep = isClosed ? null : isPending ? (
+                    <button type="button" onClick={stop(() => handleAcknowledgeAssistance(sos))} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>Acknowledge</button>
+                  ) : isDispatched ? (
+                    <button type="button" disabled={updateAssistanceMutation.isPending} onClick={stop(() => setSosToResolve(sos))} className={`${SOS_BTN} ${SOS_BTN_RESOLVE}`}><CheckCircle2 size={13} aria-hidden="true" />Mark Resolved</button>
+                  ) : isAcknowledged && pendingSosSync[sos.id] ? (
+                    <button type="button" disabled={updateAssistanceMutation.isPending} onClick={stop(() => void retrySosSync(sos.id))} className={`${SOS_BTN} ${SOS_BTN_WARN}`}>Retry update</button>
+                  ) : isAcknowledged ? (
+                    <button type="button" onClick={stop(() => handleDeploySosSquad(sos))} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>Deploy squad<ArrowRight size={13} aria-hidden="true" /></button>
+                  ) : null;
 
                   return (
-                    <div
-                      key={sos.id}
-                      className={`bg-white border rounded-xl p-4 shadow-2xs transition-all space-y-3 ${isClosed ? 'opacity-65 border-slate-200' : 'border-slate-200 hover:border-slate-300'
-                        }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
-                              {sos.display_id || sos.displayId || 'SOS-2026'}
+                    <li key={sos.id} className={isClosed ? 'text-slate-500' : ''}>
+                      <div onClick={toggle} className={`grid grid-cols-[minmax(0,1fr)_auto] ${SOS_COLS} gap-x-4 gap-y-1 items-center px-4 py-2.5 cursor-pointer transition-colors ${open ? 'bg-blue-50/70' : 'hover:bg-slate-50'}`}>
+                        <span className="hidden md:block text-xs text-slate-600 tabular-nums whitespace-nowrap" title={formatDateTime(sos.created_at || sos.createdAt)}>{received}</span>
+                        <p className="min-w-0 text-[13px] text-slate-900 truncate">
+                          <span className="font-semibold">{type}</span>
+                          <span className="text-slate-500"> · </span>
+                          {sos.location}
+                          {mediaList.length > 0 && (
+                            <span className="ml-2 inline-flex items-center gap-0.5 text-[11px] text-slate-500 tabular-nums align-baseline">
+                              <Camera size={11} aria-hidden="true" />{mediaList.length}<span className="sr-only"> attachments</span>
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
-                              {sos.request_type || sos.requestType || 'Rescue'}
-                            </span>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isPending
-                                  ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                  : isAcknowledged
-                                    ? 'bg-blue-50 text-blue-800 border-blue-200'
-                                    : isDispatched
-                                      ? 'bg-purple-50 text-purple-800 border-purple-200'
-                                      : isCancelled
-                                        ? 'bg-slate-100 text-slate-600 border-slate-200'
-                                        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                }`}
-                            >
-                              {sos.status}
-                            </span>
-                          </div>
-
-                          <p className="text-xs font-bold text-slate-900 mt-1.5 flex items-center gap-1.5">
-                            <MapPin size={13} className="text-blue-600 shrink-0" />
-                            <span>{sos.location}</span>
-                          </p>
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <span className="text-[11px] font-bold text-slate-900 block">
-                            {sos.people_affected || sos.peopleAffected || 1} pax affected
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-medium">
-                            {formatDateTime(sos.created_at || sos.createdAt)}
-                          </span>
-                        </div>
+                          )}
+                        </p>
+                        <span className="hidden md:block text-xs text-slate-700 tabular-nums">{people}</span>
+                        <span className="hidden md:block">{status}</span>
+                        <span className="row-start-2 md:row-start-auto col-start-2 md:col-start-auto justify-self-end md:justify-self-start">{nextStep}</span>
+                        <button type="button" aria-expanded={open} aria-label={open ? 'Hide details' : 'Show details'} onClick={stop(toggle)}
+                          className="row-start-1 col-start-2 md:row-start-auto md:col-start-auto justify-self-end text-slate-400 hover:text-slate-700 rounded cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600">
+                          <ChevronDown size={15} aria-hidden="true" className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                        </button>
+                        <span className="md:hidden row-start-2 col-start-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">{status}<span className="tabular-nums">{received} · {people} {people === 1 ? 'person' : 'people'}</span></span>
                       </div>
 
-                      <p className="text-xs text-slate-700 bg-slate-50 border border-slate-100 p-2.5 rounded-lg leading-relaxed">
-                        {sos.description}
-                      </p>
-
-                      {(() => {
-                        const mediaList: string[] = sos.media_urls || sos.mediaUrls || [];
-                        if (mediaList.length === 0) return null;
-
-                        return (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                              <Camera size={12} className="text-blue-600" />
-                              Citizen Attached Ground Evidence ({mediaList.length})
-                            </span>
-                            <div className="flex flex-wrap gap-2">
+                      <AnimatePresence initial={false}>
+                      {open && (
+                        <motion.div key="details" className="overflow-hidden"
+                          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}>
+                        <div className="bg-blue-50/70 px-4 pb-4">
+                          <div className="bg-white rounded-xl overflow-hidden">
+                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_260px]">
+                              <div className="p-4 space-y-3.5 min-w-0">
+                                <SosDetail label="What the citizen reported">
+                                  <p className="text-[13px] text-slate-900 leading-relaxed bg-slate-50 rounded-lg px-3 py-2">{sos.description || 'No description given.'}</p>
+                                </SosDetail>
+                                {mediaList.length > 0 && (
+                                  <SosDetail label={`Photos and videos · ${mediaList.length}`}>
+                                    <div className="flex flex-wrap gap-1.5">
                               {mediaList.map((url: string, idx: number) => {
                                 const isVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.includes('video');
+                                const title = `Citizen SOS Attachment #${idx + 1}`;
                                 return (
-                                  <div
-                                    key={idx}
-                                    onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title: `Citizen SOS Attachment #${idx + 1}` })}
-                                    className="relative group rounded-lg overflow-hidden border border-slate-200 bg-slate-100 w-20 h-16 cursor-pointer hover:border-blue-500 shadow-2xs transition-all"
-                                  >
+                                  <button key={idx} type="button" aria-label={`Open attachment ${idx + 1}`} onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title })}
+                                    className="rounded-md overflow-hidden border border-slate-200 bg-slate-100 w-16 h-12 cursor-pointer hover:border-slate-400 transition-colors">
                                     {isVideo ? (
-                                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white">
-                                        <Play size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
-                                        <span className="text-[9px] font-bold mt-0.5">Video</span>
-                                      </div>
+                                      <span className="w-full h-full flex items-center justify-center bg-slate-800 text-white"><Play size={14} aria-hidden="true" /></span>
                                     ) : (
-                                      <img
-                                        src={url}
-                                        alt={`Citizen attachment ${idx + 1}`}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                        onError={(e) => {
-                                          (e.target as HTMLElement).style.display = 'none';
-                                        }}
-                                      />
+                                      <img src={url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
                                     )}
-                                    <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-colors flex items-center justify-center">
-                                      <Eye size={12} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
-                                    </div>
-                                  </div>
+                                  </button>
                                 );
                               })}
                             </div>
+                                  </SosDetail>
+                                )}
+                                {isAcknowledged && !pendingSosSync[sos.id] && (() => {
+                                  const near = responsesFor(sos)[0];
+                                  return near && near.km != null && near.km <= SOS_HINT_KM && (
+                                    <p className="text-xs text-blue-900 bg-blue-50 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+                                      <span className="min-w-0"><strong className="font-semibold">{near.teams[0]}</strong> is already on {near.displayId}, {near.km.toFixed(1)} km away</span>
+                                      <button type="button" onClick={() => handleOpenLink(sos, near.incidentId)} className={`${SOS_BTN} ${SOS_BTN_LINK} shrink-0`}>Link</button>
+                                    </p>
+                                  );
+                                })()}
+                                {isClosed && sos.closure_reason && (
+                                  <SosDetail label="Why it was closed"><p className="text-xs text-slate-800">{sos.closure_reason}</p></SosDetail>
+                                )}
+                              </div>
+                              <dl className="p-4 space-y-2.5 bg-slate-50/60 text-xs">
+                                <div><dt className="text-[11px] font-semibold text-slate-500">Reporter</dt><dd className="font-semibold text-slate-900 mt-0.5">{sos.reporter_name || sos.reporterName || 'Citizen'}</dd></div>
+                                <div><dt className="text-[11px] font-semibold text-slate-500">Phone</dt><dd className="mt-0.5">{contact
+                                  ? <a href={`tel:${String(contact).replace(/\s/g, '')}`} className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline tabular-nums"><Phone size={12} aria-hidden="true" />{contact}</a>
+                                  : <span className="text-slate-400">Not given</span>}</dd></div>
+                                <div><dt className="text-[11px] font-semibold text-slate-500">Received</dt><dd className="text-slate-800 mt-0.5 tabular-nums">{formatDateTime(sos.created_at || sos.createdAt)}</dd></div>
+                                <div><dt className="text-[11px] font-semibold text-slate-500">SOS ID</dt><dd className="text-slate-800 mt-0.5 tabular-nums">{sos.display_id || sos.displayId || 'Not assigned'}</dd></div>
+                              </dl>
+                            </div>
+                            {!isClosed && (
+                              <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-2.5">
+                                {isAcknowledged && !pendingSosSync[sos.id] && responsesFor(sos).length > 0 && (
+                                  <button type="button" onClick={() => handleOpenLink(sos)} className={`${SOS_BTN} ${SOS_BTN_LINK}`}>Link to Response</button>
+                                )}
+                                <button type="button" onClick={() => handleCancelAssistance(sos)} className={`${SOS_BTN} ${SOS_BTN_CLOSE}`}><XCircle size={13} aria-hidden="true" />Close SOS</button>
+                              </div>
+                            )}
                           </div>
-                        );
-                      })()}
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
-                        <div className="flex items-center gap-3 text-slate-500 text-[11px]">
-                          <span>Reporter: <strong className="text-slate-700">{sos.reporter_name || sos.reporterName || 'Citizen'}</strong></span>
-                          {sos.reporter_contact || sos.reporterContact ? (
-                            <span className="flex items-center gap-1 text-blue-700 font-semibold">
-                              <Phone size={11} /> {sos.reporter_contact || sos.reporterContact}
-                            </span>
-                          ) : null}
                         </div>
-
-                        {!isClosed && (
-                          <div className="flex items-center gap-2">
-                            {isAcknowledged && pendingSosSync[sos.id] && (
-                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => void retrySosSync(sos.id)} className={`${SOS_BTN} ${SOS_BTN_WARN}`}>
-                                Retry SOS update · {pendingSosSync[sos.id]}
-                              </button>
-                            )}
-                            <button type="button" onClick={() => handleCancelAssistance(sos)} className={`${SOS_BTN} ${SOS_BTN_CANCEL}`}>
-                              <XCircle size={12} />
-                              Cancel SOS
-                            </button>
-                            {isPending && (
-                              <button type="button" onClick={() => handleAcknowledgeAssistance(sos)} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>
-                                Acknowledge
-                              </button>
-                            )}
-                            {isDispatched && (
-                              <button type="button" disabled={updateAssistanceMutation.isPending} onClick={() => setSosToResolve(sos)} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>
-                                <CheckCircle2 size={12} />
-                                Mark Resolved
-                              </button>
-                            )}
-                            {isAcknowledged && !pendingSosSync[sos.id] && (
-                              <button type="button" onClick={() => handleDeploySosSquad(sos)} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>
-                                <span>Deploy Tactical Squad</span>
-                                <ArrowRight size={12} />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                        </motion.div>
+                      )}
+                      </AnimatePresence>
+                    </li>
                   );
                 })}
+                </ul>
               </div>
             )}
           </motion.div>
@@ -732,66 +773,55 @@ const RescueOperations: React.FC = () => {
         {sosToResolve?.display_id || sosToResolve?.displayId || 'This request'} no longer needs assistance. This does not close its mission.
       </ConfirmModal>
 
-      {/* Cancel SOS Request Confirmation Modal */}
-      <AnimatePresence>
-        {sosToCancelId && (
-          <div
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
-            onClick={() => setSosToCancelId(null)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
-            >
-              <div className="p-6 space-y-4">
-                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
-                  <XCircle size={22} className="text-red-600" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Cancel SOS Request</h3>
-                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                    Are you sure you want to cancel request{' '}
-                    <strong className="text-slate-900">{sosToCancelId.display_id || sosToCancelId.displayId || sosToCancelId.id}</strong>?
-                  </p>
-                  <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                    <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-                      <MapPin size={11} className="text-blue-600" />
-                      {sosToCancelId.location}
-                    </p>
-                    <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
-                      {sosToCancelId.description}
-                    </p>
-                  </div>
-                  <p className="text-[11px] text-red-600 font-medium mt-2">
-                    This will mark the request as Cancelled. This action cannot be undone.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setSosToCancelId(null)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
-                  >
-                    Keep Open
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmCancelSos}
-                    disabled={updateAssistanceMutation.isPending}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
-                  >
-                    {updateAssistanceMutation.isPending ? 'Cancelling...' : 'Confirm Cancel'}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+      {/* Close SOS (a reason is required) */}
+      <ConfirmModal
+        open={!!sosToCancelId}
+        onClose={() => setSosToCancelId(null)}
+        onConfirm={handleConfirmCloseSos}
+        title="Close this SOS?"
+        icon={XCircle}
+        confirmLabel="Close SOS"
+        danger
+        pending={updateAssistanceMutation.isPending}
+      >
+        <p>{sosToCancelId?.display_id || sosToCancelId?.displayId} · {sosToCancelId?.location}</p>
+        <select
+          aria-label="Reason for closing"
+          value={sosCloseReason}
+          onChange={(e) => setSosCloseReason(e.target.value)}
+          className={`mt-3 w-full px-3 py-2 text-xs text-slate-800 bg-white border rounded-lg focus:outline-none ${sosCloseAttempted && !sosCloseReason ? 'border-rose-400' : 'border-slate-200 focus:border-blue-600'}`}
+        >
+          <option value="">Choose a reason</option>
+          {SOS_CLOSE_REASONS.map((r) => <option key={r.reason} value={r.reason}>{r.reason}</option>)}
+        </select>
+        {sosCloseAttempted && !sosCloseReason && (
+          <span className="block mt-1 text-[10px] text-rose-500 font-medium">Please choose a reason</span>
         )}
-      </AnimatePresence>
+      </ConfirmModal>
+
+      {/* Link an SOS to a response that already has a team */}
+      <ConfirmModal
+        open={!!sosToLink}
+        onClose={() => setSosToLink(null)}
+        onConfirm={handleConfirmLinkSos}
+        title="Link to existing response?"
+        icon={ArrowRight}
+        confirmLabel="Link SOS"
+        pending={updateAssistanceMutation.isPending}
+      >
+        <p>No new mission is created. The citizen is told help is on the way.</p>
+        <div className="mt-3 space-y-1.5">
+          {sosToLink && responsesFor(sosToLink).map((r) => (
+            <label key={r.incidentId} className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer ${sosLinkIncidentId === r.incidentId ? 'border-blue-300 bg-blue-50/60' : 'border-slate-200'}`}>
+              <input type="radio" name="sos-link" className="mt-0.5" checked={sosLinkIncidentId === r.incidentId} onChange={() => setSosLinkIncidentId(r.incidentId)} />
+              <span className="min-w-0 text-[11px] leading-snug">
+                <span className="block font-semibold text-slate-900 truncate">{r.displayId} · {r.title}</span>
+                <span className="block text-slate-500 truncate">{r.teams.join(', ')}{r.km != null ? ` · ${r.km.toFixed(1)} km` : ''}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </ConfirmModal>
 
       <AnimatePresence>
         {selectedMediaModal && (

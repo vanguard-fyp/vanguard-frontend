@@ -1,9 +1,8 @@
 import React from 'react';
-import { Search, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { Search, SlidersHorizontal, Radio } from 'lucide-react';
 
 import type {
   CommunicationCategoryFilter,
-  CommunicationSortBy,
   CommunicationStatusFilter,
 } from '../../../types';
 import { categories, severities } from '../../../constants';
@@ -15,10 +14,8 @@ interface CommunicationFiltersProps {
   onCategoryChange: (v: CommunicationCategoryFilter) => void;
   severityFilter: string;
   onSeverityChange: (v: string) => void;
-  statusFilter?: CommunicationStatusFilter;
-  onStatusChange?: (v: CommunicationStatusFilter) => void;
-  sortBy: CommunicationSortBy;
-  onSortChange: (v: CommunicationSortBy) => void;
+  statusFilter: CommunicationStatusFilter;
+  onStatusChange: (v: CommunicationStatusFilter) => void;
   totalCount: number;
   filteredCount: number;
 }
@@ -30,16 +27,14 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
   onCategoryChange,
   severityFilter,
   onSeverityChange,
-  statusFilter: _statusFilter = 'All',
-  onStatusChange: _onStatusChange,
-  sortBy,
-  onSortChange,
+  statusFilter,
+  onStatusChange,
   totalCount,
   filteredCount,
 }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
-      {/* Row 1: Search bar + Sort controls */}
+      {/* Row 1: Search bar + Live / Retracted */}
       <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
         <div className="relative flex-1 min-w-[220px]">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -52,19 +47,21 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium shrink-0">
-          <ArrowUpDown size={12} className="text-slate-400" />
-          <span>Sort:</span>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium shrink-0" role="group" aria-label="Broadcast status">
+          <Radio size={12} className="text-slate-400" />
+          <span>Status:</span>
           {([
-            { id: 'latest' as const, label: 'Latest' },
-            { id: 'oldest' as const, label: 'Oldest' },
-            // { id: 'active' as const, label: 'Active First' },
+            { id: 'All' as const, label: 'All' },
+            { id: 'Active' as const, label: 'Live' },
+            { id: 'Retracted' as const, label: 'Retracted' },
           ]).map(({ id, label }) => (
             <button
               key={id}
-              onClick={() => onSortChange(id)}
+              type="button"
+              aria-pressed={statusFilter === id}
+              onClick={() => onStatusChange(id)}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
-                sortBy === id
+                statusFilter === id
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
@@ -75,7 +72,7 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
         </div>
       </div>
 
-      {/* Row 2: Category, Severity, and Status Filters */}
+      {/* Row 2: Category and Severity filters */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Category Pills */}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -117,28 +114,6 @@ export const CommunicationFilters: React.FC<CommunicationFiltersProps> = ({
             ))}
           </div>
         </div>
-
-        {/* Status Filter */}
-        {/* {onStatusChange && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status:</span>
-            <div className="flex gap-1">
-              {(['All', 'Active', 'Retracted'] as CommunicationStatusFilter[]).map((st) => (
-                <button
-                  key={st}
-                  onClick={() => onStatusChange(st)}
-                  className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold cursor-pointer transition-all ${
-                    statusFilter === st
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
-                  }`}
-                >
-                  {st === 'Active' ? 'Live Only' : st === 'Retracted' ? 'Retracted Only' : 'All'}
-                </button>
-              ))}
-            </div>
-          </div>
-        )} */}
 
         <span className="ml-auto text-[11px] text-slate-400 font-medium shrink-0">
           Showing {filteredCount} of {totalCount} broadcasts

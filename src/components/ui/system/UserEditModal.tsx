@@ -135,7 +135,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="p-6 space-y-4">
           {/* Avatar Upload Section */}
           <div className="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl p-3.5">
             {/* Avatar Preview */}
@@ -315,6 +315,12 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
             </div>
           )}
 
+          {!user && (
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              We will email an invite link to this address. The officer sets their own password from that link.
+            </p>
+          )}
+
           {/* Footer Actions */}
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
@@ -330,7 +336,7 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
               className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs cursor-pointer disabled:opacity-60"
             >
               <Check size={14} />
-              {user ? 'Save Changes' : 'Create User'}
+              {user ? 'Save Changes' : 'Create & send invite'}
             </button>
           </div>
         </form>

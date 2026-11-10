@@ -27,6 +27,12 @@ export function useCreateUser() {
   });
 }
 
+export function useResendInvite() {
+  return useMutation({
+    mutationFn: (id: string) => userService.resendInvite(id),
+  });
+}
+
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({

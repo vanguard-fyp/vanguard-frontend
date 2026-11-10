@@ -1,23 +1,18 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useLockPageScroll } from '../../../../hooks/useLockPageScroll';
+import { Overlay } from '../../shared/Modal';
 import {
   X,
   MapPin,
   Phone,
   UserCheck,
-  ShieldCheck,
   Target,
 } from 'lucide-react';
 import type { RescueTeam, Mission, Incident } from '../../../../types';
 import { Tag, StatusTag, SEVERITY_TONE } from '../../shared/Tag';
 import { MissionProgressPipeline } from './MissionProgressPipeline';
 
-const SEVERITY_BORDER: Record<string, string> = {
-  Critical: 'border-l-red-500',
-  High: 'border-l-orange-500',
-  Medium: 'border-l-amber-500',
-  Low: 'border-l-slate-400',
-};
 interface TeamDetailSlideOverProps {
   team: RescueTeam | null;
   missions: Mission[];
@@ -76,9 +71,11 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
       : team.status;
   const sc = statusConfig[normalizedStatus] || statusConfig['Off Duty'];
   const ac = agencyColors[team.agency] || '';
+  useLockPageScroll(true);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <Overlay>
+    <div className="fixed top-0 left-0 w-screen h-screen z-[55] overflow-hidden">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
@@ -166,12 +163,9 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
 
             {/* Active Incident assignment */}
             {assignedIncident && (
-              <div className={`bg-white border border-slate-200/90 border-l-4 ${SEVERITY_BORDER[assignedIncident.severity] ?? 'border-l-blue-500'} rounded-xl p-4 shadow-2xs space-y-2`}>
+              <div className={`bg-white border border-slate-200/90 rounded-xl p-4 shadow-2xs space-y-2`}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-slate-500">
-                    <ShieldCheck size={14} className="text-blue-600" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Incident Assignment</span>
-                  </div>
+                  <span className="text-[11px] font-medium text-slate-500">Currently assigned to</span>
                   <div className="flex items-center gap-1.5">
                     <Tag tone={SEVERITY_TONE[assignedIncident.severity] ?? 'slate'}>{assignedIncident.severity}</Tag>
                     <StatusTag status={assignedIncident.status} />
@@ -197,5 +191,6 @@ export const TeamDetailSlideOver: React.FC<TeamDetailSlideOverProps> = ({
         </motion.div>
       </div>
     </div>
+    </Overlay>
   );
 };

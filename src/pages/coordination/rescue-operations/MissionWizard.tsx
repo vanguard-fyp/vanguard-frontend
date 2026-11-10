@@ -247,12 +247,12 @@ export const MissionWizard: React.FC<ExtendedMissionWizardProps> = ({
                         </div>
                       </div>
                       <p className="text-sm font-bold text-slate-900">{inc.title}</p>
-                      <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 font-medium">
-                        <span className="flex items-center gap-1">
-                          <MapPin size={10} />
-                          {inc.location}, {inc.state}
+                      <div className="flex items-center justify-between gap-4 mt-1 text-[11px] text-slate-500 font-medium">
+                        <span className="flex items-center gap-1 min-w-0" title={inc.location}>
+                          <MapPin size={10} className="shrink-0" />
+                          <span className="truncate">{inc.location?.includes(inc.state) ? inc.location : `${inc.location}, ${inc.state}`}</span>
                         </span>
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1 shrink-0 whitespace-nowrap">
                           <Users size={10} />
                           {inc.field_verification?.affected_population === 'unknown' ? 'Affected: not reported' : `${inc.affected_population.toLocaleString()} reported affected`}
                         </span>

@@ -8,6 +8,7 @@ import Header from './components/layout/Header';
 // Public Pages
 import LandingPage from './pages/public/LandingPage';
 import LoginPage from './pages/public/LoginPage';
+import SetPasswordPage from './pages/public/SetPasswordPage';
 import UnauthorizedPage from './pages/public/UnauthorizedPage';
 import { WEB_ADMIN_ROLES } from './services/authService';
 
@@ -117,6 +118,7 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/set-password" element={<SetPasswordPage />} />
               <Route path="/unauthorized" element={<UnauthorizedPage />} />
               <Route path="/*" element={<ProtectedOperations />} />
             </Routes>

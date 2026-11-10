@@ -23,7 +23,7 @@ import {
   Archive,
 } from 'lucide-react';
 import { Tag, TONE, SEVERITY_TONE, ALERT_TONE, LevelTag, StatusTag } from '../../../components/ui/shared/Tag';
-import { useIncidents, useCreateIncident, useUpdateIncident, useDeleteIncident, useGlobalIncidents, usePromotePrediction, useIncidentMedia } from '../../../hooks';
+import { useIncidents, useCreateIncident, useUpdateIncident, useDeleteIncident, useGlobalIncidents, usePromotePrediction, useIncidentMedia, useIncidentCovers } from '../../../hooks';
 import { PaginationBar } from '../../../components/ui/shared/PaginationBar';
 import { SlashMedia } from '../../../components/ui/situational/HazardArt';
 import { MediaUploader, hasPendingUploads, uploadedRefs, type MediaItem } from '../../../components/ui/shared/MediaUploader';
@@ -76,6 +76,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
 
   const toast = useToast();
   const incidentsQuery = useIncidents();
+  const { data: covers = {} } = useIncidentCovers();
   const {
     data: incidents = [],
     isLoading: isIncidentsLoading,
@@ -765,6 +766,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                   <option value="Verified">Verified</option>
                   <option value="Responding">Responding</option>
                   <option value="Resolved">Resolved</option>
+                  <option value="Rejected">Rejected</option>
                 </select>
               </div>
             </div>
@@ -825,7 +827,9 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                 <AnimatePresence mode="popLayout" initial={false}>
                   {displayedIncidents.map((incident) => {
                     const isInactive = incident.status === 'Resolved' || incident.status === 'Rejected';
-                    const photos = (incident.media_urls ?? []).filter((u) => u.startsWith('http'));
+                    const photos = (incident.media_urls ?? []).filter((u) => u.startsWith('http') || u.startsWith('storage://'));
+                    const publicPhotos = photos.filter((u) => u.startsWith('http'));
+                    const cover = covers[incident.id] ?? publicPhotos[publicPhotos.length - 1];
                     const open = () => navigate(`/situational/incidents/${incident.id}`);
                     return (
                       <motion.article
@@ -839,7 +843,7 @@ const IncidentManagement: React.FC<IncidentManagementProps> = () => {
                         focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600
                         ${isInactive ? 'bg-slate-50 border-slate-200/80 opacity-80' : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-[0_10px_28px_-16px_rgba(15,23,42,.35)]'}`}
                       >
-                        <SlashMedia hazard={incident.type || incident.title} photo={photos[0]} count={photos.length}
+                        <SlashMedia hazard={incident.type || incident.title} photo={cover} count={photos.length}
                           alt={`Photo of ${incident.title}`} surface={isInactive ? '#f8fafc' : '#ffffff'} />
                         <div className="flex-1 min-w-0 flex flex-col pl-1.5 pr-4 py-3.5">
                           <div className="flex items-center gap-1.5 flex-wrap">

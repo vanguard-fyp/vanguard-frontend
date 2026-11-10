@@ -41,7 +41,8 @@ const PublicCommunication: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<CommunicationCategoryFilter>('All');
   const [severityFilter, setSeverityFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<CommunicationStatusFilter>('All');
-  const [sortBy, setSortBy] = useState<CommunicationSortBy>('latest');
+  // Newest first; the status filter replaced the sort buttons.
+  const [sortBy] = useState<CommunicationSortBy>('latest');
   const [pageIndex, setPageIndex] = useState(0);
   const PAGE_SIZE = 10;
 
@@ -220,8 +221,6 @@ const PublicCommunication: React.FC = () => {
           onSeverityChange={setSeverityFilter}
           statusFilter={statusFilter}
           onStatusChange={setStatusFilter}
-          sortBy={sortBy}
-          onSortChange={setSortBy}
           totalCount={totalCount}
           filteredCount={filteredAnnouncements.length}
         />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, AlertCircle, Eye, EyeOff, Mail, LockKeyhole } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff, Mail, LockKeyhole } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PublicHeader } from '../../components/public/PublicChrome';
 import { MonitoringPlate, useSceneCycle } from '../../components/public/MonitoringPlate';
@@ -9,8 +9,10 @@ import { MonitoringPlate, useSceneCycle } from '../../components/public/Monitori
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
+  // Arriving from the set-password page: prefill the email and confirm it worked.
+  const arrival = (useLocation().state ?? {}) as { email?: string; notice?: string };
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(arrival.email ?? '');
   const [emailTouched, setEmailTouched] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -57,6 +59,12 @@ export const LoginPage: React.FC = () => {
             <p className="lf-small" style={{ margin: '0.75rem 0 2rem', fontSize: '1rem' }}>
               Use the email and password issued with your agency account.
             </p>
+
+            {arrival.notice && !errorMsg && (
+              <p role="status" className="lf-small" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: '0 0 1.25rem', color: '#047857' }}>
+                <CheckCircle2 size={18} aria-hidden="true" /> {arrival.notice}
+              </p>
+            )}
 
             {errorMsg && (
               <div className="lf-alert" role="alert">

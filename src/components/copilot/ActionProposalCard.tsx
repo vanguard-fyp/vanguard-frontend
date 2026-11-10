@@ -153,9 +153,14 @@ export const ActionProposalCard: React.FC<Props> = ({ proposal, messageId, outco
             <ul className="space-y-1">
               {draft.teams.map((t) => (
                 <li key={t.team_id} className="flex items-center gap-2">
-                  <span className="flex-1 min-w-0 truncate text-xs text-slate-700">{t.name ?? t.display_id}</span>
+                  <span className="flex-1 min-w-0 text-xs text-slate-700" title={[t.name, t.display_id, t.agency].filter(Boolean).join(' · ')}>
+                    <span className="block truncate font-medium">{t.name ?? t.display_id ?? 'Team'}</span>
+                    {t.name && t.display_id && (
+                      <span className="block truncate text-[10px] text-slate-400">{t.display_id}{t.agency ? ` · ${t.agency}` : ''}</span>
+                    )}
+                  </span>
                   <input type="number" min={1} max={500} aria-label={`Personnel for ${t.name ?? t.display_id}`}
-                    className={`${field} w-16 tabular-nums`} value={t.personnel}
+                    className={`${field.replace('w-full ', '')} w-16 shrink-0 tabular-nums`} value={t.personnel}
                     onChange={(e) => set({ teams: draft.teams.map((x) => (x.team_id === t.team_id ? { ...x, personnel: Number(e.target.value) } : x)) })} />
                   {draft.teams.length > 1 && (
                     <button type="button" aria-label={`Remove ${t.name ?? t.display_id}`} className="p-1 text-slate-400 hover:text-red-500 cursor-pointer"

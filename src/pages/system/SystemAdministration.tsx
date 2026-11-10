@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';
 import { useCreateUser, useUpdateUser, useDeleteUser } from '../../hooks';
+import { useToast } from '../../context/ToastContext';
 import { UserManagementTable } from '../../components/ui/system/UserManagementTable';
 import { UserEditModal } from '../../components/ui/system/UserEditModal';
 import { SystemSettingsPanel } from '../../components/ui/system/SystemSettingsPanel';
@@ -14,6 +15,7 @@ const SystemAdministration: React.FC = () => {
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
+  const toast = useToast();
 
   const [selectedUser, setSelectedUser] = useState<UserAccount | null>(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -35,10 +37,14 @@ const SystemAdministration: React.FC = () => {
       createUserMutation.mutate({
         name: data.name || 'New Officer',
         email: data.email!,
+        phone_number: data.phone_number!,
         agency: data.agency || 'NADMA Malaysia',
         role: data.role || 'Disaster Management Officer',
         status: 'Active',
         ...(data.avatar_url ? { avatar_url: data.avatar_url } : {}),
+      }, {
+        onSuccess: (created) => toast.success('Invite sent', `${created.name} will get an email at ${created.email} to set their password.`),
+        onError: (e) => toast.error('User not created', e instanceof Error ? e.message : undefined),
       });
     }
   };

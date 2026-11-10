@@ -27,6 +27,11 @@ export const userService = {
     return apiClient.post<UserAccount>('/users', user);
   },
 
+  /** Email a fresh invite link to an officer who has not set a password yet. */
+  resendInvite: async (id: string): Promise<void> => {
+    await apiClient.post<void>(`/users/${id}/resend-invite`);
+  },
+
   /**
    * Update an existing user account
    */

@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion, useReducedMotion, useScroll, useTransform } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, ArrowUpRight, Phone } from 'lucide-react';
 import { PublicHeader, PublicFooter } from '../../components/public/PublicChrome';
 import { MonitoringPlate, useSceneCycle } from '../../components/public/MonitoringPlate';
-import { HalftoneField } from '../../components/public/HalftoneField';
+import { WeatherStage } from '../../components/public/WeatherStage';
 import { PublicationFold } from '../../components/public/PublicationFold';
 import { FlipBook } from '../../components/public/FlipBook';
 import { ResourceShelf } from '../../components/public/ResourceShelf';
@@ -21,13 +21,6 @@ import {
   type Publication,
 } from './publicContent';
 import { useAuth } from '../../context/AuthContext';
-
-/** Clamped linear map. A function transform keeps framer-motion from handing the
-    value to a native ScrollTimeline, which proved unreliable for opacity here. */
-const lerp = (v: number, a: number, b: number, from: number, to: number) => {
-  const t = Math.min(1, Math.max(0, (v - a) / (b - a)));
-  return from + (to - from) * t;
-};
 
 const useMedia = (query: string) => {
   const [match, setMatch] = useState(() => window.matchMedia(query).matches);
@@ -55,10 +48,6 @@ export const LandingPage: React.FC = () => {
   const wide = useMedia('(min-width: 900px)');
   const scene = useSceneCycle(reduced);
 
-  const stage = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: stage, offset: ['start start', 'end end'] });
-  const fieldOpacity = useTransform(scrollYProgress, (v) => lerp(v, 0.1, 0.36, 1, 0.22));
-
   useEffect(() => {
     if (!location.hash) return;
     const el = document.getElementById(location.hash.slice(1));
@@ -70,7 +59,8 @@ export const LandingPage: React.FC = () => {
     const { isAuthenticated } = useAuth();
 
   return (
-    <div className="lf" id="top">
+    <div className="lf lf--weather" id="top">
+      <WeatherStage still={reduced} wide={wide} />
       <Preloader reduced={reduced} landOn={location.hash ? undefined : 'about'} onEnter={() => { }} />
       <a href="#about" className="sr-only focus:not-sr-only">Skip to content</a>
       <PublicHeader />
@@ -78,15 +68,8 @@ export const LandingPage: React.FC = () => {
       <RadarRoamer scene={scene} still={reduced} />
 
       <main>
-        <div ref={stage} className="lf-stage" data-static={reduced}>
+        <div className="lf-stage" data-static={reduced}>
           <section id="about" className="lf-intro" aria-labelledby="about-title">
-            <motion.div
-              className="lf-stage__field"
-              style={reduced ? undefined : { opacity: fieldOpacity }}
-            >
-              <HalftoneField still={reduced} className="lf-stage__field" />
-            </motion.div>
-
             <div className="lf-wrap lf-intro__grid">
               <div className="lf-intro__head">
                 <h2
@@ -133,8 +116,7 @@ export const LandingPage: React.FC = () => {
           </section>
         </div>
 
-        <section id="resources" className="lf-section lf-section--field" aria-labelledby="resources-title">
-          <HalftoneField still={reduced} className="lf-section__field" />
+        <section id="resources" className="lf-section" aria-labelledby="resources-title">
           <div className="lf-wrap">
             <div className="lf-section__head">
               <h2 id="resources-title" className="lf-h2">When a warning lands, officers reach for the rules.</h2>

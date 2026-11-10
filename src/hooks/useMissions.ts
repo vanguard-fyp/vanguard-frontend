@@ -54,6 +54,18 @@ export function useRescueRecommendation(incidentId: string | null | undefined) {
   });
 }
 
+export function useMobilizeTeam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ missionId, teamId }: { missionId: string; teamId: string }) => missionService.mobilizeTeam(missionId, teamId),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.missions });
+      qc.invalidateQueries({ queryKey: MISSION_KEYS.teams });
+      qc.invalidateQueries({ queryKey: ['incidents', 'logs'] });
+    },
+  });
+}
+
 export function useUpdateMissionStatus() {
   const qc = useQueryClient();
   return useMutation({
@@ -132,9 +144,9 @@ export function useAssistanceRequests(params?: { status?: string; reporter_conta
 export function useUpdateAssistanceStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ requestId, status, notes }: { requestId: string; status: string; notes?: string }) => {
+    mutationFn: async ({ requestId, status, notes, closureReason, linkedIncidentId }: { requestId: string; status: string; notes?: string; closureReason?: string; linkedIncidentId?: string }) => {
       const { incidentService } = await import('../services/incidentService');
-      return incidentService.updateAssistanceStatus(requestId, status, notes);
+      return incidentService.updateAssistanceStatus(requestId, status, notes, { closure_reason: closureReason, linked_incident_id: linkedIncidentId });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assistance_requests'] });

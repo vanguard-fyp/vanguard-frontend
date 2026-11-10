@@ -36,6 +36,11 @@ export const incidentService = {
     return apiClient.get<Page<Incident>>('/incidents', { ...params, paginated: true });
   },
 
+  /** Latest photo of each incident for the officers' list (signed URLs, about 15 min). */
+  getMediaCovers: async (): Promise<Record<string, string>> => {
+    return apiClient.get<Record<string, string>>('/incidents/media-covers');
+  },
+
   /**
    * Upload ONE photo/video to private incident storage. Returns a storage reference
    * for media_urls. Throws ApiError (415 type, 413 size, 502 storage down).
@@ -131,8 +136,8 @@ export const incidentService = {
   /**
    * Update status of citizen assistance request (e.g. Dispatched, Resolved)
    */
-  updateAssistanceStatus: async (requestId: string, status: string, notes?: string): Promise<any> => {
-    return apiClient.patch<any>(`/incidents/assistance-requests/${requestId}/status`, { status, notes });
+  updateAssistanceStatus: async (requestId: string, status: string, notes?: string, extra?: { closure_reason?: string; linked_incident_id?: string }): Promise<any> => {
+    return apiClient.patch<any>(`/incidents/assistance-requests/${requestId}/status`, { status, notes, ...extra });
   },
 
   /**

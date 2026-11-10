@@ -44,7 +44,7 @@ export const PublicFooter: React.FC = () => (
     <div className="lf-wrap">
       <div className="lf-footer__grid">
         <div>
-          <p className="lf-wordmark__name" style={{ color: '#fff', margin: '0 0 0.5rem' }}>Vanguard</p>
+          <p className="lf-wordmark__name lf-footer__name" style={{ margin: '0 0 0.5rem' }}>Vanguard</p>
           <p style={{ margin: 0, maxWidth: '44ch' }}>
             A multi-agency disaster operations platform built around the work of{' '}
             {NADMA_OFFICE.name}, {NADMA_OFFICE.parent}.

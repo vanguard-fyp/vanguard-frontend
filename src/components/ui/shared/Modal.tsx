@@ -1,5 +1,6 @@
 import React, { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
+import { useLockPageScroll } from '../../../hooks/useLockPageScroll';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Trash, X, type LucideIcon } from 'lucide-react';
 
@@ -35,6 +36,7 @@ interface ShellProps {
 }
 
 const Shell: React.FC<ShellProps> = ({ open, onClose, children, width = 'max-w-lg', labelledBy }) => {
+  useLockPageScroll(open);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();

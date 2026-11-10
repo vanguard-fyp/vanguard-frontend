@@ -54,7 +54,6 @@ export interface IncidentDetailViewProps {
   onTrackInIntelligence?: (incident: Incident) => void;
 }
 
-export type CommandTabType = 'verify' | 'deploy' | 'resolve' | 'export';
 
 export interface GdacsHazardDef {
   id: string;

@@ -85,6 +85,8 @@ interface PhoneInputProps {
   className?: string;
   /** If true, shows validation error span below input */
   showValidation?: boolean;
+  /** The form was submitted: a required, empty field shows its message too */
+  submitted?: boolean;
 }
 
 export const PhoneInput: React.FC<PhoneInputProps> = ({
@@ -95,10 +97,12 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   required = false,
   className = '',
   showValidation = true,
+  submitted = false,
 }) => {
   const dirty = value.trim().length > 0;
   const valid = isValidMalaysianPhone(value);
   const showError = showValidation && dirty && !valid;
+  const showMissing = required && submitted && !dirty;
 
   return (
     <div className={className}>
@@ -119,12 +123,15 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
           placeholder={placeholder}
           required={required}
           className={`w-full pl-9 pr-3 py-2 text-[13px] tabular-nums text-slate-900 bg-white border rounded-lg placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-600/10 transition ${
-            showError
+            showError || showMissing
               ? 'border-rose-400 focus:border-rose-500'
               : 'border-slate-200 focus:border-blue-600'
           }`}
         />
       </div>
+      {showMissing && (
+        <span className="block mt-1 text-[10px] text-rose-500 font-medium">Please enter the phone number</span>
+      )}
       {showError && (
         <span className="block mt-1 text-[10px] text-rose-500 font-medium">
           Enter a valid Malaysian number, e.g.{' '}

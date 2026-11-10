@@ -20,6 +20,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -32,6 +33,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
       setDisplayName(user.name || '');
       setEmail(user.email || '');
       setPhone(sanitizePhoneInput(user.phone_number || ''));
+      setSubmitted(false);
       setPendingAvatarFile(null);
       setAvatarPreview(user.avatar_url || null);
     }
@@ -60,10 +62,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    if (!isValidMalaysianPhone(phone)) {
-      toast.error('Please enter a valid Malaysian phone number.');
-      return;
-    }
+    setSubmitted(true);
+    if (!displayName.trim() || !isValidMalaysianPhone(phone)) return;
     setIsSaving(true);
 
     try {
@@ -132,7 +132,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          <form onSubmit={handleSave} noValidate className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
 
             {/* Avatar + Identity Card */}
             <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-4">
@@ -196,8 +196,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   required
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 font-medium"
+                  className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none font-medium ${
+                    submitted && !displayName.trim() ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-blue-600'}`}
                 />
+                {submitted && !displayName.trim() && (
+                  <span className="block mt-1 text-[10px] text-rose-500 font-medium">Please enter your name</span>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">Official Email</label>
@@ -220,6 +224,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
                 value={phone}
                 onChange={setPhone}
                 required
+                submitted={submitted}
                 showValidation
               />
               <div>

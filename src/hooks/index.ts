@@ -13,3 +13,4 @@ export * from './useGeo';
 export * from './useSystemSettings';
 export * from './useSensors';
 export * from './useCopilot';
+export * from './useLockPageScroll';

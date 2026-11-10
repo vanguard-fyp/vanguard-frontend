@@ -14,7 +14,11 @@ import type { HazardPrediction } from '../../../types/intelligence';
 import { IconTile, LevelTag, Tag, TONE, type Tone } from '../shared/Tag';
 import { NavyIcon, Overlay } from '../shared/Modal';
 import { FormattedMessageText } from '../../../utils/messageFormatter';
+import { parseAdvisory, splitAdvisory } from '../../../utils/advisoryText';
 import { formatDateTime } from '../../../utils/dateFormatter';
+
+/** Said once under the context rows, rather than after each one. */
+const CONTEXT_NOTE = /\s*Context only, not part of the score\.$/;
 
 /** History behind the "historically …-prone" tag: context only, never part of the score. */
 const historyText = (p: HazardPrediction): string => {
@@ -22,7 +26,7 @@ const historyText = (p: HazardPrediction): string => {
   if (!h) return '';
   const where = h.scope === 'district' ? 'this district' : 'this state';
   const last = h.last_event_at ? `, latest ${relativeTime(h.last_event_at)}` : '';
-  return `${h.confirmed_events} confirmed events in ${where} in the last ${h.years} years${last}. Context only, not part of the score.`;
+  return `${h.confirmed_events} confirmed events in ${where} in the last ${h.years} years${last}. `;
 };
 
 /** JKM's open relief centres in this prediction's districts: context only, never the score. */
@@ -36,7 +40,7 @@ const reliefText = (p: HazardPrediction): string => {
 const warningText = (p: HazardPrediction): string =>
   (p.official_warnings ?? [])
     .map((w) => `${w.title} for ${w.districts?.join(', ') ?? 'the whole state'}${w.valid_to ? `, until ${formatDateTime(w.valid_to)}` : ''}`)
-    .join('; ') + ' (MET Malaysia, official). Context only, not part of the score.';
+    .join('; ') + ' (MET Malaysia, official).';
 
 /**
  * Emerging-hazard predictions from the scheduled scan: the forecast watch
@@ -54,12 +58,15 @@ const band = (score: number | null): { tone: Tone; label: string } =>
       : score >= 65 ? { tone: 'orange', label: 'Elevated' }
         : { tone: 'blue', label: 'Watch' };
 const scoreColor = (score: number | null) => TONE[band(score).tone];
+/** Muted band colours for score bars and markers; the tag and figure carry the exact level. */
+const BAR_COLOR: Partial<Record<Tone, string>> = { red: '#e3a5a5', orange: '#ecbd98', blue: '#a8c2ec' };
+const barColor = (score: number | null) => BAR_COLOR[band(score).tone] ?? '#c3ccd8';
 const confidenceWord = (c: number) => (c >= 75 ? 'high' : c >= 50 ? 'moderate' : 'low');
 
 /** Score on a 0–100 scale with the three bands marked, and the model's confidence under it. */
 const ScoreScale: React.FC<{ score: number | null; confidence: number | null }> = ({ score, confidence }) => {
   const b = band(score);
-  const c = TONE[b.tone];
+  const c = barColor(score);
   return (
     <div className="rounded-xl border border-slate-200/80 p-4">
       <div className="flex items-end justify-between gap-3">
@@ -126,22 +133,6 @@ const HAZARD_COLOR: Record<string, string> = {
   Drought: '#f97316',
 };
 const hazardColor = (t?: string | null) => HAZARD_COLOR[t ?? ''] ?? '#64748b';
-
-/** Split an advisory body into a short summary and the actions it recommends,
- *  so a long AI paragraph reads as a few lines and a checklist. */
-const ACTION_WORDS = /\b(should|must|need to|needs to|recommend|advise|ensure|evacuate|restrict|establish|prepare|monitor|deploy|issue|activate|avoid|close)\b/i;
-const splitAdvisory = (body: string): { summary: string[]; actions: string[] } => {
-  const sentences = body
-    .replace(/\s+/g, ' ')
-    .split(/(?<=[.!?])\s+(?=[A-Z])/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-  const summary: string[] = [];
-  const actions: string[] = [];
-  sentences.forEach((x, i) => (i > 0 && ACTION_WORDS.test(x) ? actions : summary).push(x));
-  // Long action sentences that list several steps ("restrict travel, open shelters and …") stay whole.
-  return { summary, actions };
-};
 
 const SOURCE_LABEL: Record<string, string> = {
   forecast: 'weather forecast',
@@ -229,26 +220,26 @@ const backtestOf = (p: HazardPrediction): BacktestFigure | null => {
 /** "administrative_areas" -> "Administrative areas" */
 const sentence = (t: string) => { const c = (t ?? '').replace(/_/g, ' ').trim(); return c ? c.charAt(0).toUpperCase() + c.slice(1) : c; };
 
-/**
- * The scan's advisory arrives as one markdown-ish string:
- * "**Title** Body … Recommended disaster level: Level 1: District".
- * Split it into a heading, readable body and the recommended level.
- */
-const parseAdvisory = (text: string) => {
-  let body = text.trim();
-  let title: string | null = null;
-  const t = body.match(/^\*\*(.+?)\*\*\s*/);
-  if (t) {
-    title = t[1].trim().replace(/:$/, '');
-    body = body.slice(t[0].length);
-  }
-  let level: string | null = null;
-  const l = body.match(/\s*Recommended disaster level:\s*(.+?)\.?\s*$/i);
-  if (l) {
-    level = l[1].trim();
-    body = body.slice(0, l.index).trim();
-  }
-  return { title, body, level };
+/** What else is known about this place: tag on the left, plain fact beside it. */
+const ContextRows: React.FC<{ p: HazardPrediction }> = ({ p }) => {
+  const items: { label: string; tone: Tone; text: string }[] = [
+    ...(p.relief_centres?.open ? [{ label: 'JKM', tone: 'red' as Tone, text: reliefText(p) }] : []),
+    ...(p.official_warnings?.length ? [{ label: 'MET warning', tone: 'red' as Tone, text: warningText(p) }] : []),
+    ...(p.history?.label ? [{ label: p.history.label, tone: 'amber' as Tone, text: historyText(p) }] : []),
+  ];
+  if (!items.length) return null;
+  return (
+    <div>
+      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-3 gap-y-2.5">
+        {items.map((x) => (
+          <React.Fragment key={x.label}>
+            <dt><Tag tone={x.tone}>{x.label}</Tag></dt>
+            <dd className="text-xs leading-relaxed text-slate-600 pt-0.5">{x.text.replace(CONTEXT_NOTE, '')}</dd>
+          </React.Fragment>
+        ))}
+      </dl>
+    </div>
+  );
 };
 
 /** Header button that opens the drawer: count, plus how many are high risk. */
@@ -473,7 +464,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                   <span className="flex flex-col items-end gap-1 w-14 shrink-0" title="Hazard score (0–100)">
                                     <span className="text-sm font-bold tabular-nums" style={{ color: (p.hazard_score ?? 0) >= 65 ? color : '#0f172a' }}>{isNum(p.hazard_score) ? p.hazard_score : 'n/a'}</span>
                                     <span className="w-full h-1 rounded-full bg-slate-100 overflow-hidden">
-                                      <span className="block h-full rounded-full" style={{ width: `${Math.min(100, p.hazard_score ?? 0)}%`, background: color }} />
+                                      <span className="block h-full rounded-full" style={{ width: `${Math.min(100, p.hazard_score ?? 0)}%`, background: barColor(p.hazard_score) }} />
                                     </span>
                                   </span>
                                   <ChevronRight size={16} className="shrink-0 text-slate-300 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all" />
@@ -509,26 +500,10 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                   {fmtText(p.hazard_type, 'Hazard')} · {fmtText(p.district, 'Unknown district')}
                                 </h3>
                                 {p.state && <p className="text-xs text-slate-500 mt-0.5">{p.state}</p>}
-                                {!!p.relief_centres?.open && (
-                                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <Tag tone="red">JKM</Tag>
-                                    <span className="text-[11px] text-slate-500">{reliefText(p)}</span>
-                                  </div>
-                                )}
-                                {!!p.official_warnings?.length && (
-                                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <Tag tone="red">MET warning</Tag>
-                                    <span className="text-[11px] text-slate-500">{warningText(p)}</span>
-                                  </div>
-                                )}
-                                {p.history?.label && (
-                                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                                    <Tag tone="amber">{p.history.label}</Tag>
-                                    <span className="text-[11px] text-slate-500">{historyText(p)}</span>
-                                  </div>
-                                )}
                               </div>
                             </div>
+
+                            <ContextRows p={p} />
 
                             <dl className="grid grid-cols-2 gap-2">
                               <div className="rounded-xl bg-slate-50 px-3.5 py-2.5">
@@ -542,11 +517,22 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                             </dl>
 
                             {p.district_profile && (
-                              <p className="text-xs text-slate-600 leading-relaxed"
-                                title={`${p.district_profile.source}: poverty ${p.district_profile.poverty_year}, population ${p.district_profile.population_year}. Context only; not part of the hazard score.`}>
-                                <span className="font-semibold text-slate-900">Who's at risk here: </span>
-                                {p.district_profile.poverty_pct}% of households in poverty{p.district_profile.poverty_scope === 'state' ? ' (state figure)' : ''} · {p.district_profile.age_65_plus_pct}% aged 65+ · {p.district_profile.under_5_pct}% under 5 ({p.district_profile.source})
-                              </p>
+                              <div title={`${p.district_profile.source}: poverty ${p.district_profile.poverty_year}, population ${p.district_profile.population_year}. Context only; not part of the hazard score.`}>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Who's at risk here</p>
+                                <dl className="grid grid-cols-3 gap-2">
+                                  {[
+                                    { label: p.district_profile.poverty_scope === 'state' ? 'Poverty (state)' : 'In poverty', value: p.district_profile.poverty_pct },
+                                    { label: 'Aged 65+', value: p.district_profile.age_65_plus_pct },
+                                    { label: 'Under 5', value: p.district_profile.under_5_pct },
+                                  ].map((x) => (
+                                    <div key={x.label} className="rounded-xl bg-slate-50 px-3 py-2.5 min-w-0">
+                                      <dt className="text-[11px] text-slate-500 truncate">{x.label}</dt>
+                                      <dd className="text-sm font-semibold text-slate-900 mt-0.5 tabular-nums">{x.value}%</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                                {/* <p className="mt-1.5 text-[10px] text-slate-400">{p.district_profile.source}</p> */}
+                              </div>
                             )}
 
                             <ScoreScale score={p.hazard_score} confidence={p.confidence} />
@@ -601,7 +587,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                               <div>
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                   <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">AI advisory</p>
-                                  <span className="text-[11px] text-slate-400" title="Written from the readings above. An officer decides.">Suggestion only</span>
+                                  {/* <span className="text-[11px] text-slate-400" title="Written from the readings above. An officer decides.">Suggestion only</span> */}
                                 </div>
                                 <div className="rounded-xl border border-slate-200/80 px-4 py-3.5">
                                   {a.title && <p className="text-sm font-semibold text-slate-900 mb-2">{a.title}</p>}
@@ -614,7 +600,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                       <>
                                         {summary.length > 0 && (
                                           <div className="space-y-2 text-[13px] leading-relaxed text-slate-700">
-                                            {summary.map((x, i) => <p key={i}>{x}</p>)}
+                                            {summary.map((x, i) => <FormattedMessageText key={i} text={x} />)}
                                           </div>
                                         )}
                                         {actions.length > 0 && (
@@ -624,7 +610,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                               {actions.map((x, i) => (
                                                 <li key={i} className="flex items-start gap-2 text-[13px] leading-relaxed text-slate-700">
                                                   <CheckCircle2 size={14} className="shrink-0 mt-[3px]" style={{ color: TONE.blue }} />
-                                                  <span>{x}</span>
+                                                  <span className="min-w-0"><FormattedMessageText text={x} /></span>
                                                 </li>
                                               ))}
                                             </ul>

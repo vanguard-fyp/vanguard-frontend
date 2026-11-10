@@ -11,11 +11,10 @@ import {
   Clock,
   Bell,
 } from 'lucide-react';
-import { DisasterBadge } from '../dashboard/DisasterBadge';
 import { formatDateTime } from '../../../utils/dateFormatter';
 
 import type { PublicAnnouncement } from '../../../types';
-import { categoryBadgeStyle } from '../../../constants';
+import { categoryBadgeStyle, commSeverityStyle } from '../../../constants';
 
 interface CommunicationCardProps {
   announcement: PublicAnnouncement;
@@ -68,13 +67,16 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
           {/* Category + Severity badges only — no location/time (shown in details) */}
           <div className="flex items-center gap-2 pt-1 flex-wrap">
             <span
-              className={`text-[11px] font-bold px-2 py-0.5 rounded border shrink-0 ${
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded border shrink-0 ${
                 categoryBadgeStyle[announcement.category] || 'bg-slate-100 text-slate-700 border-slate-200'
               }`}
             >
               {announcement.category}
             </span>
-            <DisasterBadge type="severity" value={announcement.severity} className="shrink-0" />
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-semibold shrink-0 ${(commSeverityStyle[announcement.severity] ?? commSeverityStyle.Low).badge}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${(commSeverityStyle[announcement.severity] ?? commSeverityStyle.Low).dot}`} />
+              {announcement.severity}
+            </span>
           </div>
         </div>
 
@@ -83,13 +85,13 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
           <span
             className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border hidden sm:flex items-center gap-1.5 ${
               announcement.active
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                ? 'bg-[#e8f6f0] text-[#1f7a5e] border-[#cce9dc]'
                 : 'bg-slate-100 text-slate-500 border-slate-200'
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                announcement.active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                announcement.active ? 'bg-[#3fae8a]' : 'bg-slate-400'
               }`}
             />
             {announcement.active ? 'Live' : 'Retracted'}

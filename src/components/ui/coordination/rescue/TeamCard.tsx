@@ -76,7 +76,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
   return (
     <div className={`bg-white border rounded-xl overflow-hidden transition-all duration-200 ${isExpanded ? 'border-blue-300 shadow-md' : 'border-slate-200 shadow-xs hover:border-slate-300'}`}>
       {/* Team Row Header */}
-      <div className="flex items-center gap-4 px-5 py-4 text-left">
+      <div onClick={onToggle} className="cursor-pointer flex items-center gap-4 px-5 py-4 text-left">
         {/* Agency badge */}
         <span className={`text-[11px] font-bold px-2.5 py-1 rounded border shrink-0 ${ac}`}>
           {team.agency}
@@ -114,7 +114,7 @@ export const TeamCard: React.FC<TeamCardProps> = ({
           
           {onViewOperations && (
             <button
-              onClick={() => onViewOperations(team)}
+              onClick={(e) => { e.stopPropagation(); onViewOperations(team); }}
               className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors cursor-pointer"
             >
               <span>Operations</span>
@@ -123,7 +123,10 @@ export const TeamCard: React.FC<TeamCardProps> = ({
           )}
 
           <button
-            onClick={onToggle}
+            type="button"
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Hide squad details' : 'Show squad details'}
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
             className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
           >
             {isExpanded
