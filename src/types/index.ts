@@ -416,6 +416,21 @@ export interface PushJobRef {
   mode: 'off' | 'http' | 'pubsub';
 }
 
+/** One push send to citizens' phones; the push worker writes the delivery counts back. */
+export interface PushJob {
+  id: string;
+  kind: 'announcement' | 'prediction' | 'manual';
+  source_id?: string | null;
+  status: string;
+  /** Phones targeted (null until the worker has run). */
+  recipients?: number | null;
+  success_count?: number | null;
+  failure_count?: number | null;
+  created_at: string;
+  completed_at?: string | null;
+  last_error?: string | null;
+}
+
 export interface UserAccount {
   id: string;
   name: string;
@@ -517,6 +532,9 @@ export interface ImpactSnapshot {
 export interface AnalyticsSummary {
   year: string;
   comparison_year: string;
+  /** e.g. "2026" or "NEM 2025/26" */
+  period_label?: string | null;
+  comparison_label?: string | null;
   total_incidents: number;
   total_resolved: number;
   resolution_rate: number | null;

@@ -144,6 +144,25 @@ export const analyticsService = {
   },
 
   /**
+   * National situation report (PDF) as at now: every active incident, JKM relief
+   * centres by state and district, warnings in force and the response.
+   */
+  exportNationalSitrep: async (): Promise<void> => {
+    const blob = await downloadBlob('/analytics/export/national-sitrep');
+    const url = window.URL.createObjectURL(blob);
+    const stamp = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    }).format(new Date()).replace(/[-: ]/g, '');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SITREP_Nasional_${stamp}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
    * Export State Disaster Summary as CSV (State Summary section)
    */
   exportStateSummaryCSV: async (year: string = '2026'): Promise<void> => {

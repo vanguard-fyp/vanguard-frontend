@@ -13,11 +13,33 @@ import {
 } from 'lucide-react';
 import { formatDateTime } from '../../../utils/dateFormatter';
 
-import type { PublicAnnouncement } from '../../../types';
+import type { PublicAnnouncement, PushJob } from '../../../types';
 import { categoryBadgeStyle, commSeverityStyle } from '../../../constants';
+
+const PUSH_STATUS_LABEL: Record<string, string> = {
+  queued: 'Queued',
+  dispatched: 'With push worker',
+  dispatch_failed: 'Could not reach worker',
+  sending: 'Sending',
+  sent: 'Delivered',
+  partial: 'Partly delivered',
+  failed: 'Failed',
+  no_recipients: 'No phones in area',
+  expired: 'Expired',
+  cancelled: 'Cancelled',
+};
+
+const pushReachText = (job: PushJob): string => {
+  if (job.recipients == null) return PUSH_STATUS_LABEL[job.status] ?? job.status;
+  const ok = job.success_count ?? 0;
+  const failed = job.failure_count ?? 0;
+  return `${ok.toLocaleString()} of ${job.recipients.toLocaleString()} phones${failed ? ` · ${failed.toLocaleString()} failed` : ''}`;
+};
 
 interface CommunicationCardProps {
   announcement: PublicAnnouncement;
+  /** Push sends for this announcement, newest first. Undefined when counts are unavailable. */
+  pushJobs?: PushJob[];
   isExpanded: boolean;
   onToggleExpand: () => void;
   onToggleActive: (id: string) => void;
@@ -29,6 +51,7 @@ interface CommunicationCardProps {
 
 export const CommunicationCard: React.FC<CommunicationCardProps> = ({
   announcement,
+  pushJobs,
   isExpanded,
   onToggleExpand,
   onToggleActive,
@@ -141,6 +164,29 @@ export const CommunicationCard: React.FC<CommunicationCardProps> = ({
                 </p>
               </div>
             </div>
+
+            {/* Phone delivery: one line per push send (the first publish and each resend) */}
+            {pushJobs && (
+              <div className="bg-white border border-slate-200 rounded-xl p-3 text-xs shadow-2xs space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Phone Delivery</p>
+                {pushJobs.length === 0 ? (
+                  <p className="text-slate-500">Not pushed to phones. Shown in the app only.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {pushJobs.map((job, i) => (
+                      <li key={job.id} className="flex items-center justify-between gap-3 flex-wrap">
+                        <span className="text-slate-500">
+                          {i === pushJobs.length - 1 ? 'First send' : 'Resend'} · {formatDateTime(job.created_at)}
+                        </span>
+                        <span className="font-bold text-slate-800 flex items-center gap-1">
+                          {pushReachText(job)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {/* Actions Bar */}
             <div className="flex items-center justify-end flex-wrap gap-3 pt-1">

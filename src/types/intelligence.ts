@@ -399,6 +399,56 @@ export interface ReliefCentresResponse {
   nearly_full_pct?: number;
 }
 
+/** One MET Malaysia earthquake (last 7 days). Times are Malaysia time. */
+export interface MetEarthquake {
+  time: string;
+  magnitude: number | null;
+  magnitude_type?: string | null;
+  depth_km?: number | null;
+  location: string | null;
+  distance_km: number | null;
+  /** e.g. "SE Semporna, Sabah" (direction and nearest Malaysian town) */
+  nearest_malaysian_town: string | null;
+  near_malaysia: boolean;
+  status: string | null;
+  /** MET status other than NORMAL (e.g. a tsunami threat) */
+  threat: boolean;
+}
+
+export interface HeatDistrict {
+  state: string;
+  district: string;
+  level: number;
+  level_name: string | null;
+  peak_c: number | null;
+  dates: string[];
+  max_c: (number | null)[];
+}
+
+/** Each part has available = false when its source could not be read (unknown, not "none"). */
+export interface MetHazardWatch {
+  checked_at: string;
+  earthquakes: {
+    available: boolean;
+    source: string;
+    days: number;
+    near_km?: number;
+    events: MetEarthquake[];
+    count?: number;
+    near_count?: number;
+    threat_count?: number;
+  };
+  heatwave: {
+    available: boolean;
+    source: string;
+    consecutive_days?: number;
+    checked_districts?: number;
+    districts: HeatDistrict[];
+    by_level?: Record<string, number>;
+    hottest?: HeatDistrict | null;
+  };
+}
+
 export interface OfficialWarning {
   title: string;
   issued: string | null;

@@ -89,6 +89,17 @@ export function useHazardPredictions() {
   });
 }
 
+/** MET earthquakes and heatwave status. The backend keeps it warm; the first check can take ~30 s. */
+export function useMetHazards(enabled = true) {
+  return useQuery({
+    queryKey: [...INTEL_KEYS.all, 'met-hazards'] as const,
+    queryFn: () => intelligenceService.getMetHazards(),
+    enabled,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+}
+
 export function useReliefCentres(params: { state?: string; district?: string } = {}, enabled = true) {
   return useQuery({
     queryKey: [...INTEL_KEYS.predictions, 'relief-centres', params.state ?? '', params.district ?? ''],

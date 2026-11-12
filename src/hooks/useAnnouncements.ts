@@ -20,6 +20,17 @@ export function useAnnouncements() {
   });
 }
 
+/** Delivery counts for announcement pushes. Optional: the page works without them. */
+export function useAnnouncementPushJobs() {
+  return useQuery({
+    queryKey: [...ANNOUNCEMENT_KEYS.all, 'push-jobs'] as const,
+    queryFn: () => announcementService.getAnnouncementPushJobs(),
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+}
+
 export function useCreateAnnouncement() {
   const qc = useQueryClient();
   return useMutation({

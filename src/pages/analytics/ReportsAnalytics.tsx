@@ -1,6 +1,6 @@
 import { DataRegion } from '../../components/common/DataRegion';
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3,
   FileText,
@@ -33,6 +33,7 @@ import {
 } from '../../hooks';
 import { analyticsService } from '../../services/analyticsService';
 import { SkeletonKPICard } from '../../components/ui/shared/SkeletonLoader';
+import { useToast } from '../../context/ToastContext';
 
 const containerAnim = {
   hidden: { opacity: 0 },
@@ -59,9 +60,27 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-// Current year in Malaysia time (the browser may be in another timezone).
-const CURRENT_YEAR = Number(new Intl.DateTimeFormat('en-MY', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric' }).format(new Date()));
+// Current year and month in Malaysia time (the browser may be in another timezone).
+const MYT_PARTS = new Intl.DateTimeFormat('en-MY', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: 'numeric' })
+  .formatToParts(new Date());
+const CURRENT_YEAR = Number(MYT_PARTS.find((p) => p.type === 'year')?.value);
+const CURRENT_MONTH = Number(MYT_PARTS.find((p) => p.type === 'month')?.value);
 const YEAR_OPTIONS = [CURRENT_YEAR, CURRENT_YEAR - 1].map(String);
+
+// Northeast Monsoon seasons run Nov–Mar; "NEM2025" = Nov 2025 to Mar 2026.
+// The latest season is the one in progress (Nov–Mar) or the one that just ended.
+const LATEST_SEASON = CURRENT_MONTH >= 11 ? CURRENT_YEAR : CURRENT_YEAR - 1;
+const SEASON_OPTIONS = [LATEST_SEASON, LATEST_SEASON - 1, LATEST_SEASON - 2].map((y) => `NEM${y}`);
+
+type PeriodMode = 'year' | 'season';
+
+/** "2026" stays as is; "NEM2025" becomes "NEM 2025/26". */
+const periodLabel = (period: string): string => {
+  const m = /^NEM(\d{4})$/.exec(period);
+  return m ? `NEM ${m[1]}/${String(Number(m[1]) + 1).slice(-2)}` : period;
+};
+
+type ExportKind = 'sitrep' | 'pdf' | 'excel';
 
 const SEVERITY_PILL: Record<string, string> = {
   Critical: 'bg-red-50 text-red-700 border border-red-200',
@@ -103,9 +122,33 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string; 
 );
 
 const ReportsAnalytics: React.FC = () => {
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('year');
   const [dateRange, setDateRange] = useState(String(CURRENT_YEAR));
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
-  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [exporting, setExporting] = useState<ExportKind | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  const periodText = periodLabel(dateRange);
+
+  const switchMode = (mode: PeriodMode) => {
+    setPeriodMode(mode);
+    setDateRange(mode === 'year' ? YEAR_OPTIONS[0] : SEASON_OPTIONS[0]);
+  };
+
+  // Close the export menu on an outside click or Escape.
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExportMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [exportMenuOpen]);
 
   const summaryQuery = useAnalyticsSummary({ year: dateRange });
   const { data: summaryData, isLoading: isSummaryLoading } = summaryQuery;
@@ -130,27 +173,36 @@ const ReportsAnalytics: React.FC = () => {
     }));
   };
 
-  const handleExportPDF = async () => {
+  const runExport = async (kind: ExportKind) => {
+    setExportMenuOpen(false);
+    setExporting(kind);
     try {
-      setIsExportingPDF(true);
-      await analyticsService.exportPDF(dateRange);
+      if (kind === 'sitrep') await analyticsService.exportNationalSitrep();
+      else if (kind === 'pdf') await analyticsService.exportPDF(dateRange);
+      else await analyticsService.exportExcel(dateRange);
     } catch (err) {
-      console.error('PDF Export Error:', err);
+      toast.error('Export failed', err instanceof Error ? err.message : 'Please try again.');
     } finally {
-      setIsExportingPDF(false);
+      setExporting(null);
     }
   };
 
-  const handleExportExcel = async () => {
-    try {
-      setIsExportingExcel(true);
-      await analyticsService.exportExcel(dateRange);
-    } catch (err) {
-      console.error('Excel Export Error:', err);
-    } finally {
-      setIsExportingExcel(false);
-    }
-  };
+  type ExportItem = { kind: ExportKind; icon: React.ElementType; color: string; label: string; hint: string; format: string };
+  const exportGroups: { title: string; items: ExportItem[] }[] = [
+    {
+      title: 'Live situation',
+      items: [
+        { kind: 'sitrep', icon: FileText, color: '#e11d48', label: 'National SITREP', hint: 'Active incidents, relief centres and warnings as at now', format: 'PDF' },
+      ],
+    },
+    {
+      title: `Analytics · ${periodText}`,
+      items: [
+        { kind: 'pdf', icon: BarChart3, color: '#2563eb', label: 'Executive report', hint: 'Charts and tables for the selected period', format: 'PDF' },
+        { kind: 'excel', icon: FileSpreadsheet, color: '#059669', label: 'Excel workbook', hint: 'All figures, one sheet per section', format: 'XLSX' },
+      ],
+    },
+  ];
 
   const resourceUtilization = rawResourceUtilization.map((r) => ({
     category: r.name,
@@ -163,8 +215,8 @@ const ReportsAnalytics: React.FC = () => {
   const resolutionRate = summaryData?.resolution_rate ?? null;
   const totalAffected = summaryData?.total_affected_reported ?? 0;
   const avgResponseTimeMin = summaryData?.avg_response_time_min ?? null;
-  const prior = summaryData?.comparison_year ?? String(Number(dateRange) - 1);
-  // Only disaster types that occurred in the year get a legend row.
+  const prior = summaryData?.comparison_label ?? summaryData?.comparison_year ?? 'the previous period';
+  // Only disaster types that occurred in the period get a legend row.
   const occurredTypes = disasterTypeDistribution.filter((d) => d.value > 0);
   const statesWithIncidents = stateIncidentHeatmap.filter((s) => s.count > 0).length;
   const visibleStates = showAllStates
@@ -196,34 +248,90 @@ const ReportsAnalytics: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-900">Reports & Analytics</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div role="tablist" aria-label="Report period type" className="flex items-center bg-slate-100 rounded-lg p-0.5">
+            {([['year', 'Year'], ['season', 'Monsoon season']] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={periodMode === mode}
+                onClick={() => periodMode !== mode && switchMode(mode)}
+                title={mode === 'season' ? 'Northeast Monsoon season, November to March' : undefined}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${periodMode === mode ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
+            aria-label={periodMode === 'year' ? 'Year' : 'Monsoon season'}
             className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-600 shadow-2xs cursor-pointer"
           >
-            {YEAR_OPTIONS.map((y) => (
-              <option key={y} value={y}>Year: {y}</option>
+            {(periodMode === 'year' ? YEAR_OPTIONS : SEASON_OPTIONS).map((p) => (
+              <option key={p} value={p}>{periodLabel(p)}</option>
             ))}
           </select>
 
-          <button
-            onClick={handleExportExcel}
-            disabled={isExportingExcel}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
-          >
-            {isExportingExcel ? <Loader2 size={13} className="animate-spin" /> : <FileSpreadsheet size={13} />}
-            <span>Export Excel (.xlsx)</span>
-          </button>
-
-          <button
-            onClick={handleExportPDF}
-            disabled={isExportingPDF}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
-          >
-            {isExportingPDF ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-            <span>Export Executive PDF</span>
-          </button>
+          <div ref={exportMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              disabled={exporting !== null}
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors shadow-xs disabled:opacity-60 cursor-pointer"
+            >
+              {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              <span>{exporting === 'sitrep' ? 'Preparing SITREP…' : exporting ? 'Exporting…' : 'Export'}</span>
+              {!exporting && <ChevronDown size={13} />}
+            </button>
+            <AnimatePresence>
+              {exportMenuOpen && (
+                <motion.div
+                  role="menu"
+                  aria-label="Export reports"
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={{ duration: 0.14 }}
+                  style={{ transformOrigin: 'top right' }}
+                  className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-[0_12px_32px_-8px_rgba(15,23,42,0.25)] z-30 overflow-hidden"
+                >
+                  {exportGroups.map((group, gi) => (
+                    <div key={group.title} className={gi > 0 ? 'border-t border-slate-100' : ''}>
+                      <p className="px-3.5 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{group.title}</p>
+                      <div className="px-1.5 pb-1.5">
+                        {group.items.map(({ kind, icon: Icon, color, label, hint, format }) => (
+                          <button
+                            key={kind}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => runExport(kind)}
+                            className="group w-full flex items-center gap-3 px-2 py-2 rounded-lg text-left hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none cursor-pointer"
+                          >
+                            <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}14`, color }}>
+                              <Icon size={15} />
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-xs font-semibold text-slate-800">{label}</span>
+                              <span className="block text-[11px] text-slate-500 leading-snug">{hint}</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 shrink-0 group-hover:text-slate-600">
+                              {format}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </motion.div>
 
@@ -243,7 +351,7 @@ const ReportsAnalytics: React.FC = () => {
         </StatCard></DataRegion>
         <DataRegion queries={[summaryQuery]} label="People Affected"><StatCard icon={<Users size={16} className="text-purple-600" />} label="People Affected"
           value={totalAffected.toLocaleString()} valueCls="text-purple-700">
-          <p className="text-[11px] font-medium text-slate-400">Reported, all districts ({dateRange})</p>
+          <p className="text-[11px] font-medium text-slate-400">Reported, all districts ({periodText})</p>
         </StatCard></DataRegion>
       </motion.div>
 
@@ -305,7 +413,7 @@ const ReportsAnalytics: React.FC = () => {
               </ResponsiveContainer>
             </div>
             <div className="space-y-3 flex-1">
-              {occurredTypes.length === 0 && <p className="text-xs text-slate-500">No incidents in {dateRange}.</p>}
+              {occurredTypes.length === 0 && <p className="text-xs text-slate-500">No incidents in {periodText}.</p>}
               {occurredTypes.map((d) => (
                 <div key={d.name} className="flex items-center gap-3">
                   <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: d.color }} />
@@ -336,7 +444,7 @@ const ReportsAnalytics: React.FC = () => {
           </ResponsiveContainer>
           {responseTimeData.some((d) => d.avg_mins == null) && (
             <p className="text-[11px] text-slate-400 mt-1">
-              No measurable dispatches ({dateRange}): {responseTimeData.filter((d) => d.avg_mins == null).map((d) => d.agency).join(', ')}
+              No measurable dispatches ({periodText}): {responseTimeData.filter((d) => d.avg_mins == null).map((d) => d.agency).join(', ')}
             </p>
           )}
           {responseTimeData.some((d) => (d.excluded ?? 0) > 0) && (
@@ -383,7 +491,7 @@ const ReportsAnalytics: React.FC = () => {
         <div className="px-5 py-4 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-800">State Disaster Impact & Performance Summary ({dateRange})</h3>
+            <h3 className="text-sm font-bold text-slate-800">State Disaster Impact & Performance Summary ({periodText})</h3>
           </div>
           {stateIncidentHeatmap.length > statesWithIncidents && (
             <button
@@ -408,7 +516,7 @@ const ReportsAnalytics: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {statesWithIncidents === 0 && !showAllStates && (
-                <tr><td colSpan={7} className="px-4 py-6 text-center text-xs text-slate-400">No incidents in {dateRange}.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-xs text-slate-400">No incidents in {periodText}.</td></tr>
               )}
               {visibleStates.map((state) => {
                 const hasIncidents = state.count > 0;

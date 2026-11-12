@@ -1,4 +1,4 @@
-import type { ReliefCentresResponse } from '../types/intelligence';
+import type { MetHazardWatch, ReliefCentresResponse } from '../types/intelligence';
 import { apiClient } from './apiClient';
 import type {
   AssessmentEnvelope,
@@ -57,6 +57,9 @@ export const intelligenceService = {
   /** Relief centres open now according to JKM, optionally for one state/district. */
   getReliefCentres: (params: { state?: string; district?: string } = {}) =>
     apiClient.get<ReliefCentresResponse>('/intelligence/relief-centres', params),
+
+  /** MET earthquakes (7 days) and heatwave status by district (MET criteria). */
+  getMetHazards: () => apiClient.get<MetHazardWatch>('/intelligence/met-hazards'),
 
   /** Related active incidents grouped into wider events (advisory). */
   getWiderEvents: () => apiClient.get<WiderEvent[]>('/intelligence/events'),

@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { Page, PublicAnnouncement } from '../types';
+import type { Page, PublicAnnouncement, PushJob } from '../types';
 
 export interface AnnouncementPageParams {
   limit: number;
@@ -39,6 +39,11 @@ export const announcementService = {
    */
   getAnnouncements: async (): Promise<PublicAnnouncement[]> => {
     return apiClient.get<PublicAnnouncement[]>('/announcements');
+  },
+
+  /** Recent announcement pushes with their delivery counts (newest first). */
+  getAnnouncementPushJobs: async (): Promise<PushJob[]> => {
+    return apiClient.get<PushJob[]>('/notifications/push-jobs', { kind: 'announcement', limit: 200 });
   },
 
   /** Server-side page; filters and sort are applied by the backend so totals are exact. */

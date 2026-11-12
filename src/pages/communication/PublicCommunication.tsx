@@ -7,12 +7,13 @@ import {
   useCreateAnnouncement,
   useUpdateAnnouncement,
   useDeleteAnnouncement,
+  useAnnouncementPushJobs,
 } from '../../hooks';
 import { PaginationBar } from '../../components/ui/shared/PaginationBar';
 import { CommunicationFilters } from '../../components/ui/communication/CommunicationFilters';
 import { CommunicationCard } from '../../components/ui/communication/CommunicationCard';
 import { ComposeBroadcastModal } from '../../components/ui/communication/ComposeBroadcastModal';
-import type { PublicAnnouncement, CommunicationCategoryFilter, CommunicationSortBy, CommunicationStatusFilter } from '../../types';
+import type { PublicAnnouncement, PushJob, CommunicationCategoryFilter, CommunicationSortBy, CommunicationStatusFilter } from '../../types';
 import { useToast } from '../../context/ToastContext';
 import { containerAnim, itemAnim, KPI_ACCENT_MAP } from '../../constants';
 
@@ -48,6 +49,16 @@ const PublicCommunication: React.FC = () => {
 
   const totalCount = allAnnouncements.length;
   const activeCount = useMemo(() => allAnnouncements.filter((a) => isActiveAnnouncement(a.active)).length, [allAnnouncements]);
+  // Push delivery counts, grouped by announcement (each resend is its own job).
+  const pushJobsQuery = useAnnouncementPushJobs();
+  const pushJobsByAnnouncement = useMemo(() => {
+    const map = new Map<string, PushJob[]>();
+    for (const job of pushJobsQuery.data ?? []) {
+      if (!job.source_id) continue;
+      map.set(job.source_id, [...(map.get(job.source_id) ?? []), job]);
+    }
+    return map;
+  }, [pushJobsQuery.data]);
   const evacuationCount = useMemo(() => allAnnouncements.filter((a) => a.category === 'Evacuation Order').length, [allAnnouncements]);
   const emergencyCount = useMemo(() => allAnnouncements.filter((a) => a.category === 'Emergency Alert').length, [allAnnouncements]);
 
@@ -184,7 +195,7 @@ const PublicCommunication: React.FC = () => {
         </button>
       </motion.div>
 
-      <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <motion.div variants={itemAnim} className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-3">
         {[
           { icon: Megaphone, label: 'Total Broadcasts', value: totalCount, sub: 'Unified registry', accent: 'blue' as const },
           { icon: CheckCircle2, label: 'Active Notices', value: activeCount, sub: 'Currently live', accent: 'green' as const },
@@ -258,6 +269,7 @@ const PublicCommunication: React.FC = () => {
               >
                 <CommunicationCard
                   announcement={ann}
+                  pushJobs={pushJobsQuery.isError ? undefined : pushJobsByAnnouncement.get(ann.id) ?? []}
                   isExpanded={expandedId === ann.id}
                   onToggleExpand={() =>
                     setExpandedId(expandedId === ann.id ? null : ann.id)

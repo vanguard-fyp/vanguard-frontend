@@ -16,6 +16,7 @@ import { NavyIcon, Overlay } from '../shared/Modal';
 import { FormattedMessageText } from '../../../utils/messageFormatter';
 import { parseAdvisory, splitAdvisory } from '../../../utils/advisoryText';
 import { formatDateTime } from '../../../utils/dateFormatter';
+import { MetHazardWatch } from './MetHazardWatch';
 
 /** Said once under the context rows, rather than after each one. */
 const CONTEXT_NOTE = /\s*Context only, not part of the score\.$/;
@@ -427,6 +428,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                       </div>
                     )}
                     <div className="flex-1 overflow-y-auto">
+                      <MetHazardWatch />
                       {isError ? (
                         <p className="p-5 text-sm text-slate-600">Predictions could not be loaded. <button onClick={() => refetch()} className="font-semibold text-blue-600 cursor-pointer">Retry</button></p>
                       ) : isLoading ? (
