@@ -412,8 +412,8 @@ export interface PublicAnnouncement {
 export interface PushJobRef {
   id: string;
   status: string;
-  /** off = queued until the push worker is connected; http / pubsub = handed to the worker */
-  mode: 'off' | 'http' | 'pubsub';
+  /** off = queued until the push worker is connected; http / sqs = handed to the worker */
+  mode: 'off' | 'http' | 'sqs';
 }
 
 /** One push send to citizens' phones; the push worker writes the delivery counts back. */

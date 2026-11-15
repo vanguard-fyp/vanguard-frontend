@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient';
+import { apiClient, API_BASE_URL } from './apiClient';
 import type { Page, UserAccount } from '../types';
 
 export const userService = {
@@ -52,7 +52,7 @@ export const userService = {
   uploadAvatar: async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    const baseUrl = API_BASE_URL;
     const token = localStorage.getItem('vanguard_token');
     const res = await fetch(`${baseUrl}/users/avatar`, {
       method: 'POST',
