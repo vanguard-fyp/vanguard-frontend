@@ -37,6 +37,7 @@ const ResourceManagement: React.FC = () => {
   const { user } = useAuth();
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const [activeStep, setActiveStep] = useState<ViewMode>(1);
+  const [focus3d, setFocus3d] = useState<string | null>(null);
   // Incident locations are only needed by the 3D view.
   const incidentsQuery = useIncidents(undefined, { enabled: activeStep === '3d' });
   const { data: incidents = [] } = incidentsQuery;
@@ -200,7 +201,7 @@ const ResourceManagement: React.FC = () => {
               <span>Pipeline</span>
             </button>
             <button
-              onClick={() => setActiveStep('3d')}
+              onClick={() => { setFocus3d(null); setActiveStep('3d'); }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                 activeStep === '3d'
                   ? 'bg-white text-blue-700 shadow-2xs border border-slate-200/80 font-bold'
@@ -348,6 +349,7 @@ const ResourceManagement: React.FC = () => {
               requests={requests}
               warehouses={warehouses}
               incidents={incidents}
+              focusRequestId={focus3d}
               onOpenRequest={(req) => setSelectedRequestForModal(req)}
               onReview={(req) => { setActiveStep(2); setSelectedRequestForModal(req); }}
             />
@@ -366,6 +368,7 @@ const ResourceManagement: React.FC = () => {
               requests={requests}
               onSelectRequest={(req) => setSelectedRequestForModal(req)}
               onNavigateStage={(stage) => setActiveStep(stage)}
+              onShowIn3D={(req) => { setFocus3d(req.id); setActiveStep('3d'); }}
             />
           </motion.div>
         )}

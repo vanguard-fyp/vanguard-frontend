@@ -21,6 +21,8 @@ import {
   Play,
   X,
   Search,
+  Clock,
+  Link2,
 } from 'lucide-react';
 import { TeamCard } from '../../../components/ui/coordination/rescue/TeamCard';
 import { TeamDetailSlideOver } from '../../../components/ui/coordination/rescue/TeamDetailSlideOver';
@@ -44,7 +46,6 @@ import { MissionWizard } from './MissionWizard';
 import { TeamListFilters } from '../../../components/ui/coordination/rescue/TeamListFilters';
 import { containerAnim, itemAnim } from '../../../constants';
 import { formatDateTime } from '../../../utils/dateFormatter';
-import { Tag, type Tone } from '../../../components/ui/shared/Tag';
 import { relativeTime } from '../../../utils/display';
 import { sortSosQueue } from '../../../utils/sosQueue';
 import { activeResponses, type ActiveResponse } from '../../../utils/sosResponses';
@@ -61,24 +62,36 @@ const SOS_CLOSE_REASONS: { reason: string; status: 'Resolved' | 'Cancelled' }[] 
 const SOS_HINT_KM = 5;
 
 /* One size and shape for every SOS action; filled blue only for the next step. */
+/** Thin edge colour on the opened report, by SOS status. */
+const SOS_ACCENT: Record<string, string> = { Pending: '#d97706', Acknowledged: '#2563eb', Dispatched: '#0891b2', Resolved: '#0d9488', Cancelled: '#94a3b8' };
+/** "Ahmad bin Ali" → "AA". */
+const initialsOf = (name?: string | null) => {
+  const words = (name ?? '').split(/\s+/).filter((w) => w && !/^(bin|binti|bt|b|a\/l|a\/p)$/i.test(w));
+  return (words.slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
+};
 const SOS_BTN = 'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md border whitespace-nowrap transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600';
 const SOS_BTN_PRIMARY = 'bg-blue-600 hover:bg-blue-700 text-white border-blue-600 hover:border-blue-700';
 const SOS_BTN_RESOLVE = 'bg-teal-600 hover:bg-teal-700 text-white border-teal-600 hover:border-teal-700';
 const SOS_BTN_LINK = 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-transparent';
-const SOS_BTN_CLOSE = 'bg-red-50 hover:bg-red-100 text-red-700 border-transparent';
 const SOS_BTN_WARN = 'bg-white hover:bg-amber-50 text-amber-800 border-amber-300';
 
-const SOS_TONE: Record<string, Tone> = { Pending: 'amber', Acknowledged: 'blue', Dispatched: 'cyan', Resolved: 'teal', Cancelled: 'slate' };
-/** A labelled block in an SOS request's details. */
-const SosDetail: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="min-w-0">
-    <p className="text-[11px] font-semibold text-slate-500 mb-1">{label}</p>
-    {children}
-  </div>
-);
-
-/** Queue columns, shared by the header and every row so they stay aligned. */
-const SOS_COLS = 'md:grid-cols-[88px_minmax(0,1fr)_56px_112px_132px_20px]';
+/** Request type badge, in the same shape as a squad's agency badge. */
+const SOS_TYPE_STYLE: Record<string, string> = {
+  Rescue: 'bg-blue-50 text-blue-800 border-blue-200',
+  Evacuation: 'bg-blue-50 text-blue-800 border-blue-200',
+  Medical: 'bg-rose-50 text-rose-800 border-rose-200',
+  Food: 'bg-amber-50 text-amber-800 border-amber-200',
+  Supplies: 'bg-amber-50 text-amber-800 border-amber-200',
+  Shelter: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+};
+/** Status pill, in the same shape as a squad's status pill. */
+const SOS_PILL: Record<string, { dot: string; badge: string }> = {
+  Pending: { dot: 'bg-amber-500 animate-pulse', badge: 'bg-amber-50 text-amber-800 border-amber-200' },
+  Acknowledged: { dot: 'bg-blue-500', badge: 'bg-blue-50 text-blue-700 border-blue-200' },
+  Dispatched: { dot: 'bg-cyan-500 animate-pulse', badge: 'bg-cyan-50 text-cyan-800 border-cyan-200' },
+  Resolved: { dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  Cancelled: { dot: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600 border-slate-200' },
+};
 
 const RescueOperations: React.FC = () => {
   const teamsQuery = useRescueTeams();
@@ -351,36 +364,53 @@ const RescueOperations: React.FC = () => {
         ))}
       </motion.div>
 
-      {/* View Switcher Tabs */}
-      <motion.div variants={itemAnim} className="flex items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          onClick={() => setActiveTab('teams')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'teams'
-              ? 'bg-blue-600 text-white shadow-2xs'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-        >
-          <ShieldCheck size={14} />
-          <span>Rescue Squads Fleet ({teams.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('assistance')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${activeTab === 'assistance'
-              ? 'bg-blue-600 text-white shadow-2xs'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-        >
-          <LifeBuoy size={14} />
-          <span>Citizen SOS Assistance ({assistanceRequests.length})</span>
-          {pendingSosCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900 text-white font-mono">
-              {pendingSosCount}
-            </span>
-          )}
-        </button>
+      {/* View switcher: one joined control; the pill slides to the active side */}
+      <motion.div variants={itemAnim}>
+        <div role="tablist" aria-label="Rescue operations view" className="inline-flex items-center gap-0.5 p-1 rounded-xl bg-slate-100 border border-slate-200">
+          {([
+            { id: 'teams', label: `Rescue Squads Fleet (${teams.length})`, Icon: ShieldCheck, badge: 0 },
+            { id: 'assistance', label: `Citizen SOS Assistance (${assistanceRequests.length})`, Icon: LifeBuoy, badge: pendingSosCount },
+          ] as const).map(({ id, label, Icon, badge }) => {
+            const on = activeTab === id;
+            return (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={on}
+                onClick={() => setActiveTab(id)}
+                className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors ${on ? 'text-white' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                {on && (
+                  <motion.span layoutId="rescue-tab-pill" className="absolute inset-0 rounded-lg bg-blue-600 shadow-2xs" transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }} />
+                )}
+                <Icon size={14} className="relative" />
+                <span className="relative">{label}</span>
+                {badge > 0 && (
+                  <span className={`relative px-1.5 rounded-full text-[10px] font-mono ${on ? 'bg-white/25 text-white' : 'bg-slate-900 text-white'}`}>{badge}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </motion.div>
 
+      {/* The two views sit side by side: the new one slides in, and dragging sideways switches between them */}
+      <motion.div
+        key={activeTab}
+        variants={{ hidden: { opacity: 0, x: activeTab === 'assistance' ? 36 : -36 }, show: { opacity: 1, x: 0, transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] } } }}
+        initial="hidden"
+        animate="show"
+        drag="x"
+        dragDirectionLock
+        dragSnapToOrigin
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.18}
+        onDragEnd={(_, info) => {
+          if (info.offset.x < -90 && activeTab === 'teams') setActiveTab('assistance');
+          else if (info.offset.x > 90 && activeTab === 'assistance') setActiveTab('teams');
+        }}
+        className="space-y-5"
+      >
       {/* TAB 1: Rescue Squads Fleet */}
       {activeTab === 'teams' && (
         <DataRegion queries={[teamsQuery]} label="Rescue teams"><div className="space-y-4">
@@ -478,7 +508,7 @@ const RescueOperations: React.FC = () => {
                     value={sosSearch}
                     onChange={(e) => setSosSearch(e.target.value)}
                     placeholder="Search SOS by location, description, or reporter..."
-                    className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-blue-500 transition-colors"
+                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 transition-colors"
                   />
                 </div>
 
@@ -492,29 +522,30 @@ const RescueOperations: React.FC = () => {
                 </button>
               </div>
 
-              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mr-1">Status:</span>
-                {(['All', 'Pending', 'Acknowledged', 'Dispatched'] as const).map((st) => {
-                  const active = sosStatusFilter === st;
-                  const count = statusCounts[st] ?? 0;
-                  return (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => setSosStatusFilter(st)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${active
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                    >
-                      <span>{st}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${active ? 'bg-blue-700/60 text-white' : 'bg-slate-200 text-slate-600'
-                        }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Status:</span>
+                <div className="flex gap-1 flex-wrap">
+                  {(['All', 'Pending', 'Acknowledged', 'Dispatched'] as const).map((st) => {
+                    const active = sosStatusFilter === st;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setSosStatusFilter(st)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-bold transition-colors cursor-pointer ${active
+                            ? 'bg-slate-700 text-white border-slate-700'
+                            : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                          }`}
+                      >
+                        {st}
+                        <span className={`tabular-nums ${active ? 'text-white/70' : 'text-slate-400'}`}>{statusCounts[st] ?? 0}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="ml-auto text-[11px] text-slate-400 font-medium shrink-0">
+                  Showing {filteredAssistance.length} of {assistanceRequests.length} requests
+                </span>
               </div>
             </div>
 
@@ -531,16 +562,7 @@ const RescueOperations: React.FC = () => {
                 </p>
               </div>
             ) : (
-              <div className="bg-white border border-slate-200/70 rounded-xl overflow-hidden">
-                <div className={`hidden md:grid ${SOS_COLS} gap-x-4 px-4 py-2 bg-slate-50/70 text-[11px] font-medium text-slate-500`}>
-                  <span>Received</span>
-                  <span>Request</span>
-                  <span>People</span>
-                  <span>Status</span>
-                  <span className="sr-only">Next step</span>
-                  <span />
-                </div>
-                <ul className="divide-y divide-slate-100">
+              <ul className="space-y-2">
                 {filteredAssistance.map((sos: any) => {
                   const isPending = sos.status === 'Pending';
                   const isAcknowledged = sos.status === 'Acknowledged';
@@ -552,8 +574,9 @@ const RescueOperations: React.FC = () => {
                   const received = relativeTime(sos.created_at || sos.createdAt) ?? 'Unknown';
                   const people = sos.people_affected || sos.peopleAffected || 1;
                   const type = sos.request_type || sos.requestType || 'Rescue';
+                  /** "Medical Assistance" → "Medical": the badge keeps only the first word. */
+                  const shortType = String(type).trim().split(/\s+/)[0] || 'Rescue';
                   const contact = sos.reporter_contact || sos.reporterContact;
-                  const status = <Tag tone={SOS_TONE[sos.status] ?? 'slate'}>{sos.status}</Tag>;
                   const stop = (run: () => void) => (e: React.MouseEvent) => { e.stopPropagation(); run(); };
                   const nextStep = isClosed ? null : isPending ? (
                     <button type="button" onClick={stop(() => handleAcknowledgeAssistance(sos))} className={`${SOS_BTN} ${SOS_BTN_PRIMARY}`}>Acknowledge</button>
@@ -566,27 +589,39 @@ const RescueOperations: React.FC = () => {
                   ) : null;
 
                   return (
-                    <li key={sos.id} className={isClosed ? 'text-slate-500' : ''}>
-                      <div onClick={toggle} className={`grid grid-cols-[minmax(0,1fr)_auto] ${SOS_COLS} gap-x-4 gap-y-1 items-center px-4 py-2.5 cursor-pointer transition-colors ${open ? 'bg-blue-50/70' : 'hover:bg-slate-50'}`}>
-                        <span className="hidden md:block text-xs text-slate-600 tabular-nums whitespace-nowrap" title={formatDateTime(sos.created_at || sos.createdAt)}>{received}</span>
-                        <p className="min-w-0 text-[13px] text-slate-900 truncate">
-                          <span className="font-semibold">{type}</span>
-                          <span className="text-slate-500"> · </span>
-                          {sos.location}
-                          {mediaList.length > 0 && (
-                            <span className="ml-2 inline-flex items-center gap-0.5 text-[11px] text-slate-500 tabular-nums align-baseline">
-                              <Camera size={11} aria-hidden="true" />{mediaList.length}<span className="sr-only"> attachments</span>
+                    <li key={sos.id} className={`bg-white border rounded-xl overflow-hidden transition-all duration-200 ${open ? 'border-blue-300 shadow-md' : 'border-slate-200 shadow-xs hover:border-slate-300'}`}>
+                      {/* Same row shape as a squad: type badge, title with a meta line, status and action on the right */}
+                      <div onClick={toggle} className="cursor-pointer flex items-center gap-4 px-5 py-4">
+                        <span title={type} className={`text-[11px] font-bold px-2.5 py-1 rounded border shrink-0 w-[76px] text-center truncate ${SOS_TYPE_STYLE[shortType] ?? 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                          {shortType}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold truncate ${isClosed ? 'text-slate-500' : 'text-slate-900'}`}>{sos.location || 'Location not given'}</p>
+                          <div className="flex items-center gap-3 mt-0.5 flex-wrap text-xs text-slate-500 font-medium">
+                            <span className="flex items-center gap-1" title={formatDateTime(sos.created_at || sos.createdAt)}>
+                              <Clock size={11} className="text-slate-400" />{received}
                             </span>
-                          )}
-                        </p>
-                        <span className="hidden md:block text-xs text-slate-700 tabular-nums">{people}</span>
-                        <span className="hidden md:block">{status}</span>
-                        <span className="row-start-2 md:row-start-auto col-start-2 md:col-start-auto justify-self-end md:justify-self-start">{nextStep}</span>
-                        <button type="button" aria-expanded={open} aria-label={open ? 'Hide details' : 'Show details'} onClick={stop(toggle)}
-                          className="row-start-1 col-start-2 md:row-start-auto md:col-start-auto justify-self-end text-slate-400 hover:text-slate-700 rounded cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-600">
-                          <ChevronDown size={15} aria-hidden="true" className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-                        </button>
-                        <span className="md:hidden row-start-2 col-start-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">{status}<span className="tabular-nums">{received} · {people} {people === 1 ? 'person' : 'people'}</span></span>
+                            <span className="flex items-center gap-1">
+                              <Users size={11} className="text-slate-400" />{people} {people === 1 ? 'person' : 'people'}
+                            </span>
+                            {mediaList.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <Camera size={11} className="text-slate-400" />{mediaList.length}<span className="sr-only"> attachments</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`hidden sm:flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border ${(SOS_PILL[sos.status] ?? SOS_PILL.Cancelled).badge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${(SOS_PILL[sos.status] ?? SOS_PILL.Cancelled).dot}`} />
+                            {sos.status}
+                          </span>
+                          {nextStep}
+                          <button type="button" aria-expanded={open} aria-label={open ? 'Hide details' : 'Show details'} onClick={stop(toggle)}
+                            className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
+                            <ChevronDown size={16} aria-hidden="true" className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+                          </button>
+                        </div>
                       </div>
 
                       <AnimatePresence initial={false}>
@@ -594,61 +629,99 @@ const RescueOperations: React.FC = () => {
                         <motion.div key="details" className="overflow-hidden"
                           initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}>
-                        <div className="bg-blue-50/70 px-4 pb-4">
-                          <div className="bg-white rounded-xl overflow-hidden">
-                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_260px]">
-                              <div className="p-4 space-y-3.5 min-w-0">
-                                <SosDetail label="What the citizen reported">
-                                  <p className="text-[13px] text-slate-900 leading-relaxed bg-slate-50 rounded-lg px-3 py-2">{sos.description || 'No description given.'}</p>
-                                </SosDetail>
-                                {mediaList.length > 0 && (
-                                  <SosDetail label={`Photos and videos · ${mediaList.length}`}>
-                                    <div className="flex flex-wrap gap-1.5">
-                              {mediaList.map((url: string, idx: number) => {
-                                const isVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.includes('video');
-                                const title = `Citizen SOS Attachment #${idx + 1}`;
-                                return (
-                                  <button key={idx} type="button" aria-label={`Open attachment ${idx + 1}`} onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title })}
-                                    className="rounded-md overflow-hidden border border-slate-200 bg-slate-100 w-16 h-12 cursor-pointer hover:border-slate-400 transition-colors">
-                                    {isVideo ? (
-                                      <span className="w-full h-full flex items-center justify-center bg-slate-800 text-white"><Play size={14} aria-hidden="true" /></span>
-                                    ) : (
-                                      <img src={url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
-                                    )}
-                                  </button>
-                                );
-                              })}
+                        {/* Same layout as an opened squad: report beside the reporter, then the facts, then actions */}
+                        <div className="border-t border-slate-100 bg-slate-50/40 px-5 py-4 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-3">
+                            {/* What the citizen reported */}
+                            <div className="relative bg-white border border-slate-200 rounded-lg pl-4 pr-3 py-3 overflow-hidden min-w-0">
+                              <span className="absolute left-0 inset-y-0 w-[3px]" style={{ background: SOS_ACCENT[sos.status] ?? '#94a3b8' }} />
+                              <p className="text-[11px] font-medium text-slate-500">What the citizen reported</p>
+                              <p className="mt-1 text-[13px] text-slate-900 leading-relaxed">{sos.description || 'No description given.'}</p>
+                              {mediaList.length > 0 && (
+                                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                  {mediaList.map((url: string, idx: number) => {
+                                    const isVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.includes('video');
+                                    const title = `Citizen SOS Attachment #${idx + 1}`;
+                                    return (
+                                      <button key={idx} type="button" aria-label={`Open attachment ${idx + 1}`} onClick={() => setSelectedMediaModal({ url, type: isVideo ? 'video' : 'image', title })}
+                                        className="rounded-md overflow-hidden border border-slate-200 bg-slate-100 w-16 h-12 cursor-pointer hover:border-slate-400 transition-colors">
+                                        {isVideo ? (
+                                          <span className="w-full h-full flex items-center justify-center bg-slate-800 text-white"><Play size={14} aria-hidden="true" /></span>
+                                        ) : (
+                                          <img src={url} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                                  </SosDetail>
+
+                            {/* Reporter */}
+                            <div className="bg-white border border-slate-200 rounded-lg px-3 py-3 flex items-center gap-3 min-w-0">
+                              <span className="w-9 h-9 rounded-full bg-[#1e293b] text-white text-xs font-semibold flex items-center justify-center shrink-0" aria-hidden="true">
+                                {initialsOf(sos.reporter_name || sos.reporterName)}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-[11px] font-medium text-slate-500">Reporter</span>
+                                <span className="block text-sm font-semibold text-slate-900 truncate">{sos.reporter_name || sos.reporterName || 'Citizen'}</span>
+                                {contact ? (
+                                  <a href={`tel:${String(contact).replace(/\s/g, '')}`} className="inline-flex items-center gap-1 text-xs font-mono text-slate-600 hover:text-blue-700">
+                                    <Phone size={11} className="text-slate-400" aria-hidden="true" /> {contact}
+                                  </a>
+                                ) : (
+                                  <span className="block text-xs text-slate-400">No phone given</span>
                                 )}
-                                {isAcknowledged && !pendingSosSync[sos.id] && (() => {
-                                  const near = responsesFor(sos)[0];
-                                  return near && near.km != null && near.km <= SOS_HINT_KM && (
-                                    <p className="text-xs text-blue-900 bg-blue-50 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
-                                      <span className="min-w-0"><strong className="font-semibold">{near.teams[0]}</strong> is already on {near.displayId}, {near.km.toFixed(1)} km away</span>
-                                      <button type="button" onClick={() => handleOpenLink(sos, near.incidentId)} className={`${SOS_BTN} ${SOS_BTN_LINK} shrink-0`}>Link</button>
-                                    </p>
-                                  );
-                                })()}
-                                {isClosed && sos.closure_reason && (
-                                  <SosDetail label="Why it was closed"><p className="text-xs text-slate-800">{sos.closure_reason}</p></SosDetail>
-                                )}
-                              </div>
-                              <dl className="p-4 space-y-2.5 bg-slate-50/60 text-xs">
-                                <div><dt className="text-[11px] font-semibold text-slate-500">Reporter</dt><dd className="font-semibold text-slate-900 mt-0.5">{sos.reporter_name || sos.reporterName || 'Citizen'}</dd></div>
-                                <div><dt className="text-[11px] font-semibold text-slate-500">Phone</dt><dd className="mt-0.5">{contact
-                                  ? <a href={`tel:${String(contact).replace(/\s/g, '')}`} className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline tabular-nums"><Phone size={12} aria-hidden="true" />{contact}</a>
-                                  : <span className="text-slate-400">Not given</span>}</dd></div>
-                                <div><dt className="text-[11px] font-semibold text-slate-500">Received</dt><dd className="text-slate-800 mt-0.5 tabular-nums">{formatDateTime(sos.created_at || sos.createdAt)}</dd></div>
-                                <div><dt className="text-[11px] font-semibold text-slate-500">SOS ID</dt><dd className="text-slate-800 mt-0.5 tabular-nums">{sos.display_id || sos.displayId || 'Not assigned'}</dd></div>
-                              </dl>
+                              </span>
                             </div>
+                          </div>
+
+                          {/* Facts as chips, one line */}
+                          <div className="flex items-start gap-3">
+                            <span className="w-[72px] shrink-0 pt-1 text-[11px] font-medium text-slate-500">Details</span>
+                            <div className="flex flex-wrap gap-1.5 min-w-0">
+                              {[
+                                { Icon: Clock, text: formatDateTime(sos.created_at || sos.createdAt), title: 'Received' },
+                                { Icon: Users, text: `${people} ${people === 1 ? 'person' : 'people'}`, title: 'People needing help' },
+                                { Icon: LifeBuoy, text: type, title: 'Request type' },
+                              ].map(({ Icon, text, title }) => (
+                                <span key={title} title={title} className="inline-flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full bg-white border border-slate-200 text-xs text-slate-700 tabular-nums">
+                                  <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center shrink-0"><Icon size={12} strokeWidth={1.9} aria-hidden="true" /></span>
+                                  {text}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {isAcknowledged && !pendingSosSync[sos.id] && (() => {
+                            const near = responsesFor(sos)[0];
+                            return near && near.km != null && near.km <= SOS_HINT_KM && (
+                              <p className="text-xs text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+                                <span className="min-w-0"><strong className="font-semibold text-slate-900">{near.teams[0]}</strong> is already on {near.displayId}, {near.km.toFixed(1)} km away</span>
+                                <button type="button" onClick={() => handleOpenLink(sos, near.incidentId)} className={`${SOS_BTN} ${SOS_BTN_LINK} shrink-0`}>Link</button>
+                              </p>
+                            );
+                          })()}
+                          {isClosed && sos.closure_reason && (
+                            <div className="flex items-start gap-3">
+                              <span className="w-[72px] shrink-0 text-[11px] font-medium text-slate-500">Closed</span>
+                              <p className="text-xs text-slate-800">{sos.closure_reason}</p>
+                            </div>
+                          )}
+
+                          {/* Actions */}
+                          <div className="pt-3 border-t border-slate-200/70 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-mono text-slate-400">{sos.display_id || sos.displayId || 'No SOS ID'}</span>
                             {!isClosed && (
-                              <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-2.5">
+                              <div className="flex items-center gap-1">
                                 {isAcknowledged && !pendingSosSync[sos.id] && responsesFor(sos).length > 0 && (
-                                  <button type="button" onClick={() => handleOpenLink(sos)} className={`${SOS_BTN} ${SOS_BTN_LINK}`}>Link to Response</button>
+                                  <button type="button" onClick={() => handleOpenLink(sos)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-blue-700 hover:bg-blue-50 cursor-pointer">
+                                    <Link2 size={12} aria-hidden="true" /> Link to response
+                                  </button>
                                 )}
-                                <button type="button" onClick={() => handleCancelAssistance(sos)} className={`${SOS_BTN} ${SOS_BTN_CLOSE}`}><XCircle size={13} aria-hidden="true" />Close SOS</button>
+                                <button type="button" onClick={() => handleCancelAssistance(sos)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 hover:text-rose-700 hover:bg-rose-50 cursor-pointer">
+                                  <XCircle size={12} aria-hidden="true" /> Close SOS
+                                </button>
                               </div>
                             )}
                           </div>
@@ -659,12 +732,12 @@ const RescueOperations: React.FC = () => {
                     </li>
                   );
                 })}
-                </ul>
-              </div>
+              </ul>
             )}
           </motion.div>
         );
       })()}</DataRegion>)}
+      </motion.div>
 
       {/* Team Detail Slide-Over */}
       <AnimatePresence>

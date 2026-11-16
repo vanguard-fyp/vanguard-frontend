@@ -13,7 +13,7 @@ interface Scene {
 }
 
 const SCENES: Scene[] = [
-  { id: 'about', sky: 'calm', rain: 0, cloud: 0.25, sun: 0, storm: 0, flood: 0, slide: 0 },
+  { id: 'about', sky: 'calm', rain: 0, cloud: 0.6, sun: 0, storm: 0, flood: 0, slide: 0 },
   { id: 'resources', sky: 'flood', rain: 0.45, cloud: 0.7, sun: 0, storm: 0, flood: 1, slide: 0 },
   { id: 'publications', sky: 'slide', rain: 0, cloud: 0.2, sun: 1, storm: 0, flood: 0, slide: 1 },
   { id: 'history', sky: 'storm', rain: 1, cloud: 0.7, sun: 0, storm: 1, flood: 0.5, slide: 0 },

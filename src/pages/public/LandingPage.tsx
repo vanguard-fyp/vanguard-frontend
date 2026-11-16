@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ArrowUpRight, Phone } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Phone } from 'lucide-react';
 import { PublicHeader, PublicFooter } from '../../components/public/PublicChrome';
 import { MonitoringPlate, useSceneCycle } from '../../components/public/MonitoringPlate';
 import { WeatherStage } from '../../components/public/WeatherStage';
@@ -96,6 +96,7 @@ export const LandingPage: React.FC = () => {
                 ) : (
                   <Link to="/login" className="lf-btn lf-btn--spot">Sign in <ArrowRight size={16} className="lf-nudge" aria-hidden="true" /></Link>
                 )}
+                  <a href="#resources" className="lf-link lf-intro__more">See what is inside <ArrowDown size={14} aria-hidden="true" /></a>
                 </div>
               </div>
 
@@ -109,7 +110,8 @@ export const LandingPage: React.FC = () => {
                   transformOrigin: 'center center',
                 }}
               >
-                <MonitoringPlate scene={scene} still={reduced} />
+                <MonitoringPlate scene={scene} still={reduced} map />
+               
               </motion.div>
 
             </div>

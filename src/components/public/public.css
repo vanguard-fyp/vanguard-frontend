@@ -755,7 +755,26 @@
 /* Halftone carried down behind the shelf. */
 
 
-.lf-intro__cta { margin-top: 2rem; }
+.lf-intro__cta { margin-top: 2rem; display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.75rem; }
+.lf-intro__more { display: inline-flex; align-items: center; gap: .4rem; font-size: .9375rem; font-weight: 600; }
+.lf-intro__eyebrow {
+  margin: 0 0 1.1rem; display: flex; align-items: center; gap: .7rem;
+  font-size: .8125rem; font-weight: 600; letter-spacing: .04em; color: var(--lf-spot);
+}
+.lf-intro__eyebrow::before { content: ''; width: 1.75rem; height: 2px; background: currentColor; }
+.lf-intro__scene {
+  position: absolute; left: 0; right: 0; top: 100%; margin: .25rem 0 0; text-align: center;
+  font-size: .8125rem; color: var(--lf-ink-soft);
+}
+.lf-intro__scene strong { color: var(--lf-ink); font-weight: 600; }
+/* A far horizon under the first screen: two ranges of hills in the sky's own blue. */
+.lf--weather .lf-intro::after {
+  content: ''; position: absolute; inset: auto 0 0 0; z-index: -1; height: 20vh; pointer-events: none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 240' preserveAspectRatio='none'%3E%3Cpath d='M0 240V150l110-44 130 30 150-72 140 50 170-84 150 62 160-70 190 58V240z' fill='%235b8fd0' fill-opacity='.10'/%3E%3Cpath d='M0 240V196l160-34 150 22 180-58 130 30 170-64 150 46 260-52V240z' fill='%235b8fd0' fill-opacity='.14'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 40%, rgba(0, 0, 0, .55) 70%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent, #000 40%, rgba(0, 0, 0, .55) 70%, transparent 100%);
+}
 
 /* The halftone sits behind the introduction, never over its links. */
 .lf-intro > .lf-intro__grid { position: relative; z-index: 1; }

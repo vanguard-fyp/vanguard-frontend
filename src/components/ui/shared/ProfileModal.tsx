@@ -190,12 +190,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) =
             {/* Name + Email */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Display Name</label>
+                <label htmlFor="profile-display-name" className="block text-xs font-bold text-slate-800 mb-1">
+                  Display Name <span className="text-rose-500" aria-hidden="true">*</span>
+                </label>
                 <input
                   type="text"
+                  id="profile-display-name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   required
+                  aria-required="true"
+                  aria-invalid={submitted && !displayName.trim()}
                   className={`w-full px-3 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none font-medium ${
                     submitted && !displayName.trim() ? 'border-rose-400 focus:border-rose-500' : 'border-slate-200 focus:border-blue-600'}`}
                 />

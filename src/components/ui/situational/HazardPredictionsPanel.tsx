@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Activity, ChevronLeft, ChevronRight, CloudFog, CloudLightning, CloudRain, Flame, Loader2, Mountain, RefreshCw, Sun, Waves, Wind,
+  Activity, ChevronLeft, ChevronRight, Clock, CloudFog, CloudLightning, CloudRain, Flame, Mountain, RefreshCw, Sun, Waves, Wind,
   CheckCircle2, CircleDashed, X,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,7 +16,8 @@ import { NavyIcon, Overlay } from '../shared/Modal';
 import { FormattedMessageText } from '../../../utils/messageFormatter';
 import { parseAdvisory, splitAdvisory } from '../../../utils/advisoryText';
 import { formatDateTime } from '../../../utils/dateFormatter';
-import { MetHazardWatch } from './MetHazardWatch';
+// Heatwave and earthquake watch hidden from the drawer for now.
+// import { MetHazardWatch } from './MetHazardWatch';
 
 /** Said once under the context rows, rather than after each one. */
 const CONTEXT_NOTE = /\s*Context only, not part of the score\.$/;
@@ -281,7 +282,7 @@ const ease = [0.16, 1, 0.3, 1] as const;
  * own screen (Back returns to the list). No nested dropdowns.
  */
 export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, onPromoteToIncident }) => {
-  const { data: predictions = [], isLoading, isError, refetch, dataUpdatedAt } = useHazardPredictions();
+  const { data: predictions = [], isLoading, isError, refetch } = useHazardPredictions();
   const dismiss = useDismissPrediction();
   const { hasPermission } = useAuth();
   const toast = useToast();
@@ -343,8 +344,6 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
   ).sort((a, b) => b[1] - a[1]);
   const filtered = filter === 'All' ? sorted : sorted.filter((p) => (p.hazard_type || 'Other') === filter);
   const selected = selectedId ? predictions.find((p) => p.id === selectedId) ?? null : null;
-  const urgent = sorted.filter((p) => (p.hazard_score ?? 0) >= 80).length;
-  const checked = dataUpdatedAt ? relativeTime(new Date(dataUpdatedAt).toISOString()) : null;
 
   const runScan = () =>
     scan.mutate(undefined, {
@@ -360,6 +359,9 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
 
   const whenText = (p: HazardPrediction) =>
     isNum(p.projected_within_hours) ? (p.projected_within_hours === 0 ? 'Now' : `In about ${p.projected_within_hours} h`) : 'Timing unknown';
+  /** Short form for the list rows: "Now" / "12 h". */
+  const whenShort = (p: HazardPrediction) =>
+    isNum(p.projected_within_hours) ? (p.projected_within_hours === 0 ? 'Now' : `${p.projected_within_hours} h`) : 'Timing unknown';
 
   return (
     <Overlay>
@@ -379,22 +381,15 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
             <header className="px-5 py-4 text-white flex items-center justify-between gap-3 shrink-0" style={{ background: '#1e293b' }}>
               <div className="flex items-center gap-3 min-w-0">
               <NavyIcon icon={CloudLightning} />
-              <div className="min-w-0">
-                <h2 className="text-[15px] font-bold">Early warnings</h2>
-                <p className="text-xs text-slate-400 mt-0.5 truncate">
-                  {isLoading ? 'Loading…' : isError ? 'Unavailable right now' : predictions.length === 0
-                    ? `No hazards predicted${checked ? ` · checked ${checked}` : ''}`
-                    : `${predictions.length} forecast hazards${urgent ? ` · ${urgent} high risk` : ''} · not incidents yet`}
-                </p>
-              </div>
+              <h2 className="text-[15px] font-bold min-w-0">Early warnings</h2>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 {canManage && (
                   <button type="button" onClick={runScan} disabled={scanning}
-                    title="Checks every district's forecast (rain, river, wind, fire, drought, haze) and GDACS alerts now. It also runs automatically."
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/10 hover:bg-white/15 disabled:opacity-50 cursor-pointer">
-                    {scanning ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                    {scanning ? 'Scanning…' : 'Scan now'}
+                    aria-label={scanning ? 'Scanning for hazards' : 'Scan for hazards now'}
+                    title={scanning ? 'Scanning…' : "Scan now: checks every district's forecast (rain, river, wind, fire, drought, haze) and GDACS alerts. It also runs automatically."}
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 disabled:cursor-default cursor-pointer">
+                    <RefreshCw size={16} className={scanning ? 'animate-spin' : ''} />
                   </button>
                 )}
                 <button type="button" onClick={onClose} aria-label="Close early warnings"
@@ -428,7 +423,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                       </div>
                     )}
                     <div className="flex-1 overflow-y-auto">
-                      <MetHazardWatch />
+                      {/* <MetHazardWatch /> */}
                       {isError ? (
                         <p className="p-5 text-sm text-slate-600">Predictions could not be loaded. <button onClick={() => refetch()} className="font-semibold text-blue-600 cursor-pointer">Retry</button></p>
                       ) : isLoading ? (
@@ -436,7 +431,7 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                       ) : filtered.length === 0 ? (
                         <div className="p-10 text-center">
                           <p className="text-sm font-semibold text-slate-700">Nothing predicted right now</p>
-                          <p className="text-xs text-slate-400 mt-1">The scan runs automatically; use Scan now to check again.</p>
+                          <p className="text-xs text-slate-400 mt-1">The scan runs automatically; use the refresh button to check again.</p>
                         </div>
                       ) : (
                         <ul className="divide-y divide-slate-100 border-t border-slate-100">
@@ -452,16 +447,15 @@ export const HazardPredictionsDrawer: React.FC<DrawerProps> = ({ open, onClose, 
                                     <span className="block text-sm font-semibold text-slate-900 truncate">
                                       {fmtText(p.hazard_type, 'Hazard')} · {fmtText(p.district, 'Unknown district')}
                                     </span>
-                                    <span className="block text-xs text-slate-500 truncate mt-0.5">
-                                      {p.state ? `${p.state} · ` : ''}{whenText(p)}{isNum(p.exposed_population) ? ` · ${fmtNumber(p.exposed_population)} exposed` : ''}
-                                    </span>
-                                    {(p.history?.label || !!p.official_warnings?.length || !!p.relief_centres?.open) && (
-                                      <span className="flex flex-wrap gap-1.5 mt-1">
-                                        {!!p.relief_centres?.open && <Tag tone="red" title={reliefText(p)}>JKM centres open</Tag>}
-                                        {!!p.official_warnings?.length && <Tag tone="red" title={warningText(p)}>MET warning</Tag>}
-                                        {p.history?.label && <Tag tone="amber" title={historyText(p)}>{p.history.label}</Tag>}
+                                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 min-w-0">
+                                      {/* Quiet text for where and when; badges only for official signals. */}
+                                      <span className="inline-flex items-center gap-1 text-xs text-slate-500 whitespace-nowrap">
+                                        <Clock size={12} className="shrink-0 text-slate-400" aria-hidden="true" />
+                                        {whenShort(p)}
                                       </span>
-                                    )}
+                                      {!!p.official_warnings?.length && <Tag variant="outline" tone="amber" title={`MET Malaysia warning: ${warningText(p)}`}>MET</Tag>}
+                                      {!!p.relief_centres?.open && <Tag variant="outline" tone="teal" title={`JKM: ${reliefText(p)}`}>JKM</Tag>}
+                                    </span>
                                   </span>
                                   <span className="flex flex-col items-end gap-1 w-14 shrink-0" title="Hazard score (0–100)">
                                     <span className="text-sm font-bold tabular-nums" style={{ color: (p.hazard_score ?? 0) >= 65 ? color : '#0f172a' }}>{isNum(p.hazard_score) ? p.hazard_score : 'n/a'}</span>

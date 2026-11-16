@@ -22,11 +22,15 @@ import { relativeTime } from '../../../../utils/display';
 import { useUpdateRequestStatus } from '../../../../hooks/useResources';
 import { useToast } from '../../../../context/ToastContext';
 import { RequestSummary, ResourceDialog, requestRoute } from './ResourceUI';
+import { Tag } from '../../shared/Tag';
 
 interface AllocationTrackerStageProps {
   requests: ResourceRequest[];
   onSelectRequest?: (req: ResourceRequest) => void;
 }
+
+/** Delivered requests shown per page in the folded log. */
+const DONE_PAGE = 5;
 
 type Pending = { req: ResourceRequest; to: 'Dispatched' | 'Delivered'; label: string };
 
@@ -36,12 +40,13 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<Pending | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const [donePage, setDonePage] = useState(0);
 
   const active = requests.filter((r) => r.status === 'Approved' || r.status === 'Dispatched');
   const delivered = requests
     .filter((r) => r.status === 'Delivered')
     .sort((a, b) => (b.delivered_at ?? b.updated_at ?? '').localeCompare(a.delivered_at ?? a.updated_at ?? ''))
-    .slice(0, 8);
+;
 
   const advance = ({ req, to }: Pending) =>
     updateStatus.mutate(
@@ -96,34 +101,21 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
         const dispatched = req.status === 'Dispatched';
         return (
           <div key={req.id} className={`bg-white border rounded-2xl shadow-xs overflow-hidden ${open ? 'border-blue-200' : 'border-slate-200'}`}>
-            {/* Summary */}
-            <div className="p-5 flex items-start justify-between gap-4 flex-wrap md:flex-nowrap">
-              <button type="button" onClick={() => setExpandedId(open ? null : req.id)} className="min-w-0 space-y-1.5 text-left cursor-pointer">
-                <span className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-slate-400">{req.display_id}</span>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide ${dispatched ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}
-                  >
-                    {steps[at]?.label ?? req.status}
-                  </span>
-                  {req.requested_at && <span className="text-[11px] text-slate-400">{formatDateTime(req.requested_at)}</span>}
+            {/* Summary: what, where to, where it is now, what to do next */}
+            <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+              <button type="button" onClick={() => setExpandedId(open ? null : req.id)} className="min-w-0 space-y-1 text-left cursor-pointer">
+                <span className="flex items-center gap-2 min-w-0">
+                  <Tag variant="outline" tone={dispatched ? 'cyan' : 'blue'}>{steps[at]?.label ?? req.status}</Tag>
+                  <span className="text-sm font-bold text-slate-900 truncate">{req.item_requested ?? 'Requested supplies'}</span>
                 </span>
-                <span className="block text-sm font-bold text-slate-900">{req.item_requested ?? 'Requested supplies'}</span>
-                <span className="flex items-center gap-2 text-xs flex-wrap">
-                  <span className="flex items-center gap-1 font-semibold text-slate-700">
-                    <Package size={13} className="text-amber-600" />
-                    {req.quantity_requested.toLocaleString()} {req.unit}
-                  </span>
-                  <span className="text-slate-300">&#8594;</span>
-                  <span className="flex items-center gap-1 font-semibold text-blue-700">
-                    <MapPin size={13} />
-                    {to} ({req.agency})
-                  </span>
+                <span className="block text-[13px] text-slate-700">
+                  <span className="font-bold text-slate-900 tabular-nums">{req.quantity_requested.toLocaleString()} {req.unit}</span>
+                  <span className="text-slate-400"> → </span>
+                  {to}
                 </span>
               </button>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {action && (
                   <button
                     onClick={() => setConfirming({ req, to: action.to, label: action.label })}
@@ -139,10 +131,11 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                   type="button"
                   onClick={() => setExpandedId(open ? null : req.id)}
                   aria-expanded={open}
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                  aria-label={open ? 'Hide details' : 'Show details'}
+                  title={open ? 'Hide details' : 'Show details'}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
                 >
-                  {open ? 'Hide Lifecycle' : 'Track Lifecycle'}
-                  {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
               </div>
             </div>
@@ -204,6 +197,10 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                       </div>
                     </div> */}
 
+                    <p className="text-xs text-slate-500">
+                      {req.agency} · {flow === 'replenishment' ? 'Depot restock' : 'Incident requisition'} · <span className="font-mono">{req.display_id}</span>
+                      {req.requested_at && ` · requested ${formatDateTime(req.requested_at)}`}
+                    </p>
                     <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                       <div>
                         <dt className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{flow === 'replenishment' ? 'Supplier' : 'Dispatch origin'}</dt>
@@ -247,7 +244,7 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
           </button>
           {showDone && (
             <div className="divide-y divide-slate-100 border-t border-slate-100">
-              {delivered.map((req) => (
+              {delivered.slice(donePage * DONE_PAGE, donePage * DONE_PAGE + DONE_PAGE).map((req) => (
                 <button
                   type="button"
                   key={req.id}
@@ -259,11 +256,22 @@ export const AllocationTrackerStage: React.FC<AllocationTrackerStageProps> = ({ 
                     <span className="font-semibold text-slate-800">{req.item_requested || 'Supplies'}</span>
                     <span className="text-slate-500"> ({req.quantity_requested.toLocaleString()} {req.unit}) · {requestRoute(req).to}</span>
                   </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 shrink-0">
+                  <Tag variant="outline" tone="teal" className="shrink-0">
                     {req.delivered_at ? `Delivered ${relativeTime(req.delivered_at)}` : 'Delivered'}
-                  </span>
+                  </Tag>
                 </button>
               ))}
+              {delivered.length > DONE_PAGE && (
+                <div className="px-5 py-2 flex items-center justify-between text-xs text-slate-500">
+                  <span className="tabular-nums">
+                    {donePage * DONE_PAGE + 1}–{Math.min(delivered.length, (donePage + 1) * DONE_PAGE)} of {delivered.length}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <button type="button" disabled={donePage === 0} onClick={() => setDonePage((n) => n - 1)} className="px-2 py-1 rounded-md hover:bg-slate-100 disabled:opacity-40 cursor-pointer disabled:cursor-default">Previous</button>
+                    <button type="button" disabled={(donePage + 1) * DONE_PAGE >= delivered.length} onClick={() => setDonePage((n) => n + 1)} className="px-2 py-1 rounded-md hover:bg-slate-100 disabled:opacity-40 cursor-pointer disabled:cursor-default">Next</button>
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

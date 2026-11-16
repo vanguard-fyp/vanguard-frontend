@@ -162,7 +162,7 @@ export const RadarRoamer: React.FC<Props> = ({ scene, still }) => {
     <>
       <canvas ref={trailRef} className="lf-wake" aria-hidden="true" />
       <div ref={ref} className="lf-roamer" aria-hidden="true">
-        <MonitoringPlate scene={scene} still={still} compact={!big} />
+        <MonitoringPlate scene={scene} still={still} compact={!big} map={big} />
       </div>
     </>
   );

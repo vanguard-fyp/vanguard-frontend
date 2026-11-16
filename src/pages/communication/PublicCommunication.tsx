@@ -1,7 +1,7 @@
 import { DataRegion } from '../../components/common/DataRegion';
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Megaphone, AlertTriangle, Shield, CheckCircle2, Bell, EyeOff } from 'lucide-react';
+import { Plus, Megaphone, AlertTriangle, Shield, CheckCircle2, Bell, EyeOff, CalendarDays } from 'lucide-react';
 import {
   useAnnouncements,
   useCreateAnnouncement,
@@ -26,6 +26,25 @@ const parseTime = (dateStr?: string | null): number => {
 
 const isActiveAnnouncement = (val: any): boolean => {
   return val === true || val === 1 || val === 'true' || val === 'True';
+};
+
+/** Calendar day in Malaysia time, e.g. "2026-11-16". */
+const dayKeyMYT = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }) : 'unknown');
+
+/** Consecutive broadcasts grouped under "Today", "Yesterday" or the date, keeping the list's order. */
+const groupByDay = (list: PublicAnnouncement[]) => {
+  const today = dayKeyMYT(new Date().toISOString());
+  const yesterday = dayKeyMYT(new Date(Date.now() - 86_400_000).toISOString());
+  const groups: { key: string; label: string; items: PublicAnnouncement[] }[] = [];
+  list.forEach((a) => {
+    const k = dayKeyMYT(a.issued_at);
+    const last = groups[groups.length - 1];
+    if (last && last.key === k) { last.items.push(a); return; }
+    const label = k === today ? 'Today' : k === yesterday ? 'Yesterday' : k === 'unknown' ? 'Date not recorded'
+      : new Date(`${k}T00:00:00+08:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kuala_Lumpur' });
+    groups.push({ key: `${k}-${groups.length}`, label, items: [a] });
+  });
+  return groups;
 };
 
 const PublicCommunication: React.FC = () => {
@@ -259,28 +278,42 @@ const PublicCommunication: React.FC = () => {
               <p className="text-xs text-slate-400 mt-1">Try clearing your search query or selecting 'All' categories</p>
             </div>
           ) : (
-            pagedAnnouncements.map((ann) => (
-              <motion.div
-                key={ann.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.15 }}
-              >
-                <CommunicationCard
-                  announcement={ann}
-                  pushJobs={pushJobsQuery.isError ? undefined : pushJobsByAnnouncement.get(ann.id) ?? []}
-                  isExpanded={expandedId === ann.id}
-                  onToggleExpand={() =>
-                    setExpandedId(expandedId === ann.id ? null : ann.id)
-                  }
-                  onToggleActive={handleToggleActive}
-                  onDelete={handleDelete}
-                  onResend={handleResend}
-                  isResending={updateMutation.isPending && updateMutation.variables?.id === ann.id}
-                />
-              </motion.div>
-            ))
+            /* Timeline: one day heading, then that day's broadcasts on a rail */
+            <div className="bg-white border border-slate-200 rounded-xl shadow-xs px-3 sm:px-4 py-3">
+              {groupByDay(pagedAnnouncements).map(({ key, label, items }) => (
+                <section key={key} aria-label={label}>
+                  <h3 className="grid grid-cols-[52px_40px_minmax(0,1fr)] gap-x-2 items-center">
+                    <span />
+                    <span className="relative flex justify-center self-stretch">
+                      <span className="absolute inset-y-0 w-[2px] bg-slate-300" aria-hidden="true" />
+                    </span>
+                    <span className="py-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#1e293b] text-white text-[11px] font-semibold">
+                        <CalendarDays size={12} aria-hidden="true" />
+                        {label}
+                        <span className="text-white/60 font-normal tabular-nums">· {items.length}</span>
+                      </span>
+                    </span>
+                  </h3>
+                  <ol>
+                    {items.map((ann, i) => (
+                      <CommunicationCard
+                        key={ann.id}
+                        announcement={ann}
+                        isLast={i === items.length - 1}
+                        pushJobs={pushJobsQuery.isError ? undefined : pushJobsByAnnouncement.get(ann.id) ?? []}
+                        isExpanded={expandedId === ann.id}
+                        onToggleExpand={() => setExpandedId(expandedId === ann.id ? null : ann.id)}
+                        onToggleActive={handleToggleActive}
+                        onDelete={handleDelete}
+                        onResend={handleResend}
+                        isResending={updateMutation.isPending && updateMutation.variables?.id === ann.id}
+                      />
+                    ))}
+                  </ol>
+                </section>
+              ))}
+            </div>
           )}
         </AnimatePresence>
         {filteredAnnouncements.length > 0 && (

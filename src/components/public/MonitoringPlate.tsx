@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 /* The radar from the original landing page, redrawn as a printed plate.
-   Everything here is illustrative: scenes are hazard types, not places,
-   and no blip represents a real incident. */
+   Everything here is illustrative: scenes are hazard types and no blip
+   represents a real incident. With `map`, a simplified outline of Malaysia
+   sits under the sweep and the blips stand over regions where that hazard is
+   typical; they are still examples, not live data. */
 
 export const SWEEP_SECONDS = 9;
 const SWEEPS_PER_SCENE = 2;
@@ -78,18 +80,60 @@ const wedge = (from: number, to: number, r: number) => {
 
 const TRAIL = [0.2, 0.13, 0.085, 0.055, 0.032, 0.016];
 
+/* Malaysia, hand-simplified (longitude, latitude), drawn flat: this close to
+   the equator a degree is nearly the same length both ways. */
+const DEG = 26; // plate units per degree
+const MID = [109.5, 3.95] as const;
+const place = (lng: number, lat: number) => [C + (lng - MID[0]) * DEG, C - (lat - MID[1]) * DEG] as const;
+const outline = (pts: number[][]) => `${pts.map(([lng, lat], i) => `${i ? 'L' : 'M'}${place(lng, lat).map((v) => v.toFixed(1)).join(' ')}`).join('')}Z`;
+
+const PENINSULA = outline([
+  [100.13, 6.42], [100.2, 6.7], [100.42, 6.52], [100.85, 6.25], [101.1, 5.65], [101.6, 5.9], [101.8, 5.75], [101.97, 6.02],
+  [102.1, 6.24], [102.3, 6.2], [102.57, 5.83], [103.14, 5.33], [103.43, 4.77], [103.45, 4.23], [103.36, 3.8], [103.45, 3.5],
+  [103.5, 2.8], [103.85, 2.43], [104.27, 1.37], [104.1, 1.35], [103.76, 1.46], [103.51, 1.27], [103.38, 1.48], [102.9, 1.8],
+  [102.56, 2.05], [102.25, 2.19], [101.79, 2.52], [101.3, 3.0], [101.24, 3.34], [100.98, 3.77], [100.85, 3.98], [100.6, 4.23],
+  [100.55, 4.85], [100.37, 5.4], [100.35, 5.65], [100.3, 6.1],
+]);
+const BORNEO = outline([
+  [109.65, 2.08], [109.78, 1.8], [110.35, 1.7], [111.0, 1.5], [111.2, 1.75], [111.32, 2.78], [112.1, 2.9], [113.03, 3.17],
+  [113.7, 3.9], [113.98, 4.4], [114.08, 4.59], [114.6, 4.0], [115.3, 4.3], [115.15, 4.9], [115.55, 5.05], [115.57, 5.55],
+  [116.05, 5.97], [116.33, 6.4], [116.74, 7.03], [116.85, 6.55], [117.25, 6.9], [117.6, 6.5], [118.1, 5.85], [118.6, 5.5],
+  [119.27, 5.2], [118.9, 5.0], [118.33, 5.03], [118.2, 4.75], [118.62, 4.48], [117.9, 4.25], [117.6, 4.17], [116.5, 4.35],
+  [115.9, 4.35], [115.65, 4.2], [115.65, 3.4], [115.5, 3.0], [115.1, 2.6], [114.8, 2.25], [114.75, 1.45], [113.9, 1.3],
+  [113.0, 1.4], [112.2, 1.45], [111.8, 1.0], [111.2, 1.05], [110.6, 0.87], [110.2, 1.2], [109.6, 1.45], [109.55, 1.9],
+]);
+
+/** Example regions per hazard scene, in the same order as SCENES: [longitude, latitude, severity]. */
+const MAP_BLIPS: [number, number, 0 | 1 | 2][][] = [
+  [[102.25, 6.1, 2], [103.1, 5.3, 1], [103.3, 3.8, 1], [102.8, 2.5, 0], [110.35, 1.55, 0], [111.83, 2.3, 1], [115.75, 5.35, 0]],
+  [[101.38, 4.47, 1], [101.8, 3.3, 2], [116.57, 5.98, 1], [112.93, 2.02, 0], [100.27, 5.42, 0]],
+  [[101.6, 3.1, 1], [103.7, 1.5, 0], [102.25, 2.2, 0], [111.46, 1.24, 1], [114.0, 4.4, 0], [110.35, 1.55, 0]],
+  [[100.3, 5.4, 0], [99.8, 6.35, 1], [116.84, 6.88, 0], [118.6, 4.48, 0]],
+];
+
 interface PlateProps {
   scene: number;
   still?: boolean;
   className?: string;
   /** Hide bearing labels at small sizes. */
   compact?: boolean;
+  /** Draw Malaysia under the sweep and stand the blips over it. */
+  map?: boolean;
 }
 
-export const MonitoringPlate: React.FC<PlateProps> = ({ scene, still = false, className, compact = false }) => {
+export const MonitoringPlate: React.FC<PlateProps> = ({ scene, still = false, className, compact = false, map = false }) => {
   const t0 = useRef<number>(performance.now());
   const ticks = useMemo(() => Array.from({ length: 72 }, (_, i) => i * 5), []);
   const current = SCENES[scene % SCENES.length];
+  const blips = map
+    ? MAP_BLIPS[scene % SCENES.length].map(([lng, lat, s]) => {
+        const [x, y] = place(lng, lat);
+        return { x, y, s, a: (Math.atan2(x - C, C - y) * 180) / Math.PI };
+      })
+    : current.blips.map((b) => {
+        const [x, y] = polar(b.a, b.d * OUTER);
+        return { x, y, s: b.s, a: b.a };
+      });
 
   // Phase each ping so it fires as the sweep crosses the blip.
   const elapsedDeg = (((performance.now() - t0.current) / 1000) / SWEEP_SECONDS) * 360;
@@ -100,13 +144,21 @@ export const MonitoringPlate: React.FC<PlateProps> = ({ scene, still = false, cl
       className={`lf-plate ${className ?? ''}`}
       data-still={still}
       role="img"
-      aria-label={`Illustrative monitoring view: ${current.name}. Not live data.`}
+      // aria-label={`Illustrative monitoring view: ${current.name}. Not live data.`}
       style={{ ['--lf-sweep-dur' as string]: `${SWEEP_SECONDS}s` }}
     >
       {/* paper disc so the halftone field never shows through */}
       <circle cx={C} cy={C} r={OUTER + 12} fill="var(--lf-stock)" />
       <circle cx={C} cy={C} r={OUTER + 12} fill="none" stroke="var(--lf-ink)" strokeWidth="1.25" />
       <circle cx={C} cy={C} r={OUTER} fill="none" stroke="var(--lf-ink)" strokeWidth="0.75" />
+
+      {map && (
+        <g opacity="0.9">
+          {[PENINSULA, BORNEO].map((d) => (
+            <path key={d.slice(0, 24)} d={d} fill="var(--lf-spot)" fillOpacity="0.1" stroke="var(--lf-ink)" strokeOpacity="0.45" strokeWidth="0.9" strokeLinejoin="round" />
+          ))}
+        </g>
+      )}
 
       {RINGS.map((r) => (
         <circle key={r} cx={C} cy={C} r={r} fill="none" stroke="var(--lf-rule-strong)" strokeWidth="0.75" />
@@ -141,8 +193,8 @@ export const MonitoringPlate: React.FC<PlateProps> = ({ scene, still = false, cl
       )}
 
       <g key={scene} className="lf-scene">
-        {current.blips.map((b, i) => {
-          const [x, y] = polar(b.a, b.d * OUTER);
+        {blips.map((b, i) => {
+          const { x, y } = b;
           const r = SEVERITY_RAMP[b.s].r;
           const phase = (((elapsedDeg - b.a) % 360) + 360) % 360;
           return (

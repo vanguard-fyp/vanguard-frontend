@@ -127,14 +127,14 @@ export function describeRecommendation(
 export const RecommendationLine: React.FC<{ req: ResourceRequest; compact?: boolean }> = ({ req, compact = true }) => {
   const { data: rec, isLoading, isError } = useRequestRecommendation(req.id);
   if (isError) return <p className="text-xs text-slate-400">AI decision advisory unavailable</p>;
-  if (isLoading || !rec) return <AiSuggestion title="AI Decision Advisory" loading compact />;
+  if (isLoading || !rec) return <AiSuggestion title="AI suggestion" loading compact />;
   const d = describeRecommendation(rec, req);
   // The backend plan: one action sentence plus the facts behind it (queue,
   // safety level, incident). The LLM wording is on request, in full view only.
   return (
     <AiSuggestion
       tone={d.tone}
-      title="AI Decision Advisory"
+      title="AI suggestion"
       meta={rec.confidence != null ? `${Math.round(rec.confidence)}% confidence` : undefined}
       headline={<AiVerdict tone={d.tone} verdict={d.status}>{rec.action ?? d.headline}</AiVerdict>}
       compact={compact}

@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  History,
   PackagePlus,
   Search,
   Send,
@@ -16,7 +15,9 @@ import type { ResourceItem, ResourceRequest, Warehouse } from '../../../../types
 import { useDeleteInventoryItem, useInventory, useStockAdvisory, useWarehouses } from '../../../../hooks';
 import { useToast } from '../../../../context/ToastContext';
 import { StockAdvisoryCard } from './ResourceAdvisory';
+import { Tag, type Tone } from '../../shared/Tag';
 import { requestFlow } from '../../../../utils/resourceFlow';
+import { relativeTime } from '../../../../utils/display';
 
 /** resource_types.category values allowed by the schema (refine-schema.sql). */
 const RESOURCE_CATEGORIES = ['Food', 'Medical supplies', 'Rescue equipment', 'Vehicles', 'Emergency supplies', 'Other'];
@@ -28,12 +29,13 @@ const STOCK_TONE: Record<string, { bar: string; text: string; dot: string }> = {
   Sufficient: { bar: 'bg-emerald-500', text: 'text-slate-900', dot: 'bg-emerald-500' },
 };
 
-const REQUEST_TONE: Record<string, string> = {
-  'Pending Approval': 'text-amber-700',
-  Approved: 'text-blue-700',
-  Dispatched: 'text-blue-700',
-  Delivered: 'text-emerald-700',
-  Rejected: 'text-red-700',
+/** Request status as an outline tag, the same way incident status is shown. */
+const REQUEST_TONE: Record<string, Tone> = {
+  'Pending Approval': 'amber',
+  Approved: 'blue',
+  Dispatched: 'cyan',
+  Delivered: 'teal',
+  Rejected: 'red',
 };
 
 interface InventoryStageProps {
@@ -49,6 +51,8 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCrea
   const [openDepots, setOpenDepots] = useState<Record<string, boolean>>({});
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  /** The stock line whose full request history is open (others show the latest 3). */
+  const [showAllHistory, setShowAllHistory] = useState<string | null>(null);
 
   const { data: inventory = [], isLoading, isError, refetch } = useInventory();
   const { data: warehouses = [] } = useWarehouses();
@@ -174,8 +178,8 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCrea
               </div>
               <div className="flex items-center gap-3 shrink-0 text-[11px] font-semibold">
                 <span className="text-slate-500">{d.items.length} items</span>
-                {d.critical > 0 && <span className="flex items-center gap-1 text-red-700"><span className="w-2 h-2 rounded-full bg-red-500" />{d.critical} critical</span>}
-                {d.low > 0 && <span className="flex items-center gap-1 text-amber-700"><span className="w-2 h-2 rounded-full bg-amber-500" />{d.low} low</span>}
+                {d.critical > 0 && <Tag tone="red">{d.critical} critical</Tag>}
+                {d.low > 0 && <Tag tone="amber">{d.low} low</Tag>}
               </div>
             </button>
 
@@ -256,7 +260,7 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCrea
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.18 }}
-                            className="overflow-hidden bg-slate-50/70 px-4 py-3 space-y-3"
+                            className="overflow-hidden bg-slate-50/50 px-4 py-3 space-y-3"
                           >
                             <StockAdvisoryCard
                               item={advisoryById[item.id]}
@@ -266,23 +270,38 @@ export const InventoryStage: React.FC<InventoryStageProps> = ({ requests, onCrea
                               onRetry={() => advisory.refetch()}
                             />
                             <div>
-                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                                <History size={11} /> Requests ({history.length})
+                              <p className="text-[11px] font-medium text-slate-500 mb-1">
+                                Request history{history.length > 0 && <span className="text-slate-400"> · {history.length}</span>}
                               </p>
                               {history.length === 0 ? (
-                                <p className="text-[11px] text-slate-400">No requests for this item yet.</p>
+                                <p className="text-xs text-slate-400">No requests for this item yet.</p>
                               ) : (
-                                <div className="space-y-1">
-                                  {history.slice(0, 6).map((r) => (
-                                    <div key={r.id} className="flex items-center justify-between text-[11px] bg-white border border-slate-200 rounded-md px-2.5 py-1.5">
-                                      <span className="text-slate-700">
-                                        <span className="font-mono text-slate-400 mr-2">{r.display_id}</span>
-                                        {requestFlow(r) === 'replenishment' ? 'Restock' : 'To incident'} · {r.quantity_requested.toLocaleString()} {r.unit}
-                                      </span>
-                                      <span className={`font-bold ${REQUEST_TONE[r.status] ?? 'text-slate-600'}`}>{r.status}</span>
-                                    </div>
-                                  ))}
-                                </div>
+                                <>
+                                  <ul className="divide-y divide-slate-200/70 border-y border-slate-200/70">
+                                    {(showAllHistory === item.id ? history : history.slice(0, 3)).map((r) => {
+                                      const when = r.delivered_at ?? r.dispatched_at ?? r.approved_at ?? r.requested_at;
+                                      return (
+                                        <li key={r.id} className="grid grid-cols-[104px_minmax(0,1fr)_auto_64px] items-center gap-3 py-1.5 text-xs">
+                                          <span className="text-[11px] text-slate-400">{r.display_id}</span>
+                                          <span className="text-slate-700 truncate">
+                                            {requestFlow(r) === 'replenishment' ? 'Restock' : 'To incident'} · <span className="tabular-nums">{r.quantity_requested.toLocaleString()}</span> {r.unit}
+                                          </span>
+                                          <Tag variant="outline" tone={REQUEST_TONE[r.status] ?? 'slate'}>{r.status}</Tag>
+                                          <span className="text-right text-[11px] text-slate-400 tabular-nums">{relativeTime(when) ?? ''}</span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                  {history.length > 3 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowAllHistory(showAllHistory === item.id ? null : item.id)}
+                                      className="mt-1.5 text-xs font-medium text-blue-700 hover:underline cursor-pointer"
+                                    >
+                                      {showAllHistory === item.id ? 'Show latest 3' : `Show all ${history.length}`}
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </motion.div>

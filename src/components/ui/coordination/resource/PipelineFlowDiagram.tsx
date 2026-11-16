@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   AlertTriangle,
-  ArrowDown,
   ArrowUpRight,
+  Box,
   Building2,
   ChevronDown,
   ChevronUp,
@@ -23,6 +23,8 @@ interface PipelineFlowDiagramProps {
   requests: ResourceRequest[];
   onNavigateStage?: (stage: 1 | 2 | 3) => void;
   onSelectRequest?: (req: ResourceRequest) => void;
+  /** open the 3D flow with this request selected */
+  onShowIn3D?: (req: ResourceRequest) => void;
 }
 
 interface StatItem {
@@ -49,32 +51,81 @@ interface Stage {
 
 const sumQty = (rs: ResourceRequest[]) => rs.reduce((s, r) => s + (r.quantity_requested || 0), 0);
 
-/* ── Flow chart: source node ──(n requests)──▶ destination node ───────────── */
-
-type NodeKind = 'supplier' | 'depot' | 'incident';
-const NODE: Record<NodeKind, { icon: React.ReactNode; cls: string }> = {
-  supplier: { icon: <Factory size={13} />, cls: 'border-slate-300 bg-slate-50 text-slate-700' },
-  depot: { icon: <Warehouse size={13} />, cls: 'border-amber-300 bg-amber-50 text-amber-900' },
-  incident: { icon: <AlertTriangle size={13} />, cls: 'border-rose-300 bg-rose-50 text-rose-900' },
+/* Same road, lots and status colours as the 3D flow, so both views read alike. */
+const ROAD = '#c5cdd8';
+const LOT = '#dfe5ec';
+type Mark = 'Pending Approval' | 'Approved' | 'Dispatched' | 'Delivered';
+const STATUS_MARK: Record<Mark, { hex: string; label: string; at: number }> = {
+  'Pending Approval': { hex: '#f59e0b', label: 'Waiting for approval', at: 5 },
+  Approved: { hex: '#3b82f6', label: 'Approved, at the origin', at: 22 },
+  Dispatched: { hex: '#06b6d4', label: 'On the way', at: 58 },
+  Delivered: { hex: '#14b8a6', label: 'Delivered', at: 95 },
 };
+const MARKS = Object.keys(STATUS_MARK) as Mark[];
 
-const FlowNode: React.FC<{ kind: NodeKind; label: string }> = ({ kind, label }) => (
-  <span className={`inline-flex items-center gap-1.5 max-w-[220px] px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${NODE[kind].cls}`}>
-    <span className="shrink-0">{NODE[kind].icon}</span>
-    <span className="truncate">{label}</span>
+/** Side view of the 3D flow's truck: body in the status colour. */
+const TruckGlyph: React.FC<{ hex: string }> = ({ hex }) => (
+  <svg width="30" height="18" viewBox="0 0 30 18" aria-hidden>
+    <rect x="1" y="2" width="18" height="10" rx="1.6" fill={hex} />
+    <rect x="1" y="2" width="18" height="3" rx="1.6" fill="#ffffff" opacity="0.25" />
+    <path d="M20 5h5.2l3.3 3.6V12H20z" fill="#f8fafc" stroke="#64748b" strokeWidth="0.9" strokeLinejoin="round" />
+    <path d="M22 6.4h2.6l1.7 1.9H22z" fill="#93c5fd" />
+    <rect x="0.5" y="12" width="28.5" height="1.6" rx="0.8" fill="#334155" />
+    <circle cx="6.5" cy="14.4" r="2.6" fill="#1e293b" />
+    <circle cx="6.5" cy="14.4" r="1" fill="#cbd5e1" />
+    <circle cx="23" cy="14.4" r="2.6" fill="#1e293b" />
+    <circle cx="23" cy="14.4" r="1" fill="#cbd5e1" />
+  </svg>
+);
+
+/** Delivered supplies: the crates the 3D flow leaves at the destination. */
+const CrateGlyph: React.FC<{ hex: string }> = ({ hex }) => (
+  <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden>
+    {[[1, 9], [11, 9], [6, 1]].map(([x, y]) => (
+      <g key={`${x},${y}`}>
+        <rect x={x} y={y} width="9" height="8" rx="1.2" fill={hex} />
+        <path d={`M${x} ${y + 3}h9M${x + 4.5} ${y}v8`} stroke="#ffffff" strokeWidth="0.8" opacity="0.55" />
+      </g>
+    ))}
+  </svg>
+);
+
+/** A request not yet approved: the amber beacon from the 3D flow. */
+const BeaconGlyph: React.FC<{ hex: string; still: boolean }> = ({ hex, still }) => (
+  <span className="relative flex w-4 h-4 items-center justify-center" aria-hidden>
+    {!still && <span className="absolute inset-0 rounded-sm rotate-45 animate-ping opacity-50" style={{ background: hex }} />}
+    <span className="relative w-3 h-3 rounded-[3px] rotate-45" style={{ background: hex }} />
   </span>
 );
 
-/** Edge colour follows the least-advanced request on the route (where attention is needed). */
-const edgeTone = (rs: ResourceRequest[]) =>
-  rs.some((r) => r.status === 'Pending Approval')
-    ? { line: 'bg-amber-400', head: 'border-l-amber-400', text: 'text-amber-800' }
-    : rs.some((r) => r.status === 'Approved' || r.status === 'Dispatched')
-      ? { line: 'bg-blue-500', head: 'border-l-blue-500', text: 'text-blue-800' }
-      : { line: 'bg-emerald-500', head: 'border-l-emerald-500', text: 'text-emerald-800' };
+/* ── Flow chart: origin lot ══ road with each request on it ══ destination lot ── */
 
-const RouteFlow: React.FC<{ requests: ResourceRequest[]; onSelectRequest?: (r: ResourceRequest) => void }> = ({ requests, onSelectRequest }) => {
+type NodeKind = 'supplier' | 'depot' | 'incident';
+const NODE: Record<NodeKind, { icon: React.ReactNode; caption: string }> = {
+  supplier: { icon: <Factory size={15} />, caption: 'Supplier' },
+  depot: { icon: <Warehouse size={15} />, caption: 'Depot' },
+  incident: { icon: <AlertTriangle size={15} />, caption: 'Incident' },
+};
+
+/** A place on the map: a paved lot with its building, named beside it. */
+const FlowNode: React.FC<{ kind: NodeKind; label: string; end?: boolean }> = ({ kind, label, end }) => (
+  <span className={`flex items-center gap-2.5 min-w-0 ${end ? 'flex-row-reverse text-right' : ''}`}>
+    <span
+      className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${kind === 'incident' ? 'text-red-600' : 'text-slate-700'}`}
+      style={{ background: LOT, boxShadow: 'inset 0 -3px 0 rgba(15,23,42,0.08)' }}
+    >
+      {NODE[kind].icon}
+    </span>
+    <span className="min-w-0">
+      <span className="block text-[10px] font-medium text-slate-400 leading-tight">{NODE[kind].caption}</span>
+      <span className="block truncate text-xs font-semibold text-slate-800" title={label}>{label}</span>
+    </span>
+  </span>
+);
+
+const RouteFlow: React.FC<Pick<PipelineFlowDiagramProps, 'requests' | 'onSelectRequest' | 'onShowIn3D'>> = ({ requests, onSelectRequest, onShowIn3D }) => {
   const [openRoute, setOpenRoute] = useState<string | null>(null);
+  const still = !!useReducedMotion();
   const routes = useMemo(() => {
     const m = new Map<string, { from: string; to: string; fromKind: NodeKind; toKind: NodeKind; items: ResourceRequest[] }>();
     requests.forEach((r) => {
@@ -93,11 +144,16 @@ const RouteFlow: React.FC<{ requests: ResourceRequest[]; onSelectRequest?: (r: R
   return (
     <ul className="space-y-2">
       {routes.map(([key, r]) => {
-        const tone = edgeTone(r.items);
         const open = openRoute === key;
         const units = [...new Set(r.items.map((i) => i.unit))];
+        const marks = MARKS
+          .map((status) => ({ status, n: r.items.filter((i) => (i.status === 'Fulfilled' ? 'Delivered' : i.status) === status).length }))
+          .filter((g) => g.n > 0);
+        // the furthest group sets how much of the road is lit and names the route's state
+        const lead = marks[marks.length - 1];
+        const leadMark = lead ? STATUS_MARK[lead.status] : null;
         return (
-          <li key={key} className="rounded-xl border border-slate-200 bg-white">
+          <li key={key} className="rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors">
             <button
               type="button"
               onClick={(e) => {
@@ -105,19 +161,53 @@ const RouteFlow: React.FC<{ requests: ResourceRequest[]; onSelectRequest?: (r: R
                 setOpenRoute(open ? null : key);
               }}
               aria-expanded={open}
-              className="w-full px-3 py-2.5 grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 text-left cursor-pointer hover:bg-slate-50 rounded-xl"
+              className="w-full px-3 py-3 grid grid-cols-[minmax(0,190px)_1fr_minmax(0,190px)_auto] items-center gap-3 text-left cursor-pointer rounded-xl"
             >
               <FlowNode kind={r.fromKind} label={r.from} />
-              {/* edge */}
-              <span className="relative flex items-center min-w-[90px]">
-                <span className={`flex-1 h-0.5 ${tone.line}`} />
-                <span className={`w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px] ${tone.head}`} />
-                <span className={`absolute left-1/2 -translate-x-1/2 -top-4 whitespace-nowrap text-[10px] font-semibold ${tone.text}`}>
-                  {r.items.length} request{r.items.length === 1 ? '' : 's'}
-                  {units.length === 1 ? ` · ${sumQty(r.items).toLocaleString()} ${units[0]}` : ''}
+              <span className="min-w-[150px]">
+                <span className="flex items-baseline justify-between gap-2 text-[10px] leading-none mb-4">
+                  <span className="font-medium text-slate-500 whitespace-nowrap">
+                    {r.items.length} request{r.items.length === 1 ? '' : 's'}
+                    {units.length === 1 ? ` · ${sumQty(r.items).toLocaleString()} ${units[0]}` : ''}
+                  </span>
+                  {leadMark && <span className="font-semibold whitespace-nowrap" style={{ color: leadMark.hex }}>{leadMark.label}</span>}
+                </span>
+                {/* the road: asphalt, a dashed centre line, and the stretch already covered lit in the status colour */}
+                <span className="relative block h-3 rounded-full" style={{ background: ROAD }}>
+                  <span className="absolute inset-x-2 top-1/2 border-t border-dashed border-white" aria-hidden />
+                  {leadMark && (
+                    <motion.span
+                      aria-hidden
+                      className="absolute left-0 top-0 h-full rounded-full"
+                      style={{ background: leadMark.hex, opacity: 0.28 }}
+                      initial={still ? false : { width: 0 }}
+                      animate={{ width: `${leadMark.at}%` }}
+                      transition={{ duration: 0.7, ease: 'easeOut' }}
+                    />
+                  )}
+                  {marks.map(({ status, n }) => {
+                    const mark = STATUS_MARK[status];
+                    return (
+                      <motion.span
+                        key={status}
+                        title={`${n} ${mark.label.toLowerCase()}`}
+                        className="absolute bottom-[3px] -translate-x-1/2 flex items-end"
+                        initial={still || status === 'Pending Approval' ? false : { left: '4%' }}
+                        animate={{ left: `${mark.at}%` }}
+                        transition={{ duration: 0.7, ease: 'easeOut' }}
+                      >
+                        {status === 'Pending Approval' ? <BeaconGlyph hex={mark.hex} still={still} /> : status === 'Delivered' ? <CrateGlyph hex={mark.hex} /> : <TruckGlyph hex={mark.hex} />}
+                        {n > 1 && (
+                          <span className="-ml-1 mb-1.5 px-1 rounded-full bg-white border text-[9px] font-bold leading-[14px] tabular-nums" style={{ color: mark.hex, borderColor: mark.hex }}>
+                            {n}
+                          </span>
+                        )}
+                      </motion.span>
+                    );
+                  })}
                 </span>
               </span>
-              <FlowNode kind={r.toKind} label={r.to} />
+              <FlowNode kind={r.toKind} label={r.to} end />
               {open ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
             </button>
             <AnimatePresence initial={false}>
@@ -130,14 +220,14 @@ const RouteFlow: React.FC<{ requests: ResourceRequest[]; onSelectRequest?: (r: R
                   className="overflow-hidden border-t border-slate-100"
                 >
                   {r.items.map((q) => (
-                    <li key={q.id}>
+                    <li key={q.id} className="flex items-center">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectRequest?.(q);
                         }}
-                        className="w-full px-4 py-2 grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_200px_auto] items-center gap-3 text-left text-xs hover:bg-slate-50 cursor-pointer"
+                        className="flex-1 min-w-0 px-4 py-2 grid grid-cols-[auto_1fr_auto] sm:grid-cols-[auto_1fr_200px_auto] items-center gap-3 text-left text-xs hover:bg-slate-50 cursor-pointer"
                       >
                         <span className="font-mono text-slate-400">{q.display_id}</span>
                         <span className="truncate text-slate-800">
@@ -149,6 +239,20 @@ const RouteFlow: React.FC<{ requests: ResourceRequest[]; onSelectRequest?: (r: R
                         </span>
                         <span className={`text-[11px] ${STATUS_TEXT[q.status] ?? 'text-slate-500'}`}>{relativeTime(q.updated_at ?? q.requested_at) ?? ''}</span>
                       </button>
+                      {onShowIn3D && q.status !== 'Rejected' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onShowIn3D(q);
+                          }}
+                          title="Show in 3D flow"
+                          aria-label={`Show ${q.display_id} in 3D flow`}
+                          className="shrink-0 mr-2 p-1.5 rounded-lg text-slate-400 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
+                        >
+                          <Box size={14} />
+                        </button>
+                      )}
                     </li>
                   ))}
                 </motion.ul>
@@ -163,7 +267,7 @@ const RouteFlow: React.FC<{ requests: ResourceRequest[]; onSelectRequest?: (r: R
 
 /* ── Stage cards ──────────────────────────────────────────────────────────── */
 
-export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({ inventory, requests, onNavigateStage, onSelectRequest }) => {
+export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({ inventory, requests, onNavigateStage, onSelectRequest, onShowIn3D }) => {
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
 
   const criticalItems = inventory.filter((i) => i.status === 'Critical');
@@ -254,7 +358,7 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({ invent
   ];
 
   return (
-    <div className="space-y-3 max-w-4xl mx-auto py-2">
+    <div className="max-w-4xl mx-auto py-2">
       {stages.map((stage, idx) => {
         const isSelected = selectedStage === stage.id;
         const Icon = stage.icon;
@@ -324,22 +428,19 @@ export const PipelineFlowDiagram: React.FC<PipelineFlowDiagramProps> = ({ invent
                           </button>
                         )}
                       </div>
-                      <RouteFlow requests={stage.flows} onSelectRequest={onSelectRequest} />
+                      <RouteFlow requests={stage.flows} onSelectRequest={onSelectRequest} onShowIn3D={onShowIn3D} />
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
+            {/* a short stretch of road joins one stage to the next */}
             {idx < stages.length - 1 && (
               <div className="flex justify-center" aria-hidden>
-                <div className="flex flex-col items-center">
-                  <div className="w-0.5 h-3 bg-slate-300" />
-                  <div className="w-6 h-6 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-                    <ArrowDown size={12} />
-                  </div>
-                  <div className="w-0.5 h-3 bg-slate-300" />
-                </div>
+                <span className="block w-2.5 h-7" style={{ background: ROAD }}>
+                  <span className="block mx-auto w-0 h-full border-l border-dashed border-white" />
+                </span>
               </div>
             )}
           </React.Fragment>

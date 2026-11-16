@@ -116,7 +116,7 @@ export const Preloader: React.FC<Props> = ({ reduced, landOn, onEnter }) => {
   return (
     <div ref={root} className="lf-loader" role="status" aria-label="Loading Vanguard" aria-busy="true">
       <div ref={scope} className="lf-loader__scope">
-        <MonitoringPlate scene={0} still />
+        <MonitoringPlate scene={0} still map />
         <svg className="lf-loader__over" viewBox="-24 -24 648 648" aria-hidden="true">
           <circle
             ref={arc}

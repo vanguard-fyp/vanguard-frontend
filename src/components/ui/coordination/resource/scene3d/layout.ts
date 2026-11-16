@@ -23,7 +23,9 @@ export interface Site {
 
 export function placeSites(
   items: { key: string; lat: number | null; lng: number | null }[],
-  fallbackColumn: string[] = []
+  fallbackColumn: string[] = [],
+  /** blocks the officer chose by dragging (view only); they win over the computed spot */
+  pinned: Record<string, [number, number]> = {}
 ): Map<string, Site> {
   const located = items.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)) as { key: string; lat: number; lng: number }[];
   const lats = located.map((p) => p.lat);
@@ -60,14 +62,17 @@ export function placeSites(
       }
     }
   };
+  const known = new Set([...items.map((p) => p.key), ...fallbackColumn]);
+  Object.entries(pinned).forEach(([key, [i, j]]) => { if (known.has(key)) claim(key, i, j); });
   located
+    .filter((p) => !sites.has(p.key))
     .map((p) => ({ ...p, x: (p.lng - cLng) * k, z: -(p.lat - cLat) * k }))
     .sort((a, b) => a.z - b.z || a.x - b.x)
     .forEach((p) => claim(p.key, Math.floor(p.x / CELL), Math.floor(p.z / CELL)));
 
   // Places without a stored location go in a labelled column west of the map.
   const minI = Math.min(...[...sites.values()].map((s) => s.i), 0);
-  fallbackColumn.forEach((key, n) => claim(key, minI - 2, n));
+  fallbackColumn.filter((key) => !sites.has(key)).forEach((key, n) => claim(key, minI - 2, n));
   return sites;
 }
 

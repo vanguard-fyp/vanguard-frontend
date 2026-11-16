@@ -140,8 +140,8 @@ export const ResupplyRequestModal: React.FC<ResupplyRequestModalProps> = ({
               <button
                 type="button"
                 onClick={handleApplyAISuggestion}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                  aiApplied ? 'bg-emerald-600 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white shadow-2xs'
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                  aiApplied ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-white text-blue-700 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
                 <ThumbsUp size={12} />

@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import {
   Plus, Minus, LocateFixed, RotateCw, RotateCcw, X, Warehouse as WarehouseIcon, AlertTriangle, Factory, Check,
-  Layers, ListChecks, Crosshair, Play, Truck, Info, Loader2,
+  Layers, ListChecks, Crosshair, Play, Truck, Info, Loader2, Move, Undo2,
 } from 'lucide-react';
 import type { Incident, ResourceItem, ResourceRequest, Warehouse } from '../../../../types';
 import { FLOW_STEPS, nextAction, requestFlow } from '../../../../utils/resourceFlow';
@@ -38,6 +38,8 @@ interface Props {
   incidents: Incident[];
   onOpenRequest?: (req: ResourceRequest) => void;
   onReview?: (req: ResourceRequest) => void;
+  /** request to open on (from the pipeline's "Show in 3D flow") */
+  focusRequestId?: string | null;
 }
 
 type Kind = 'depot' | 'incident' | 'supplier' | 'request';
@@ -55,6 +57,11 @@ const STATUS_LOOK: Record<string, { tone: Tone; label: string; hex: string }> = 
 const SEVERITY_HEX: Record<string, string> = { Critical: '#ef4444', High: '#f97316', Medium: '#f59e0b', Low: '#94a3b8' };
 const STOCK_HEX: Record<string, string> = { Sufficient: '#22c55e', 'Low Stock': '#f59e0b', Critical: '#ef4444' };
 const STOCK_TONE: Record<string, Tone> = { Sufficient: 'teal', 'Low Stock': 'amber', Critical: 'red' };
+const LAYOUT_KEY = 'vanguard.resourceFlow3D.layout';
+type Pins = Record<string, [number, number]>;
+const loadPins = (): Pins => {
+  try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? '{}') as Pins; } catch { return {}; }
+};
 const SPEED = 3.6; // scene units per second (simulation), slow enough to follow
 
 const hash = (a: number, b: number) => {
@@ -87,14 +94,26 @@ interface SceneApi {
 }
 
 /* ── Component ───────────────────────────────────────────────────────────── */
-export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouses, incidents, onOpenRequest, onReview }) => {
+export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouses, incidents, onOpenRequest, onReview, focusRequestId }) => {
   const mountRef = useRef<HTMLDivElement>(null);
-  const [selected, setSelected] = useState<Sel>(null);
+  const [selected, setSelected] = useState<Sel>(focusRequestId ? { kind: 'request', id: focusRequestId } : null);
   const [following, setFollowing] = useState<string | null>(null);
   const [menu, setMenu] = useState<'requests' | 'layers' | null>(null);
   const [layers, setLayers] = useState<Record<LayerKey, boolean>>({ stock: true, vehicles: true, incidents: true, scenery: true, labels: true });
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
+  // Arrange mode: drag a place to another block. View only, kept in this browser.
+  const [arrange, setArrange] = useState(false);
+  const [hinted, setHinted] = useState(false);
+  const [pins, setPins] = useState<Pins>(loadPins);
+  const arrangeRef = useRef(arrange);
+  arrangeRef.current = arrange;
+  const savePins = (next: Pins) => {
+    setPins(next);
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch { /* layout stays for this visit only */ }
+  };
+  const savePinsRef = useRef(savePins);
+  savePinsRef.current = savePins;
   const api = useRef<SceneApi | null>(null);
   const selectedRef = useRef<Sel>(null);
   selectedRef.current = selected;
@@ -124,6 +143,7 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
     inventory.map((i) => [i.id, i.warehouse_id, i.stock_level, i.min_threshold, i.status, i.category]),
     live.map((r) => [r.id, r.status, r.warehouse_id, r.incident_id, r.supplier]),
     linkedIncidents.map((i) => [i.id, i.coordinates, i.severity]),
+    pins,
   ]);
 
   useEffect(() => {
@@ -141,7 +161,8 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
       [
         ...warehouses.filter((w) => !hasLoc(w)).map((w) => `depot:${w.id}`),
         ...suppliers.map((s) => `supplier:${s}`),
-      ]
+      ],
+      pins
     );
     const origin = (r: ResourceRequest) => (requestFlow(r) === 'replenishment' ? sites.get(`supplier:${supplierOf(r)}`) : r.warehouse_id ? sites.get(`depot:${r.warehouse_id}`) : undefined);
     const destination = (r: ResourceRequest) => (requestFlow(r) === 'replenishment' ? (r.warehouse_id ? sites.get(`depot:${r.warehouse_id}`) : undefined) : r.incident_id ? sites.get(`incident:${r.incident_id}`) : undefined);
@@ -184,9 +205,13 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
     controls.minZoom = 0.45;
     controls.maxZoom = 8;
     controls.zoomSpeed = 1.6;
-    controls.minPolarAngle = 0.25;
-    controls.maxPolarAngle = 1.32;
+    controls.minPolarAngle = 0.08;
+    controls.maxPolarAngle = 1.45;
     controls.screenSpacePanning = false;
+    controls.zoomToCursor = true;
+    controls.rotateSpeed = 0.7;
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 
     scene.add(new THREE.HemisphereLight('#ffffff', '#cbd5e1', 1.35));
     const sun = new THREE.DirectionalLight('#ffffff', 1.7);
@@ -281,6 +306,7 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
       anchors.set(`depot:${w.id}`, s.center.clone());
       const lot = groundRect(CELL - ROAD_W - 1, CELL - ROAD_W - 1, '#dfe5ec', 0.016);
       lot.position.set(s.center.x, 0.016, s.center.z);
+      tag(lot, { kind: 'depot', id: w.id });
       scene.add(lot);
       const house = makeWarehouse();
       house.position.set(s.center.x - 1, 0, s.center.z - 2.2);
@@ -541,12 +567,109 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
       return (o?.userData.sel as NonNullable<Sel>) ?? null;
     };
     let down: { x: number; y: number } | null = null;
-    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; glide = null; };
+
+    const marker = (hex: string, opacity: number) => {
+      const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64), new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+      m.rotation.x = -Math.PI / 2;
+      m.visible = false;
+      scene.add(m);
+      return m;
+    };
+    const hoverRing = marker('#2563eb', 0.45);
+    const selRing = marker('#2563eb', 0.95);
+    let hover: Sel = null;
+    let chosen: Sel = null;
+    const place = (ring: THREE.Mesh, sel: Sel, time: number) => {
+      const pos = sel && (vehicles.get(sel.id)?.truck.position ?? anchors.get(`${sel.kind}:${sel.id}`));
+      ring.visible = !!pos;
+      if (!sel || !pos) return;
+      const radius = sel.kind === 'request' ? 2.2 : CELL * 0.46;
+      ring.position.set(pos.x, 0.08, pos.z);
+      ring.scale.setScalar(ring === selRing && !reduced ? radius * (1 + Math.sin(time * 3) * 0.02) : radius);
+    };
+
+    // Arrange mode: drag a depot, incident or supplier onto another block.
+    const tile = (hex: string, opacity: number) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(CELL - ROAD_W, CELL - ROAD_W), new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.06;
+      m.visible = false;
+      scene.add(m);
+      return m;
+    };
+    const fromTile = tile('#0f172a', 0.14);
+    const toTile = tile('#2563eb', 0.32);
+    const floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const blockAt = (e: PointerEvent): [number, number] | null => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      const hit = ray.ray.intersectPlane(floor, new THREE.Vector3());
+      if (!hit) return null;
+      return [
+        THREE.MathUtils.clamp(Math.floor(hit.x / CELL), minI - 1, maxI + 1),
+        THREE.MathUtils.clamp(Math.floor(hit.z / CELL), minJ - 1, maxJ + 1),
+      ];
+    };
+    let drag: { key: string; i: number; j: number; to: [number, number] | null } | null = null;
+    const endDrag = () => {
+      drag = null;
+      fromTile.visible = false;
+      toTile.visible = false;
+      controls.enabled = true;
+    };
+
+    const onDown = (e: PointerEvent) => {
+      down = { x: e.clientX, y: e.clientY };
+      glide = null;
+      if (!arrangeRef.current || e.button !== 0) return;
+      const hit = pick(e);
+      const site = hit && hit.kind !== 'request' ? sites.get(`${hit.kind}:${hit.id}`) : undefined;
+      if (!site) return;
+      drag = { key: site.key, i: site.i, j: site.j, to: null };
+      controls.enabled = false;
+      fromTile.position.set(site.center.x, 0.06, site.center.z);
+      fromTile.visible = true;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      renderer.domElement.style.cursor = 'grabbing';
+    };
     const onUp = (e: PointerEvent) => {
-      if (!down || e.button !== 0 || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+      if (drag) {
+        const { key, i, j, to } = drag;
+        endDrag();
+        if (to && (to[0] !== i || to[1] !== j)) {
+          // freeze every place where it stands, then move this one (swapping with whoever is there)
+          const next: Pins = {};
+          sites.forEach((st) => { next[st.key] = [st.i, st.j]; });
+          const occupant = all.find((st) => st.i === to[0] && st.j === to[1]);
+          if (occupant) next[occupant.key] = [i, j];
+          next[key] = to;
+          down = null;
+          savePinsRef.current(next);
+          return;
+        }
+      }
+      if (!down || e.button !== 0 || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;
       setSelected(pick(e));
     };
-    const onMove = (e: PointerEvent) => { if (e.buttons === 0) renderer.domElement.style.cursor = pick(e) ? 'pointer' : 'grab'; };
+    const onMove = (e: PointerEvent) => {
+      if (drag) {
+        const b = blockAt(e);
+        if (!b) return;
+        drag.to = b;
+        toTile.position.set((b[0] + 0.5) * CELL, 0.07, (b[1] + 0.5) * CELL);
+        toTile.visible = b[0] !== drag.i || b[1] !== drag.j;
+        return;
+      }
+      if (e.buttons !== 0) { hover = null; return; }
+      const hit = pick(e);
+      hover = hit;
+      renderer.domElement.style.cursor = !hit ? 'grab' : arrangeRef.current && hit.kind !== 'request' ? 'move' : 'pointer';
+    };
+    const onCancel = () => { if (drag) endDrag(); };
+    const onLeave = () => { hover = null; };
+    renderer.domElement.addEventListener('pointercancel', onCancel);
+    renderer.domElement.addEventListener('pointerleave', onLeave);
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointerup', onUp);
     renderer.domElement.addEventListener('pointermove', onMove);
@@ -564,13 +687,16 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
       reset: () => { follow = null; glide = { target: home.target.clone(), position: home.position.clone(), zoom: home.zoom }; },
       focus: (sel) => {
         focusKey = sel ? `${sel.kind}:${sel.id}` : '';
+        chosen = sel;
         showRoute(sel);
         vehicles.forEach((v, id) => { v.label.visible = sel?.kind === 'request' && sel.id === id; });
         if (!sel) return;
         const v = sel.kind === 'request' ? vehicles.get(sel.id) : undefined;
         const p = v ? v.truck.position.clone() : anchors.get(`${sel.kind}:${sel.id}`);
         if (!p) return;
-        glide = { target: p.clone(), position: p.clone().add(offset()), zoom: Math.max(camera.zoom, 1.9) };
+        // a whole block for a place, closer for a truck; never zooms the officer out of a closer look at a truck
+        const zoom = sel.kind === 'request' ? Math.max(camera.zoom, 2.6) : THREE.MathUtils.clamp(camera.zoom, 1.9, 3.2);
+        glide = { target: p.clone(), position: p.clone().add(offset()), zoom };
       },
       follow: (id) => { follow = id; if (id) glide = null; },
       replay: (id) => {
@@ -687,6 +813,8 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
         if (controls.target.distanceTo(glide.target) < 0.05 && camera.position.distanceTo(glide.position) < 0.05 && Math.abs(camera.zoom - glide.zoom) < 0.01) glide = null;
       }
       controls.update();
+      place(selRing, chosen, time);
+      place(hoverRing, hover && !(chosen && hover.kind === chosen.kind && hover.id === chosen.id) ? hover : null, time);
       renderer.render(scene, camera);
       labelRenderer.render(scene, camera);
       if (time - lastDeclutter > 0.15) {
@@ -722,6 +850,8 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
       renderer.domElement.removeEventListener('pointerdown', onDown);
       renderer.domElement.removeEventListener('pointerup', onUp);
       renderer.domElement.removeEventListener('pointermove', onMove);
+      renderer.domElement.removeEventListener('pointercancel', onCancel);
+      renderer.domElement.removeEventListener('pointerleave', onLeave);
       controls.dispose();
       // cached geometries/materials in models.ts are reused across rebuilds;
       // per-scene ones (ground rects, route tube) are disposed here
@@ -770,7 +900,7 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
 
   return (
     <div className="relative h-[calc(100vh-250px)] min-h-[640px] rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-100">
-      <div ref={mountRef} className="absolute inset-0 isolate z-0" />
+      <div ref={mountRef} onPointerDown={() => setHinted(true)} className="absolute inset-0 isolate z-0" />
 
       {/* Top-left: two compact menus instead of a wall of cards */}
       <div className="absolute top-3 left-3 flex items-start gap-2">
@@ -828,6 +958,16 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
             )}
           </div>
         ))}
+        <button onClick={() => setArrange((a) => !a)} aria-pressed={arrange} title="Drag places to rearrange the map"
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border shadow-sm cursor-pointer ${arrange ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/95 text-slate-700 border-slate-200 hover:bg-white'}`}>
+          <Move size={14} />Arrange
+        </button>
+        {Object.keys(pins).length > 0 && (
+          <button onClick={() => savePins({})} title="Put every place back where it was"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border shadow-sm cursor-pointer bg-white/95 text-slate-700 border-slate-200 hover:bg-white">
+            <Undo2 size={14} />Reset layout
+          </button>
+        )}
       </div>
 
       {/* Camera controls and the simulation note, bottom-left */}
@@ -847,10 +987,10 @@ export const ResourceFlow3D: React.FC<Props> = ({ inventory, requests, warehouse
         </div>
         <p
           className="text-[11px] text-slate-600 bg-white/90 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5"
-          title="Schematic map: places keep their real relative positions on a block grid. Statuses come from the database; truck movement is simulated because no vehicle tracking is connected. Drag to turn, right-drag to pan, scroll to zoom."
+          title="Schematic map: places keep their real relative positions on a block grid. Statuses come from the database; truck movement is simulated because no vehicle tracking is connected. Drag to move, right-drag (or Shift-drag) to turn, scroll to zoom."
         >
           <Info size={13} className="shrink-0 text-blue-600" />
-          Schematic map · truck movement simulated
+          {arrange ? 'Drag a place to another block' : hinted ? 'Schematic map · truck movement simulated' : 'Drag to move · right-drag to turn · scroll to zoom · click a place'}
         </p>
       </div>
 
