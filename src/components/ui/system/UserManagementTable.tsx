@@ -130,7 +130,7 @@ export const UserManagementTable: React.FC<UserManagementTableProps> = ({
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-left">
-              <th className="px-5 py-3">Officer Name</th>
+              <th className="px-5 py-3">User Name</th>
               <th className="px-4 py-3">Email Address</th>
               <th className="px-4 py-3">Agency</th>
               <th className="px-4 py-3">Role</th>
